@@ -2,7 +2,17 @@
 
 (reverse chronological; one entry per working session)
 
-## 2026-07-04 · session 1 · Phase 0 (in progress)
+## 2026-07-04 · session 1 · Phase 0 COMPLETE (launchd install awaits Nyel)
+
+**Gate results:** `mix harness.doctor` all green (PAT + launchd rows are warns by design — see below). `ANTHROPIC_API_KEY=… mix run` refuses to boot with exit 1. Policy hot-reload verified against a live dev server. Prod compile + assets.deploy + boot verified serving HTTP 200 on 127.0.0.1:4040. 30 tests green.
+
+**Awaiting Nyel (two interactive steps):**
+1. `mix harness.setup` — prompts for the fine-grained GitHub PAT (Contents RW, Issues RW, Pull requests RW, scoped to policy repos) and stores it in the Keychain.
+2. `mix harness.install` — bootstraps the launchd LaunchAgent (permission classifier correctly refused to let the agent self-install a persistent daemon).
+
+**Known nit:** transient `Exqlite database is locked` errors at boot while the pool races the auto-migrator; connections retry and recover. Cosmetic; revisit if it ever crash-loops under launchd KeepAlive.
+
+## 2026-07-04 · session 1 · Phase 0 (planning notes)
 
 **Done:** Plan approved (see `~/.claude/plans/sunny-tickling-forest.md` for the full Phase 0+1 plan). Repo initialized at `~/Documents/ProjectEx` (Nyel's call: ProjectEx *is* the repo; spec's `/Users/nyel/agent-harness` paths corrected throughout). Spec committed verbatim as HANDOFF-agentic-harness.md.
 
