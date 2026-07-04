@@ -28,6 +28,7 @@ defmodule Harness.Janitor do
     reap_orphaned_runs()
     unwedge_stuck_issues()
     retriage_updated_issues()
+    resume_stalled_ideation()
     :ok
   end
 
@@ -104,6 +105,30 @@ defmodule Harness.Janitor do
 
       %{issue_id: issue.id} |> Harness.GitHub.TriageWorker.new() |> Oban.insert()
     end
+  end
+
+  # a running session whose iteration/critique chain broke (job exhausted
+  # attempts, or the daemon died between iterations) has no incomplete ideate
+  # job — re-enqueue one so the tree keeps growing
+  defp resume_stalled_ideation do
+    for session <- Harness.Ideation.running_sessions(),
+        not has_incomplete_ideate_job?(session.id) do
+      Logger.warning("janitor: ideation session #{session.id} stalled — resuming")
+      Harness.Ideation.enqueue_iteration(session)
+    end
+  end
+
+  defp has_incomplete_ideate_job?(session_id) do
+    incomplete = ~w(available scheduled executing retryable)
+
+    Repo.exists?(
+      from(j in Oban.Job,
+        where:
+          j.worker in ["Harness.Ideation.IterationWorker", "Harness.Ideation.CritiqueWorker"] and
+            j.state in ^incomplete and
+            fragment("json_extract(?, '$.session_id') = ?", j.args, ^session_id)
+      )
+    )
   end
 
   defp latest_triages do

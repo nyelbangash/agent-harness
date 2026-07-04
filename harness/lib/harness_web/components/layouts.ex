@@ -36,9 +36,10 @@ defmodule HarnessWeb.Layouts do
   @nav [
     {"Overview", "/"},
     {"Issues", "/issues"},
-    {"Runs", "/runs"}
+    {"Runs", "/runs"},
+    {"Ideation", "/ideation"}
   ]
-  @nav_later ~w(Ideation Budget Policy)
+  @nav_later ~w(Budget Policy)
 
   def app(assigns) do
     assigns = assign(assigns, nav: @nav, nav_later: @nav_later)
@@ -57,7 +58,7 @@ defmodule HarnessWeb.Layouts do
             class={[
               "font-display uppercase tracking-[0.14em] text-[12px] px-2 py-1.5 rounded-sm",
               "focus-visible:outline-2 focus-visible:outline-accent",
-              if(@current_path == path,
+              if(nav_active?(@current_path, path),
                 do: "text-bg bg-accent",
                 else: "text-ink-dim hover:text-ink"
               )
@@ -140,6 +141,9 @@ defmodule HarnessWeb.Layouts do
     </div>
     """
   end
+
+  defp nav_active?(current, "/"), do: current == "/"
+  defp nav_active?(current, path), do: String.starts_with?(current, path)
 
   defp mode_label(:plan_only), do: "Plan-Only"
   defp mode_label(:full_auto), do: "Full Auto"

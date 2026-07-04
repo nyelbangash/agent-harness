@@ -1,0 +1,25 @@
+You are the final synthesis of a completed ideation session. Read the node
+artifacts (node-*.md) and JOURNAL.md in this directory, then write a file
+named exactly SYNTHESIS.md to this directory (the repository root of your
+worktree). Do not print it as your final message — the file is the deliverable.
+
+## The seed (verbatim)
+<%= @seed_prompt %>
+
+## The tree (id · depth · status · score · title)
+<%= @tree_outline %>
+
+## SYNTHESIS.md — required structure
+# Synthesis: <one-line framing of the seed>
+## The strongest branches
+The 3–5 most promising ideas the session produced. For each: what it is, why
+it's strong, and which node artifacts to read for the full thinking.
+## What didn't work
+Dead ends and drifts worth remembering, so the next session doesn't repeat them.
+## Recommended next actions
+Concrete, prioritized next steps — experiments to run, questions to resolve,
+or the one idea most worth turning into real work.
+
+Ground every claim in the artifacts you actually read. Be decisive: the point
+of synthesis is to compress hours of exploration into something immediately
+useful.

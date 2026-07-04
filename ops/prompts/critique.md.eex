@@ -1,0 +1,26 @@
+You are the critique checkpoint of a long-running ideation engine. Step back
+from the individual iterations and judge the tree as a whole. Read the node
+artifacts under this directory (node-*.md) and the JOURNAL.md as needed.
+
+## The seed (verbatim)
+<%= @seed_prompt %>
+
+## The current frontier (un-expanded nodes, id · title · score)
+<%= @frontier %>
+
+## Journal so far
+<%= @journal %>
+
+## Your task
+1. Re-score the frontier nodes 0–10 with fresh eyes — reward developed,
+   novel, seed-serving ideas; penalize thin or drifted ones.
+2. Flag any node that is a dead end or has drifted from the seed for pruning
+   (prune: true) — pruning marks it, it is not deleted.
+3. Answer honestly: has the tree DRIFTED from the seed intent? Has it made
+   MATERIAL PROGRESS since the last critique, or is it spinning?
+4. Write a short synthesis note: the through-line so far and what the next
+   iterations should chase.
+
+Two consecutive critiques reporting no material progress stop the session, so
+be honest rather than encouraging. Respond only with the JSON object matching
+the provided schema.

@@ -112,4 +112,31 @@ defmodule Harness.Fixtures do
     if code != 0, do: raise("fixture git #{Enum.join(args, " ")} failed: #{output}")
     output
   end
+
+  @doc """
+  Open the ideation gate for a test: swap in a policy with no ideation-window
+  restriction and record a fresh low-utilization usage sample so
+  `Policy.gate(:ideate)` returns :ok. Reverts on exit.
+  """
+  def enable_ideation! do
+    original = Application.fetch_env!(:harness, :policy_path)
+    tmp = Path.join(System.tmp_dir!(), "ideate-policy-#{System.unique_integer([:positive])}.yaml")
+
+    File.write!(
+      tmp,
+      File.read!(original)
+      |> String.replace(~r/ideation_windows:.*/, "ideation_windows: []")
+    )
+
+    Application.put_env(:harness, :policy_path, tmp)
+    Harness.Policy.reload()
+
+    Harness.Usage.record_oauth_sample!(%{seven_day_utilization: 5.0, raw: %{}})
+
+    ExUnit.Callbacks.on_exit(fn ->
+      Application.put_env(:harness, :policy_path, original)
+      Harness.Policy.reload()
+      File.rm(tmp)
+    end)
+  end
 end

@@ -1,0 +1,33 @@
+You are one iteration of a long-running ideation engine exploring a single
+seed idea. This iteration DIVERGES: branch the current node into 2–4 distinct,
+non-overlapping child ideas that each take the thinking in a genuinely
+different direction. You have web search available — use it to ground ideas in
+what already exists.
+
+## The seed (verbatim — everything must stay in service of this)
+<%= @seed_prompt %>
+
+## Where you are in the tree
+Current node: <%= @node_title %> (depth <%= @node_depth %>, score <%= @node_score %>)
+<%= @node_summary %>
+
+## Ancestor chain (root → here)
+<%= @ancestor_chain %>
+
+## Sibling ideas already explored at this level (don't duplicate these)
+<%= @sibling_summaries %>
+
+## Running journal (what's been tried, what surprised, what's next)
+<%= @journal %>
+
+## Your task
+Produce 2–4 children. For each: a short title, a one-paragraph summary, a
+calibrated score 0–10 for how promising it is relative to the seed, and an
+"artifact" — a few paragraphs of actual developed thinking (the substance,
+not a placeholder). Also give a journal entry: up to 3 short lines on what you
+tried, what surprised you, and what's worth pursuing next.
+
+Score honestly — the engine prunes low scorers. Reward ideas that are novel
+AND in service of the seed; a clever idea that has drifted off the seed is a
+low score, not a high one. Respond only with the JSON object matching the
+provided schema.

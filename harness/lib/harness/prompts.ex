@@ -51,6 +51,71 @@ defmodule Harness.Prompts do
     )
   end
 
+  # -- ideation ---------------------------------------------------------------
+
+  alias Harness.Ideation
+
+  def ideate(mode, session, node) do
+    template = if mode == :diverge, do: "ideate_diverge.md.eex", else: "ideate_develop.md.eex"
+
+    render(template,
+      # seed is trusted operator input, included verbatim (anti-drift §5.2)
+      seed_prompt: session.seed_prompt,
+      node_title: node.title,
+      node_depth: node.depth,
+      node_score: node.score,
+      node_summary: node.summary || "",
+      ancestor_chain: format_ancestors(node),
+      sibling_summaries: format_siblings(node),
+      journal: truncate(Ideation.read_journal(session), 8_000)
+    )
+  end
+
+  def critique(session) do
+    render("critique.md.eex",
+      seed_prompt: session.seed_prompt,
+      frontier: format_frontier(session),
+      journal: truncate(Ideation.read_journal(session), 10_000)
+    )
+  end
+
+  def synthesis(session) do
+    render("synthesis.md.eex",
+      seed_prompt: session.seed_prompt,
+      tree_outline: format_tree(session)
+    )
+  end
+
+  defp format_ancestors(node) do
+    node
+    |> Ideation.ancestor_chain()
+    |> Enum.map_join("\n", fn n ->
+      "#{String.duplicate("  ", n.depth)}- #{n.title}: #{n.summary}"
+    end)
+  end
+
+  defp format_siblings(node) do
+    case Ideation.sibling_summaries(node) do
+      [] -> "(none)"
+      sums -> Enum.join(sums, "\n")
+    end
+  end
+
+  defp format_frontier(session) do
+    session.id
+    |> Ideation.tree()
+    |> Enum.filter(&(&1.status == "frontier"))
+    |> Enum.map_join("\n", fn i -> "#{i.id} · #{i.title} · score #{i.score}" end)
+  end
+
+  defp format_tree(session) do
+    session.id
+    |> Ideation.tree()
+    |> Enum.map_join("\n", fn i ->
+      "#{i.id} · d#{i.depth} · #{i.status} · #{i.score} · #{i.title}"
+    end)
+  end
+
   defp render(template, assigns) do
     Application.fetch_env!(:harness, :prompts_dir)
     |> Path.join(template)

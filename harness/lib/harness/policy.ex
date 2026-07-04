@@ -85,13 +85,17 @@ defmodule Harness.Policy do
   end
 
   defp gate_action(:ideate, policy, usage_mode, now) do
+    windows = policy.schedule.ideation_windows
+
     cond do
       usage_mode in [:defer_ideation, :plan_only] ->
         {:skip, :usage_defers_ideation}
 
-      not in_windows?(now, policy.schedule.ideation_windows) ->
-        {:snooze, seconds_until_window(now, policy.schedule.ideation_windows),
-         :outside_ideation_window}
+      # empty ideation_windows = unrestricted. Ideation is low-risk, so an
+      # unconfigured window means "any time" rather than the auto lane's
+      # safe-by-default "never".
+      windows != [] and not in_windows?(now, windows) ->
+        {:snooze, seconds_until_window(now, windows), :outside_ideation_window}
 
       true ->
         :ok
