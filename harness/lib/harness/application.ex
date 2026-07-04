@@ -17,6 +17,9 @@ defmodule Harness.Application do
       {Phoenix.PubSub, name: Harness.PubSub},
       Harness.Policy.Server,
       Harness.Policy.Watcher,
+      Harness.Repos,
+      {Registry, keys: :unique, name: Harness.Runs.Registry},
+      Harness.Runs.RunSupervisor,
       {Oban, Application.fetch_env!(:harness, Oban)},
       # Start to serve requests, typically the last entry
       HarnessWeb.Endpoint

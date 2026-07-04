@@ -36,7 +36,11 @@ config :harness, Oban,
     # Workers self-throttle against policy.yaml intervals (poll_minutes is
     # hot-reloadable; Oban cron is fixed at boot), so cron fires every minute
     # and the workers early-exit when not due.
-    {Oban.Plugins.Cron, crontab: []}
+    {Oban.Plugins.Cron,
+     crontab: [
+       {"* * * * *", Harness.GitHub.PollWorker},
+       {"* * * * *", Harness.Usage.PollWorker}
+     ]}
   ]
 
 # Configure the endpoint

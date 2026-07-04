@@ -12,8 +12,15 @@ config :harness, Harness.Repo,
 
 config :harness, Oban, testing: :manual
 
+config :harness, :runner, Harness.Runs.FakeRunner
 config :harness, :boot_check_level, :skip
 config :harness, :policy_path, Path.expand("../test/support/fixtures/policy.yaml", __DIR__)
+
+# never touch the real ~/.harness, Keychain, or GitHub from tests
+config :harness, :harness_home, Path.expand("../tmp/test_harness_home", __DIR__)
+config :harness, :workspaces_dir, Path.expand("../tmp/test_workspaces", __DIR__)
+config :harness, :github_pat, "test-pat"
+config :harness, :claude_oauth_token, "test-oauth-token"
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.

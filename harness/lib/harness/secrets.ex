@@ -19,15 +19,18 @@ defmodule Harness.Secrets do
   """
   @spec github_pat() :: {:ok, String.t()} | {:error, :not_found}
   def github_pat do
-    case :persistent_term.get({__MODULE__, :github_pat}, nil) do
-      nil ->
+    cond do
+      override = Application.get_env(:harness, :github_pat) ->
+        {:ok, override}
+
+      pat = :persistent_term.get({__MODULE__, :github_pat}, nil) ->
+        {:ok, pat}
+
+      true ->
         with {:ok, pat} <- read_password(service: @pat_service, account: System.get_env("USER")) do
           :persistent_term.put({__MODULE__, :github_pat}, pat)
           {:ok, pat}
         end
-
-      pat ->
-        {:ok, pat}
     end
   end
 
@@ -42,6 +45,14 @@ defmodule Harness.Secrets do
           {:ok, %{access_token: String.t(), refresh_token: String.t() | nil, expires_at: integer() | nil}}
           | {:error, :not_found | :unexpected_shape}
   def claude_oauth do
+    if token = Application.get_env(:harness, :claude_oauth_token) do
+      {:ok, %{access_token: token, refresh_token: nil, expires_at: nil}}
+    else
+      read_claude_oauth()
+    end
+  end
+
+  defp read_claude_oauth do
     with {:ok, json} <- read_password(service: @claude_service),
          {:ok, %{"claudeAiOauth" => oauth}} <- Jason.decode(json),
          %{"accessToken" => access} <- oauth do

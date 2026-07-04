@@ -1,0 +1,4 @@
+{"type":"some_future_event","payload":{"x":1},"uuid":"bbbbbbbb-0000-0000-0000-000000000001"}
+{"type":"system","subtype":"never_seen_subtype","detail":"?","uuid":"bbbbbbbb-0000-0000-0000-000000000002"}
+this line is not json at all
+{"type":"result","subtype":"success","is_error":false,"num_turns":1,"result":"ok","session_id":"11111111-2222-3333-4444-555555555555","total_cost_usd":0.001,"usage":{"input_tokens":1,"output_tokens":1},"uuid":"bbbbbbbb-0000-0000-0000-000000000003"}

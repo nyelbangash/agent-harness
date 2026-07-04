@@ -24,6 +24,9 @@ defmodule Harness.DataCase do
       import Ecto.Changeset
       import Ecto.Query
       import Harness.DataCase
+      import Harness.Fixtures
+
+      use Oban.Testing, repo: Harness.Repo, engine: Oban.Engines.Lite
     end
   end
 
