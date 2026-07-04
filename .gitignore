@@ -1,0 +1,23 @@
+# unrelated pre-existing file, kept on disk but out of the repo
+/dashboard.html
+
+# per-run git worktrees
+/workspaces/*
+!/workspaces/.gitkeep
+
+# macOS
+.DS_Store
+
+# databases (belt and braces; real DBs live in ~/.harness)
+*.db
+*.db-*
+
+# Phoenix / Elixir
+/harness/_build/
+/harness/deps/
+/harness/.elixir_ls/
+/harness/.lexical/
+/harness/priv/static/assets/
+/harness/assets/node_modules/
+harness-*.tar
+erl_crash.dump
