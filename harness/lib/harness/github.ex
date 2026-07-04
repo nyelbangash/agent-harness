@@ -81,8 +81,17 @@ defmodule Harness.GitHub do
 
   @doc "Move an issue through the pipeline and broadcast."
   def transition!(%Issue{} = issue, pipeline_state) do
+    previous = issue.pipeline_state
     issue = issue |> Issue.changeset(%{pipeline_state: pipeline_state}) |> Repo.update!()
     broadcast(issue)
+
+    if pipeline_state == "failed" and previous != "failed" do
+      Harness.Notify.notify(
+        :run_failed,
+        "Run failed for #{issue.repo}##{issue.number}: #{issue.title}"
+      )
+    end
+
     issue
   end
 

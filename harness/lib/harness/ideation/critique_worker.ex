@@ -149,6 +149,11 @@ defmodule Harness.Ideation.CritiqueWorker do
 
         if File.exists?(path) do
           Ideation.update_session!(session, %{status: "synthesized", synthesis_path: path})
+
+          Harness.Notify.notify(
+            :ideation_synthesized,
+            "Ideation session #{session.id} synthesized: #{String.slice(session.seed_prompt, 0, 80)}"
+          )
         else
           Logger.warning("ideation #{session.id}: synthesis wrote no SYNTHESIS.md")
         end

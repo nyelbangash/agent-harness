@@ -145,6 +145,12 @@ defmodule Harness.GitHub.PlanWorker do
       |> Harness.Repo.update!()
 
       GitHub.transition!(issue, "plan_ready")
+
+      Harness.Notify.notify(
+        :plan_ready,
+        "Plan ready for #{issue.repo}##{issue.number}: #{issue.title}"
+      )
+
       :ok
     else
       Logger.warning("plan run for #{issue.repo}##{issue.number} left no usable artifacts")

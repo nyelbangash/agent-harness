@@ -95,6 +95,15 @@ defmodule Harness.GitHub.PollWorker do
           GitHub.transition!(issue, "skipped")
         end
 
+      # the off-machine lane (GitHub Action) owns agent-cloud issues — don't
+      # triage/implement them locally (spec §8: Mission Control observes this
+      # lane on the board, it doesn't orchestrate it). They still flow to
+      # done when the cloud PR closes them.
+      "agent-cloud" in issue.labels ->
+        if issue.pipeline_state in @retriageable and issue.pipeline_state != "skipped" do
+          GitHub.transition!(issue, "skipped")
+        end
+
       change == :new ->
         enqueue_triage(issue)
 

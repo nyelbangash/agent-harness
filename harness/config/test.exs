@@ -13,6 +13,7 @@ config :harness, Harness.Repo,
 config :harness, Oban, testing: :manual
 
 config :harness, :runner, Harness.Runs.FakeRunner
+config :harness, :notify_backend, Harness.Notify.TestBackend
 config :harness, :boot_check_level, :skip
 config :harness, :policy_path, Path.expand("../test/support/fixtures/policy.yaml", __DIR__)
 

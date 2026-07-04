@@ -131,6 +131,13 @@ defmodule HarnessWeb.IssuesLive do
         >
           done
         </span>
+        <span
+          :if={"agent-cloud" in @issue.labels}
+          class="font-display uppercase text-[9px] tracking-widest px-1 py-0.5 bg-accent/10 text-accent rounded-sm"
+          title="Handled by the off-machine GitHub Action lane"
+        >
+          ☁ cloud
+        </span>
       </div>
 
       <p class="font-body text-[13px] leading-snug text-ink mb-1.5">{@issue.title}</p>

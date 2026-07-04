@@ -37,9 +37,10 @@ defmodule HarnessWeb.Layouts do
     {"Overview", "/"},
     {"Issues", "/issues"},
     {"Runs", "/runs"},
-    {"Ideation", "/ideation"}
+    {"Ideation", "/ideation"},
+    {"Budget", "/budget"}
   ]
-  @nav_later ~w(Budget Policy)
+  @nav_later ~w(Policy)
 
   def app(assigns) do
     assigns = assign(assigns, nav: @nav, nav_later: @nav_later)

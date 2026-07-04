@@ -60,6 +60,10 @@ defmodule Harness.Policy.Schema do
     defstruct repos: [], poll_minutes: 2
   end
 
+  defmodule Notify do
+    defstruct macos: true, ntfy_topic: nil, budget_warn_fraction: 0.80
+  end
+
   defmodule Repo do
     @enforce_keys [:name]
     defstruct [:name, :test_command, :lint_command, :typecheck_command]
@@ -75,6 +79,7 @@ defmodule Harness.Policy.Schema do
             implement: nil,
             ideate: nil,
             github: nil,
+            notify: nil,
             billing_model: :subscription_pool,
             calendar_notes: []
 
@@ -104,6 +109,7 @@ defmodule Harness.Policy.Schema do
          implement: struct_from(Implement, raw["implement"]),
          ideate: struct_from(Ideate, raw["ideate"]),
          github: github,
+         notify: struct_from(Notify, raw["notify"]),
          billing_model: billing,
          calendar_notes: List.wrap(raw["calendar_notes"]) |> Enum.map(&to_string/1)
        }}

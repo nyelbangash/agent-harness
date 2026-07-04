@@ -1,0 +1,40 @@
+# Off-machine lane (spec §8): runs Claude Code in GitHub Actions when the Mac
+# is off. Copy this into a target repo as .github/workflows/agent-cloud.yml and
+# add the repo secret CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`).
+#
+# Trigger: label an issue `agent-cloud`. The cloud run produces the same
+# harness/* branches + PRs the local daemon does, so Mission Control's board
+# surfaces the result on the next poll — the local harness does not orchestrate
+# this lane, it just observes where it converges (GitHub).
+name: agent-cloud
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  implement:
+    if: github.event.label.name == 'agent-cloud'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # implement the labeled issue on a harness/* branch and open a PR;
+          # never merge, never push to the default branch
+          prompt: |
+            Implement a fix for issue #${{ github.event.issue.number }}
+            ("${{ github.event.issue.title }}"). Work on a branch named
+            harness/issue-${{ github.event.issue.number }}-cloud, run the
+            project's tests, and open a pull request. Do not merge. Do not push
+            to the default branch. If the issue is underspecified, open a draft
+            PR describing what's blocked.
+          allowed_tools: "Read,Edit,Write,Bash(git *),Bash(gh *)"

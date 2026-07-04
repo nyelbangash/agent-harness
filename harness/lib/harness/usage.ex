@@ -30,10 +30,22 @@ defmodule Harness.Usage do
   def current_mode do
     policy = Harness.Policy.get()
 
-    case fresh_oauth_sample(policy) do
-      nil -> :plan_only
-      sample -> mode_for(sample, policy)
+    cond do
+      # §9.5 hard stop: at/over the weekly overflow cap, pause everything
+      # regardless of utilization
+      overflow_over_cap?(policy) ->
+        :pause
+
+      true ->
+        case fresh_oauth_sample(policy) do
+          nil -> :plan_only
+          sample -> mode_for(sample, policy)
+        end
     end
+  end
+
+  defp overflow_over_cap?(policy) do
+    (overflow_usd_this_week() || 0.0) >= policy.budgets.overflow_usd_weekly_cap
   end
 
   @spec health() :: :ok | :stale
@@ -149,6 +161,58 @@ defmodule Harness.Usage do
 
   defdelegate opus_hours_this_week, to: Harness.Runs
   defdelegate overflow_usd_this_week, to: Harness.Runs
+
+  @doc "Seven-day utilization history (oauth samples), oldest first, for sparklines."
+  def utilization_history(days \\ 7) do
+    since = DateTime.add(DateTime.utc_now(), -days, :day)
+
+    from(s in Sample,
+      where: s.source == "oauth_api" and s.sampled_at > ^since,
+      order_by: [asc: s.sampled_at],
+      select: %{
+        at: s.sampled_at,
+        five_hour: s.five_hour_utilization,
+        seven_day: s.seven_day_utilization,
+        seven_day_opus: s.seven_day_opus_utilization
+      }
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Per-day output-token burn for the last `days`, stacked by run kind (lane).
+  Returns `[%{date: Date.t(), by_kind: %{kind => tokens}, total: n}]`, oldest
+  first.
+  """
+  def token_burn_by_day(days \\ 7) do
+    since = DateTime.add(DateTime.utc_now(), -days, :day)
+
+    rows =
+      from(r in Harness.Runs.Run,
+        where: r.inserted_at > ^since,
+        group_by: [fragment("date(?)", r.inserted_at), r.kind],
+        select: {fragment("date(?)", r.inserted_at), r.kind, sum(r.tokens_out)}
+      )
+      |> Repo.all()
+
+    rows
+    |> Enum.group_by(fn {date, _, _} -> date end)
+    |> Enum.map(fn {date, entries} ->
+      by_kind = Map.new(entries, fn {_, kind, tokens} -> {kind, tokens || 0} end)
+      %{date: to_date(date), by_kind: by_kind, total: by_kind |> Map.values() |> Enum.sum()}
+    end)
+    |> Enum.sort_by(& &1.date, Date)
+  end
+
+  # SQLite date() returns an ISO8601 string
+  defp to_date(%Date{} = d), do: d
+
+  defp to_date(iso) when is_binary(iso) do
+    case Date.from_iso8601(iso) do
+      {:ok, date} -> date
+      _ -> Date.utc_today()
+    end
+  end
 
   defp broadcast(message) do
     Phoenix.PubSub.broadcast(Harness.PubSub, @topic, message)

@@ -24,6 +24,7 @@ defmodule HarnessWeb.Router do
       live "/runs/:id", RunsLive
       live "/ideation", IdeationLive
       live "/ideation/:id", IdeationLive
+      live "/budget", BudgetLive
     end
   end
 

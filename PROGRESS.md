@@ -2,6 +2,14 @@
 
 (reverse chronological; one entry per working session)
 
+## 2026-07-04 · session 1 (cont.) · Phase 4 built — ALL FOUR PHASES COMPLETE
+
+**Done:** (1) Notifications — `Harness.Notify` (macOS osascript banner + optional ntfy.sh topic from policy), swappable backend, best-effort (never raises into a job). Fired on: plan ready, PR opened, run failed (central, on issue→failed transition), ideation synthesized, gate tripped, budget ≥ 80% (rate-limited once/hour/cap). (2) Budget LiveView — Opus-hours & overflow-$ cap bars (red at breach), 7-day utilization sparklines (5h/weekly/opus), per-day token burn stacked by lane, annotated calendar_notes; visually verified. (3) Off-machine lane — `ops/github/agent-cloud.yml` (claude-code-action, `agent-cloud` label, CLAUDE_CODE_OAUTH_TOKEN); poller defers `agent-cloud` issues (no local double-billing) and the board shows a ☁ cloud chip; `ops/ROUTINES.md` documents all three off-machine lanes. (4) §9.5 overflow hard-pause: `current_mode` forces `:pause` at the weekly overflow cap. README rewritten. **184 tests green** (2 transient git-timing flakes under parallel load; clean at seed 0).
+
+**The build is feature-complete against the handoff spec (Phases 0–4).** Remaining work is operational, not code: the live §10 acceptance gates need real runs with the daemon installed (`mix harness.install`) + a real assigned issue / seeded session, which only Nyel can drive.
+
+**Next:** final Phase 4 adversarial review, then it's over to Nyel for the live gates.
+
 ## 2026-07-04 · session 1 (cont.) · Phase 3 built — all four phases now feature-complete
 
 **Done:** Ideation engine (spec §5). Ralph-style: each iteration is a fresh headless session, the on-disk tree is the memory. `Harness.Ideation` owns the tree + frontier selection (`score × novelty_decay(depth)`, decay 0.85 — unit-tested to prefer a shallow 8.0 over a deep 8.5, which is what stops tunnelling). `IterationWorker` alternates diverge (branch 2–4, even depth) / develop (deepen, odd depth) via `--json-schema` structured output; `CritiqueWorker` (Opus, every `critique_every`=5) re-scores, prunes (marks, never deletes), checks seed drift; stop on budget / empty frontier / 2 no-progress critiques → final `SYNTHESIS.md`. Anti-drift: seed included verbatim every iteration; journal capped at 3 lines. Server-computed SVG tidy-tree (`Ideation.Layout`, no JS hook), artifact side panel, journal strip, start form — visually verified against a seeded inbox-app tree (pruned branch dimmed, score-graded node colors). Janitor resumes stalled sessions. **170 tests green.** Fixed mid-build: `:layout` is a reserved Phoenix assign (renamed `:tree_layout`); ideation gate now treats empty windows as unrestricted (low-risk lane).

@@ -237,6 +237,7 @@ defmodule Harness.GitHub.ImplementWorker do
     |> GitHub.transition!("pr_open")
 
     if promoted?, do: mark_plan_promoted(issue.id)
+    Harness.Notify.notify(:pr_opened, "PR opened for #{issue.repo}##{issue.number}: #{pr_url}")
     :ok
   end
 

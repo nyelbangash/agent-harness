@@ -37,6 +37,10 @@ ideate:
 github:
   repos: ["nyelbangash/FitnessTracker"] # "owner/name" or {name: "owner/name", test_command: "mix test"}
   poll_minutes: 2
+notify:
+  macos: true # osascript banner
+  ntfy_topic: null # e.g. "harness-nyel-7f3a" for phone push via ntfy.sh
+  budget_warn_fraction: 0.80 # notify when a weekly cap crosses this
 billing_model: subscription_pool # subscription_pool | sdk_credit — see §11
 calendar_notes:
   - "2026-07-13: temporary +50% weekly limit expires; expect thresholds to bite sooner"
