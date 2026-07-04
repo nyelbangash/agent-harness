@@ -26,31 +26,25 @@ defmodule Mix.Tasks.Harness.Setup do
     end
 
     service = Harness.Secrets.pat_service()
-    user = System.get_env("USER")
 
+    # Deliberately NOT prompting from inside Mix: without a real controlling
+    # TTY, `security -w` cannot disable echo and the pasted token appears in
+    # plaintext in the terminal. The user runs the command in their own shell.
     Mix.shell().info("""
 
-    Storing the GitHub fine-grained PAT in the Keychain (service #{service}).
+    Next: store the GitHub fine-grained PAT in the Keychain (service #{service}).
     Create one at https://github.com/settings/personal-access-tokens with:
       Repository access: only the repos in ops/policy.yaml
       Permissions: Contents RW · Issues RW · Pull requests RW (Metadata R is automatic)
 
-    security will now prompt for the token (input is hidden):
+    Then run this yourself, directly in your terminal (it prompts twice with
+    hidden input — if you can SEE the token as you paste, abort and revoke it):
+
+      security add-generic-password -U -s "#{service}" -a "$USER" -T /usr/bin/security -w
+
+    Verify afterwards with: mix harness.doctor
     """)
 
-    status =
-      Mix.shell().cmd(
-        ~s(security add-generic-password -U -s "#{service}" -a "#{user}" -T /usr/bin/security -w)
-      )
-
-    if status == 0 do
-      Harness.Secrets.forget_github_pat()
-
-      Mix.shell().info(
-        "  ✓ PAT stored. Run `mix harness.doctor` to verify against the GitHub API."
-      )
-    else
-      Mix.raise("security add-generic-password exited #{status}")
-    end
+    Harness.Secrets.forget_github_pat()
   end
 end
