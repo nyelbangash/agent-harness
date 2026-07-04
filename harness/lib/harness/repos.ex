@@ -45,7 +45,7 @@ defmodule Harness.Repos do
   Spec §9.2 pre-push guard (non-negotiable): only `harness/*` branches may
   ever be pushed, and never the repo's default branch.
   """
-  @spec publish_branch!(String.t(), Path.t(), String.t(), [String.t()], String.t()) :: :ok
+  @spec publish_branch!(String.t(), Path.t(), String.t(), [String.t()] | :all, String.t()) :: :ok
   def publish_branch!(repo, worktree, branch, files, message) do
     unless String.starts_with?(branch, "harness/") and branch != default_branch(repo) do
       raise "refusing to push #{inspect(branch)} — only harness/* branches may be pushed (§9.2)"
@@ -159,7 +159,11 @@ defmodule Harness.Repos do
 
     git(worktree, ["branch", "-D", branch], repo)
     git!(worktree, ["checkout", "-b", branch], repo)
-    git!(worktree, ["add" | files], repo)
+
+    case files do
+      :all -> git!(worktree, ["add", "-A"], repo)
+      list when is_list(list) -> git!(worktree, ["add" | list], repo)
+    end
 
     git!(
       worktree,

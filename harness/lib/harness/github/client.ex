@@ -66,6 +66,26 @@ defmodule Harness.GitHub.Client do
     end
   end
 
+  @doc "Open a PR. Returns `{:ok, %{number: n, url: html_url}}`."
+  def create_pull_request(repo, head, base, title, body) do
+    case request(:post, "/repos/#{repo}/pulls",
+           json: %{title: title, head: head, base: base, body: body}
+         ) do
+      {:ok, %{status: 201, body: %{"number" => number, "html_url" => url}}} ->
+        {:ok, %{number: number, url: url}}
+
+      {:ok, %{status: 422, body: body}} ->
+        # usually "A pull request already exists for ..." on a re-run
+        {:error, {:unprocessable, body}}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp request(method, path, opts \\ []) do
     with {:ok, pat} <- Harness.Secrets.github_pat() do
       headers =

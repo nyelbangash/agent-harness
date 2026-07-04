@@ -28,6 +28,8 @@ defmodule Harness.GitHub.Issue do
     field :github_updated_at, :utc_datetime_usec
     field :pipeline_state, :string, default: "incoming"
     field :last_synced_at, :utc_datetime_usec
+    field :pr_url, :string
+    field :pr_number, :integer
 
     has_many :triages, Harness.GitHub.TriageDecision
     has_many :plans, Harness.GitHub.Plan
@@ -52,7 +54,9 @@ defmodule Harness.GitHub.Issue do
       :comments_count,
       :github_updated_at,
       :pipeline_state,
-      :last_synced_at
+      :last_synced_at,
+      :pr_url,
+      :pr_number
     ])
     |> validate_required([:repo, :number, :github_id, :title])
     |> validate_inclusion(:pipeline_state, @pipeline_states)

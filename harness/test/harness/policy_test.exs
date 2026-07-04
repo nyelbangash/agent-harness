@@ -160,5 +160,32 @@ defmodule Harness.PolicyTest do
       assert Policy.mode() == :full_auto
       assert_receive {:policy_error, _}
     end
+
+    test "set_mode! rewrites only the mode line and preserves comments" do
+      tmp =
+        Path.join(System.tmp_dir!(), "harness-setmode-#{System.unique_integer([:positive])}.yaml")
+
+      original = Application.fetch_env!(:harness, :policy_path)
+      File.cp!(original, tmp)
+      Application.put_env(:harness, :policy_path, tmp)
+
+      on_exit(fn ->
+        Application.put_env(:harness, :policy_path, original)
+        Harness.Policy.Server.reload()
+        File.rm(tmp)
+      end)
+
+      assert :ok = Policy.set_mode!(:paused)
+      assert Policy.mode() == :paused
+
+      content = File.read!(tmp)
+      assert content =~ ~r/^mode: paused/m
+      # the inline comment on the mode line survives, as does the rest
+      assert content =~ "flippable from Mission Control"
+      assert content =~ "full_auto_windows"
+
+      assert :ok = Policy.set_mode!(:plan_only)
+      assert Policy.mode() == :plan_only
+    end
   end
 end

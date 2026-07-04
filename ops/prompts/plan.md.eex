@@ -29,6 +29,14 @@ Body:
 Route: plan. Scope estimate: <%= @estimated_scope %>.
 Risk flags: <%= Enum.join(@risk_flags, ", ") %>.
 Triage reasoning: <%= @triage_reasoning %>
+<%= if assigns[:failure_transcript] do %>
+## Failed auto-implementation attempt (pipeline-generated, trusted)
+The auto lane already tried to implement this and its verification gate
+stayed red after the allowed fix cycles. Study the failure before planning —
+your plan should explain what went wrong and how a human should avoid it:
+
+<%= @failure_transcript %>
+<% end %>
 
 ## How to work
 Explore the codebase thoroughly before writing: read the files the issue

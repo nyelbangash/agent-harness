@@ -39,7 +39,7 @@ defmodule Harness.GitHub.PlanWorker do
   @min_artifact_bytes 400
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"issue_id" => issue_id}}) do
+  def perform(%Oban.Job{args: %{"issue_id" => issue_id} = args}) do
     issue = GitHub.get_issue!(issue_id)
 
     cond do
@@ -48,14 +48,14 @@ defmodule Harness.GitHub.PlanWorker do
 
       true ->
         case Policy.gate(:plan) do
-          :ok -> plan(issue)
+          :ok -> plan(issue, args["failure_transcript"])
           {:snooze, seconds, _reason} -> {:snooze, seconds}
           {:skip, reason} -> {:cancel, reason}
         end
     end
   end
 
-  defp plan(issue) do
+  defp plan(issue, failure_transcript) do
     policy = Policy.get()
     Repos.ensure_base!(issue.repo)
 
@@ -74,7 +74,7 @@ defmodule Harness.GitHub.PlanWorker do
 
       triage = GitHub.latest_triage(issue.id)
       default_branch = Repos.default_branch(issue.repo)
-      prompt = Harness.Prompts.plan(issue, comments, triage, default_branch)
+      prompt = Harness.Prompts.plan(issue, comments, triage, default_branch, failure_transcript)
       issue = GitHub.transition!(issue, "planning")
 
       spec = %RunSpec{

@@ -1,4 +1,4 @@
-mode: plan_only          # plan_only | full_auto | paused — flippable from Mission Control
+mode: plan_only # plan_only | full_auto | paused — flippable from Mission Control
 models:
   triage: sonnet
   implement: sonnet
@@ -7,36 +7,36 @@ models:
   critique: opus
   escalation: opus
 schedule:
-  full_auto_windows: ["20:00-06:00"]     # local time; outside these, auto lane demotes to plan
+  full_auto_windows: ["20:00-06:00"] # local time; outside these, auto lane demotes to plan
   ideation_windows: ["21:00-02:00"]
   max_ideation_sessions_per_week: 3
 budgets:
   opus_hours_weekly_cap: 18
-  overflow_usd_weekly_cap: 25            # hard stop on API-rate overflow spend
+  overflow_usd_weekly_cap: 25 # hard stop on API-rate overflow spend
   implement_max_turns: 60
   ideate_iteration_max_turns: 25
   # additions to spec §7 (flagged in the approved plan):
   triage_max_turns: 12
   plan_max_turns: 40
-utilization_gates:                        # polled from https://claude.ai/api/oauth/usage
+utilization_gates: # polled from https://claude.ai/api/oauth/usage
   poll_minutes: 10
-  full_auto_below: 0.60                   # weekly (seven_day) utilization thresholds
+  full_auto_below: 0.60 # weekly (seven_day) utilization thresholds
   defer_ideation_above: 0.60
   plan_only_above: 0.80
   pause_above: 0.90
 triage:
   auto_threshold: 0.75
-  low_confidence_floor: 0.4              # addition: §4.2's opus re-triage threshold
+  low_confidence_floor: 0.4 # addition: §4.2's opus re-triage threshold
 plan:
-  post_to_issue: false                   # addition: referenced by spec §4.4
+  post_to_issue: false # addition: referenced by spec §4.4
 implement:
   max_fix_cycles: 2
 ideate:
   critique_every: 5
   default_budget_minutes: 180
 github:
-  repos: []                               # "owner/name" or {name: "owner/name", test_command: "mix test"}
+  repos: ["nyelbangash/FitnessTracker"] # "owner/name" or {name: "owner/name", test_command: "mix test"}
   poll_minutes: 2
-billing_model: subscription_pool          # subscription_pool | sdk_credit — see §11
+billing_model: subscription_pool # subscription_pool | sdk_credit — see §11
 calendar_notes:
   - "2026-07-13: temporary +50% weekly limit expires; expect thresholds to bite sooner"

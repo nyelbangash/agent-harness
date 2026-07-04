@@ -225,9 +225,11 @@ defmodule HarnessWeb.OverviewLive do
                 <span :if={plan.branch}>branch: {plan.branch}</span>
                 <span :if={plan.issue_comment_id}>plan posted to issue</span>
                 <button
-                  class="ml-2 px-1.5 py-0.5 border border-surface-2 text-ink-dim/50 rounded-sm cursor-not-allowed"
-                  title="Promote to auto — Phase 2"
-                  disabled
+                  :if={issue.pipeline_state == "plan_ready"}
+                  phx-click="promote_to_auto"
+                  phx-value-id={issue.id}
+                  data-confirm={"Promote #{issue.repo}##{issue.number} to auto? An implement session will run against the reviewed plan and open a PR."}
+                  class="ml-2 px-1.5 py-0.5 border border-accent text-accent rounded-sm hover:bg-accent hover:text-bg"
                 >
                   Promote to auto
                 </button>

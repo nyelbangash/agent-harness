@@ -216,8 +216,12 @@ defmodule Harness.GitHub.TriageWorker do
         :ok
 
       "auto" ->
-        # Phase 2's ImplementWorker picks up from "triaged"
         GitHub.transition!(issue, "triaged")
+
+        %{issue_id: issue.id}
+        |> Harness.GitHub.ImplementWorker.new()
+        |> Oban.insert()
+
         :ok
 
       "plan" ->

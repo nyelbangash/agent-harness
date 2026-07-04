@@ -135,6 +135,17 @@ defmodule HarnessWeb.IssuesLive do
 
       <p class="font-body text-[13px] leading-snug text-ink mb-1.5">{@issue.title}</p>
 
+      <div :if={@issue.pr_url} class="mb-1.5">
+        <a
+          href={@issue.pr_url}
+          target="_blank"
+          rel="noopener"
+          class="font-mono text-[10px] text-accent hover:underline"
+        >
+          PR #{@issue.pr_number} ↗
+        </a>
+      </div>
+
       <div :if={@triage} class="flex items-center gap-1.5 flex-wrap">
         <span class={[
           "font-display uppercase text-[9px] tracking-widest px-1.5 py-0.5 rounded-sm",

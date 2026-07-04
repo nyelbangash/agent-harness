@@ -103,12 +103,27 @@ defmodule HarnessWeb.Layouts do
   defp mode_indicator(assigns) do
     ~H"""
     <div class="flex flex-col items-center md:items-stretch gap-1" data-testid="mode-indicator">
-      <span class={[
-        "font-display uppercase tracking-[0.14em] text-[11px] px-3 py-1.5 rounded-sm border text-center",
-        mode_classes(@mode)
-      ]}>
-        {mode_label(@mode)}
-      </span>
+      <div class="flex flex-col rounded-sm border border-surface-2 overflow-hidden">
+        <button
+          :for={mode <- [:plan_only, :full_auto, :paused]}
+          phx-click="set_mode"
+          phx-value-mode={mode}
+          data-confirm={
+            mode == :full_auto &&
+              "Enable FULL AUTO? The agent will implement and open PRs unattended (inside the policy windows)."
+          }
+          disabled={@mode == mode}
+          class={[
+            "font-display uppercase tracking-[0.14em] text-[10px] px-3 py-1.5 text-center",
+            if(@mode == mode,
+              do: mode_active_classes(mode),
+              else: "text-ink-dim hover:text-ink cursor-pointer"
+            )
+          ]}
+        >
+          {mode_label(mode)}
+        </button>
+      </div>
       <span
         :if={@usage_health == :stale}
         class="font-mono text-[10px] text-alert text-center"
@@ -130,8 +145,8 @@ defmodule HarnessWeb.Layouts do
   defp mode_label(:full_auto), do: "Full Auto"
   defp mode_label(:paused), do: "Paused"
 
-  defp mode_classes(:paused), do: "border-alert text-alert"
-  defp mode_classes(_), do: "border-accent text-accent"
+  defp mode_active_classes(:paused), do: "bg-alert/20 text-alert"
+  defp mode_active_classes(_), do: "bg-accent text-bg"
 
   @doc """
   Shows the flash group with standard titles and content.

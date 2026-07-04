@@ -27,6 +27,24 @@ defmodule Harness.Policy do
   @spec reload() :: :ok | {:error, [String.t()]}
   def reload, do: Harness.Policy.Server.reload()
 
+  @doc """
+  Flip the operating mode from Mission Control (spec §7: "flippable from
+  Mission Control"). Rewrites only the `mode:` line of policy.yaml — the file
+  stays the single source of truth — then reloads immediately (the fs watcher
+  would also catch it, but this avoids the debounce window).
+  """
+  @spec set_mode!(:plan_only | :full_auto | :paused) :: :ok | {:error, [String.t()]}
+  def set_mode!(mode) when mode in [:plan_only, :full_auto, :paused] do
+    path = Application.fetch_env!(:harness, :policy_path)
+    content = File.read!(path)
+
+    updated =
+      Regex.replace(~r/^mode:\s*\w+/m, content, "mode: #{mode}", global: false)
+
+    File.write!(path, updated)
+    reload()
+  end
+
   @spec gate?(action()) :: boolean()
   def gate?(action), do: gate(action) == :ok
 

@@ -45,6 +45,26 @@ defmodule HarnessWeb.RailHooks do
     end
   end
 
+  defp handle_event("set_mode", %{"mode" => mode}, socket)
+       when mode in ["plan_only", "full_auto", "paused"] do
+    :ok = Harness.Policy.set_mode!(String.to_existing_atom(mode))
+
+    {:halt,
+     socket
+     |> assign(rail_state())
+     |> put_flash(:info, "Mode set to #{String.replace(mode, "_", " ")}")}
+  end
+
+  defp handle_event("promote_to_auto", %{"id" => id}, socket) do
+    issue_id = String.to_integer(id)
+
+    %{issue_id: issue_id, promoted: true}
+    |> Harness.GitHub.ImplementWorker.new()
+    |> Oban.insert()
+
+    {:halt, put_flash(socket, :info, "Promoted to auto — implement session queued")}
+  end
+
   defp handle_event(_event, _params, socket), do: {:cont, socket}
 
   defp handle_info(:rail_tick, socket), do: {:halt, assign(socket, rail_state())}

@@ -62,7 +62,7 @@ defmodule Harness.Policy.Schema do
 
   defmodule Repo do
     @enforce_keys [:name]
-    defstruct [:name, :test_command]
+    defstruct [:name, :test_command, :lint_command, :typecheck_command]
   end
 
   defstruct mode: :plan_only,
@@ -201,8 +201,17 @@ defmodule Harness.Policy.Schema do
 
   defp parse_repo(%{"name" => name} = map) when is_binary(name) do
     case parse_repo(name) do
-      {:ok, repo} -> {:ok, %{repo | test_command: map["test_command"]}}
-      :error -> :error
+      {:ok, repo} ->
+        {:ok,
+         %{
+           repo
+           | test_command: map["test_command"],
+             lint_command: map["lint_command"],
+             typecheck_command: map["typecheck_command"]
+         }}
+
+      :error ->
+        :error
     end
   end
 
