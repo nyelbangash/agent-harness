@@ -14,6 +14,7 @@ defmodule Harness.GitHub.PollWorker do
   use Oban.Worker, queue: :ops, max_attempts: 1, unique: [period: 55]
 
   require Logger
+  import Ecto.Query
 
   alias Harness.GitHub
   alias Harness.GitHub.{Client, Issue}
@@ -97,10 +98,12 @@ defmodule Harness.GitHub.PollWorker do
 
       # the off-machine lane (GitHub Action) owns agent-cloud issues — don't
       # triage/implement them locally (spec §8: Mission Control observes this
-      # lane on the board, it doesn't orchestrate it). They still flow to
-      # done when the cloud PR closes them.
+      # lane on the board, it doesn't orchestrate it). Also stop any local work
+      # already in flight when the label arrives mid-pipeline, or the local
+      # session double-bills against the cloud Action.
       "agent-cloud" in issue.labels ->
-        if issue.pipeline_state in @retriageable and issue.pipeline_state != "skipped" do
+        unless issue.pipeline_state in ~w(skipped done pr_open) do
+          cancel_local_work(issue)
           GitHub.transition!(issue, "skipped")
         end
 
@@ -121,6 +124,27 @@ defmodule Harness.GitHub.PollWorker do
     %{issue_id: issue.id}
     |> Harness.GitHub.TriageWorker.new()
     |> Oban.insert()
+  end
+
+  # cancel queued/running local pipeline jobs + kill any live session for this
+  # issue (used when the cloud lane claims a mid-flight issue)
+  defp cancel_local_work(issue) do
+    Oban.cancel_all_jobs(
+      from(j in Oban.Job,
+        where:
+          j.worker in [
+            "Harness.GitHub.TriageWorker",
+            "Harness.GitHub.PlanWorker",
+            "Harness.GitHub.ImplementWorker"
+          ] and
+            j.state in ["available", "scheduled", "executing", "retryable"] and
+            fragment("json_extract(?, '$.issue_id') = ?", j.args, ^issue.id)
+      )
+    )
+
+    for run <- Harness.Runs.running_runs(), run.issue_id == issue.id do
+      Harness.Runs.kill(run.id)
+    end
   end
 
   # open-issues listing no longer contains an issue we track → it closed or

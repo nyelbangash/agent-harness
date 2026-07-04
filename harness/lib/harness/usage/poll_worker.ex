@@ -65,16 +65,14 @@ defmodule Harness.Usage.PollWorker do
       overflow =
         (Harness.Usage.overflow_usd_this_week() || 0.0) / policy.budgets.overflow_usd_weekly_cap
 
-      cond do
-        opus >= warn ->
-          warn_once(:opus, "Opus hours at #{round(opus * 100)}% of the weekly cap")
+      # independent checks — both caps can warn in the same poll (each
+      # deduped separately by warn_once), so a high Opus reading never masks
+      # an overflow-spend warning
+      if opus >= warn,
+        do: warn_once(:opus, "Opus hours at #{round(opus * 100)}% of the weekly cap")
 
-        overflow >= warn ->
-          warn_once(:overflow, "Overflow spend at #{round(overflow * 100)}% of the weekly cap")
-
-        true ->
-          :ok
-      end
+      if overflow >= warn,
+        do: warn_once(:overflow, "Overflow spend at #{round(overflow * 100)}% of the weekly cap")
     end
 
     :ok

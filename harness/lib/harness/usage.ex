@@ -187,31 +187,32 @@ defmodule Harness.Usage do
   def token_burn_by_day(days \\ 7) do
     since = DateTime.add(DateTime.utc_now(), -days, :day)
 
-    rows =
-      from(r in Harness.Runs.Run,
-        where: r.inserted_at > ^since,
-        group_by: [fragment("date(?)", r.inserted_at), r.kind],
-        select: {fragment("date(?)", r.inserted_at), r.kind, sum(r.tokens_out)}
-      )
-      |> Repo.all()
+    # bucket by LOCAL calendar day (the operator reads this on their own
+    # machine; the rest of the app also gates on local time), so evening runs
+    # aren't misattributed to the next UTC day
+    offset = local_offset_seconds()
 
-    rows
-    |> Enum.group_by(fn {date, _, _} -> date end)
+    from(r in Harness.Runs.Run,
+      where: r.inserted_at > ^since,
+      select: {r.inserted_at, r.kind, r.tokens_out}
+    )
+    |> Repo.all()
+    |> Enum.group_by(fn {at, _, _} ->
+      at |> DateTime.add(offset, :second) |> DateTime.to_date()
+    end)
     |> Enum.map(fn {date, entries} ->
-      by_kind = Map.new(entries, fn {_, kind, tokens} -> {kind, tokens || 0} end)
-      %{date: to_date(date), by_kind: by_kind, total: by_kind |> Map.values() |> Enum.sum()}
+      by_kind =
+        entries
+        |> Enum.group_by(fn {_, kind, _} -> kind end, fn {_, _, tok} -> tok || 0 end)
+        |> Map.new(fn {kind, toks} -> {kind, Enum.sum(toks)} end)
+
+      %{date: date, by_kind: by_kind, total: by_kind |> Map.values() |> Enum.sum()}
     end)
     |> Enum.sort_by(& &1.date, Date)
   end
 
-  # SQLite date() returns an ISO8601 string
-  defp to_date(%Date{} = d), do: d
-
-  defp to_date(iso) when is_binary(iso) do
-    case Date.from_iso8601(iso) do
-      {:ok, date} -> date
-      _ -> Date.utc_today()
-    end
+  defp local_offset_seconds do
+    NaiveDateTime.diff(NaiveDateTime.local_now(), NaiveDateTime.utc_now(), :second)
   end
 
   defp broadcast(message) do

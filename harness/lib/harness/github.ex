@@ -85,7 +85,9 @@ defmodule Harness.GitHub do
     issue = issue |> Issue.changeset(%{pipeline_state: pipeline_state}) |> Repo.update!()
     broadcast(issue)
 
-    if pipeline_state == "failed" and previous != "failed" do
+    # notify once per failure, deduped over a short window: an Oban retry
+    # re-enters planning→failed, so `previous != "failed"` alone would double-fire
+    if pipeline_state == "failed" and previous != "failed" and notify_failure?(issue.id) do
       Harness.Notify.notify(
         :run_failed,
         "Run failed for #{issue.repo}##{issue.number}: #{issue.title}"
@@ -93,6 +95,20 @@ defmodule Harness.GitHub do
     end
 
     issue
+  end
+
+  @failed_notify_window 600
+
+  defp notify_failure?(issue_id) do
+    key = {__MODULE__, :last_failed_notify, issue_id}
+    now = System.system_time(:second)
+
+    if now - :persistent_term.get(key, 0) > @failed_notify_window do
+      :persistent_term.put(key, now)
+      true
+    else
+      false
+    end
   end
 
   @doc "Issues grouped by board column, newest activity first (drives IssuesLive)."
