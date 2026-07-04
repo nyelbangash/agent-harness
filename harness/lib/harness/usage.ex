@@ -47,7 +47,11 @@ defmodule Harness.Usage do
     gates = policy.utilization_gates
 
     utilization =
-      [sample.seven_day_utilization, sample.five_hour_utilization, sample.seven_day_opus_utilization]
+      [
+        sample.seven_day_utilization,
+        sample.five_hour_utilization,
+        sample.seven_day_opus_utilization
+      ]
       |> Enum.reject(&is_nil/1)
       |> case do
         [] -> 100.0

@@ -34,6 +34,10 @@ defmodule Harness.Runs.RunServer do
 
   @impl true
   def init({spec, run}) do
+    # trap exits so supervisor/VM shutdown reaches terminate/2 — otherwise the
+    # claude OS process is orphaned mid-session (Port close sends no signal)
+    Process.flag(:trap_exit, true)
+
     {:ok,
      %{
        spec: spec,
@@ -129,6 +133,29 @@ defmodule Harness.Runs.RunServer do
 
   def handle_info(_message, state), do: {:noreply, state}
 
+  @impl true
+  def terminate(_reason, %{final: nil} = state) do
+    # daemon shutdown / crash while a session is live: signal the OS process
+    # and finalize the row so no ghost "running" run survives the restart
+    if is_integer(state.os_pid) do
+      System.cmd("kill", ["-TERM", Integer.to_string(state.os_pid)], stderr_to_stdout: true)
+    end
+
+    try do
+      Runs.update_run!(state.run, %{
+        status: "killed",
+        error: "daemon shutdown while run was live",
+        ended_at: DateTime.utc_now()
+      })
+    catch
+      _, _ -> :ok
+    end
+
+    :ok
+  end
+
+  def terminate(_reason, _state), do: :ok
+
   # -- stream handling -------------------------------------------------------------
 
   # :json mode emits one JSON document — buffer everything, decode at exit.
@@ -162,7 +189,10 @@ defmodule Harness.Runs.RunServer do
           state = %{state | turns: state.turns + 1, last_message_id: message_id}
 
           if state.turns > state.spec.max_turns and is_nil(state.killed) do
-            Logger.warning("run #{state.run.id} exceeded turn cap #{state.spec.max_turns}, killing")
+            Logger.warning(
+              "run #{state.run.id} exceeded turn cap #{state.spec.max_turns}, killing"
+            )
+
             do_kill(state, :turn_cap)
           else
             state
@@ -289,13 +319,27 @@ defmodule Harness.Runs.RunServer do
     subtype = state.result_payload && state.result_payload["subtype"]
 
     cond do
-      state.killed == :user -> {"killed", "killed by operator", {:error, :killed}}
-      state.killed == :timeout -> {"killed", "wall-clock timeout", {:error, :timeout}}
-      state.killed == :turn_cap -> {"killed", "exceeded Elixir-side turn cap", {:error, {:run_failed, :turn_cap}}}
-      startup_error -> {"failed", startup_error, {:error, {:spawn_failed, startup_error}}}
-      subtype == "success" -> {"succeeded", nil, :ok}
-      is_binary(subtype) -> {"failed", "result subtype: #{subtype}", {:error, {:run_failed, subtype}}}
-      true -> {"failed", "no result envelope (exit #{inspect(exit_code)})", {:error, {:cli_exit, exit_code}}}
+      state.killed == :user ->
+        {"killed", "killed by operator", {:error, :killed}}
+
+      state.killed == :timeout ->
+        {"killed", "wall-clock timeout", {:error, :timeout}}
+
+      state.killed == :turn_cap ->
+        {"killed", "exceeded Elixir-side turn cap", {:error, {:run_failed, :turn_cap}}}
+
+      startup_error ->
+        {"failed", startup_error, {:error, {:spawn_failed, startup_error}}}
+
+      subtype == "success" ->
+        {"succeeded", nil, :ok}
+
+      is_binary(subtype) ->
+        {"failed", "result subtype: #{subtype}", {:error, {:run_failed, subtype}}}
+
+      true ->
+        {"failed", "no result envelope (exit #{inspect(exit_code)})",
+         {:error, {:cli_exit, exit_code}}}
     end
   end
 end

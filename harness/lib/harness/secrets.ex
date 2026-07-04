@@ -42,7 +42,12 @@ defmodule Harness.Secrets do
   the CLI refreshes the access token underneath us.
   """
   @spec claude_oauth() ::
-          {:ok, %{access_token: String.t(), refresh_token: String.t() | nil, expires_at: integer() | nil}}
+          {:ok,
+           %{
+             access_token: String.t(),
+             refresh_token: String.t() | nil,
+             expires_at: integer() | nil
+           }}
           | {:error, :not_found | :unexpected_shape}
   def claude_oauth do
     if token = Application.get_env(:harness, :claude_oauth_token) do

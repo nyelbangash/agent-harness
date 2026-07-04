@@ -6,7 +6,8 @@ defmodule Harness.BootCheckTest do
   alias Harness.BootCheck
   alias Harness.Doctor.Check
 
-  defp check(id, boot), do: %Check{id: id, label: to_string(id), boot: boot, run: fn -> :unused end}
+  defp check(id, boot),
+    do: %Check{id: id, label: to_string(id), boot: boot, run: fn -> :unused end}
 
   test "the anthropic env check errors when the billing-trap variables are set" do
     env_check = Enum.find(Harness.Doctor.checks(), &(&1.id == :anthropic_env))

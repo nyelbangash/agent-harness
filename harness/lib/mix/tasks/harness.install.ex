@@ -35,7 +35,9 @@ defmodule Mix.Tasks.Harness.Install do
       Mix.raise("prod build failed")
     end
 
-    plist_source = Path.join(Application.fetch_env!(:harness, :project_root), "ops/#{@label}.plist")
+    plist_source =
+      Path.join(Application.fetch_env!(:harness, :project_root), "ops/#{@label}.plist")
+
     plist_dest = Path.expand("~/Library/LaunchAgents/#{@label}.plist")
 
     File.mkdir_p!(Path.dirname(plist_dest))
@@ -45,7 +47,9 @@ defmodule Mix.Tasks.Harness.Install do
     # Re-bootstrap if already loaded
     System.cmd("launchctl", ["bootout", "gui/#{uid()}/#{@label}"], stderr_to_stdout: true)
 
-    case System.cmd("launchctl", ["bootstrap", "gui/#{uid()}", plist_dest], stderr_to_stdout: true) do
+    case System.cmd("launchctl", ["bootstrap", "gui/#{uid()}", plist_dest],
+           stderr_to_stdout: true
+         ) do
       {_, 0} ->
         Mix.shell().info("""
           ✓ bootstrapped gui/#{uid()}/#{@label}

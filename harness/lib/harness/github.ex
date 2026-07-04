@@ -32,7 +32,8 @@ defmodule Harness.GitHub do
       title: payload["title"] || "(untitled)",
       body: payload["body"],
       state: payload["state"] || "open",
-      labels: payload["labels"] |> List.wrap() |> Enum.map(& &1["name"]) |> Enum.reject(&is_nil/1),
+      labels:
+        payload["labels"] |> List.wrap() |> Enum.map(& &1["name"]) |> Enum.reject(&is_nil/1),
       author: get_in(payload, ["user", "login"]),
       url: payload["html_url"],
       comments_count: payload["comments"] || 0,
@@ -52,7 +53,8 @@ defmodule Harness.GitHub do
           broadcast(issue)
           {:updated, issue}
         else
-          {:unchanged, existing |> Issue.changeset(%{last_synced_at: attrs.last_synced_at}) |> Repo.update!()}
+          {:unchanged,
+           existing |> Issue.changeset(%{last_synced_at: attrs.last_synced_at}) |> Repo.update!()}
         end
     end
   end

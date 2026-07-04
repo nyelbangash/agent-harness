@@ -40,7 +40,8 @@ defmodule Harness.Runs.CLIArgsTest do
   end
 
   test "json mode with schema (triage shape)" do
-    argv = CLIArgs.build(spec(output_mode: :json, json_schema: ~s({"type":"object"}), max_turns: 12))
+    argv =
+      CLIArgs.build(spec(output_mode: :json, json_schema: ~s({"type":"object"}), max_turns: 12))
 
     assert ["-p", _, "--output-format", "json", "--json-schema", ~s({"type":"object"}) | _] = argv
     refute "--verbose" in argv

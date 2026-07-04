@@ -181,5 +181,4 @@ defmodule HarnessWeb.Layouts do
     </div>
     """
   end
-
 end

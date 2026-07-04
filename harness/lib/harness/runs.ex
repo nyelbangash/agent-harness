@@ -63,7 +63,7 @@ defmodule Harness.Runs do
   @doc "Kill one running session (UI kill button)."
   def kill(run_id) do
     case Registry.lookup(Harness.Runs.Registry, run_id) do
-      [{pid, _}] -> Harness.Runs.RunServer.kill(pid)
+      [{pid, _}] -> safe_kill(pid)
       [] -> {:error, :not_running}
     end
   end
@@ -71,7 +71,16 @@ defmodule Harness.Runs do
   @doc "Master kill: every registered live run."
   def kill_all do
     Registry.select(Harness.Runs.Registry, [{{:_, :"$1", :_}, [], [:"$1"]}])
-    |> Enum.each(&Harness.Runs.RunServer.kill/1)
+    |> Enum.each(&safe_kill/1)
+  end
+
+  # the registry lookup races run completion — a server that finalized between
+  # lookup and call exits the caller with :noproc/:normal; that's a run that
+  # no longer needs killing, not an error
+  defp safe_kill(pid) do
+    Harness.Runs.RunServer.kill(pid)
+  catch
+    :exit, _ -> {:error, :not_running}
   end
 
   # -- queries ----------------------------------------------------------------

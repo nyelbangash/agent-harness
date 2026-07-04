@@ -86,7 +86,12 @@ defmodule Harness.GitHub.PlanWorkerTest do
 
     original = Application.fetch_env!(:harness, :policy_path)
     tmp = Path.join(System.tmp_dir!(), "post-to-issue-#{System.unique_integer([:positive])}.yaml")
-    File.write!(tmp, File.read!(original) |> String.replace("post_to_issue: false", "post_to_issue: true"))
+
+    File.write!(
+      tmp,
+      File.read!(original) |> String.replace("post_to_issue: false", "post_to_issue: true")
+    )
+
     Application.put_env(:harness, :policy_path, tmp)
     Harness.Policy.reload()
 

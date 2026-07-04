@@ -58,10 +58,21 @@ defmodule Harness.Prompts do
   defp truncate(nil, _limit), do: ""
 
   defp truncate(text, limit) do
+    text = sanitize(text)
+
     if String.length(text) > limit do
       String.slice(text, 0, limit) <> "\n… (truncated)"
     else
       text
     end
+  end
+
+  # untrusted content must not be able to forge the trust-boundary markers
+  # the templates wrap it in (e.g. a premature <<<END-ISSUE-DATA>>> followed
+  # by a fake "trusted" section)
+  defp sanitize(text) do
+    text
+    |> String.replace("<<<", "‹‹‹")
+    |> String.replace(">>>", "›››")
   end
 end

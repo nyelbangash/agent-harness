@@ -178,9 +178,14 @@ defmodule Harness.Runs.RunServerTest do
   test "split assistant events with one message id count as one turn", %{tmp: tmp} do
     # two events, same message id — must NOT trip a cap of 1... but a fresh
     # message afterwards must
-    same_id_1 = ~s({"type":"assistant","message":{"id":"msg_same","role":"assistant","content":[{"type":"text","text":"a"}]},"uuid":"u1"})
-    same_id_2 = ~s({"type":"assistant","message":{"id":"msg_same","role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]},"uuid":"u2"})
-    result = ~s({"type":"result","subtype":"success","is_error":false,"num_turns":1,"result":"ok","session_id":"s","total_cost_usd":0.001,"usage":{"input_tokens":1,"output_tokens":1},"uuid":"u3"})
+    same_id_1 =
+      ~s({"type":"assistant","message":{"id":"msg_same","role":"assistant","content":[{"type":"text","text":"a"}]},"uuid":"u1"})
+
+    same_id_2 =
+      ~s({"type":"assistant","message":{"id":"msg_same","role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]},"uuid":"u2"})
+
+    result =
+      ~s({"type":"result","subtype":"success","is_error":false,"num_turns":1,"result":"ok","session_id":"s","total_cost_usd":0.001,"usage":{"input_tokens":1,"output_tokens":1},"uuid":"u3"})
 
     stub_executable(tmp, """
     printf '%s\\n' '#{same_id_1}'

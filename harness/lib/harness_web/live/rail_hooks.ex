@@ -13,6 +13,9 @@ defmodule HarnessWeb.RailHooks do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Harness.PubSub, "policy")
       Phoenix.PubSub.subscribe(Harness.PubSub, "usage")
+      # staleness is a silent time-based transition (no broadcast fires when
+      # the last sample ages out) — refresh the rail on a slow tick
+      :timer.send_interval(60_000, self(), :rail_tick)
     end
 
     socket =
@@ -44,6 +47,7 @@ defmodule HarnessWeb.RailHooks do
 
   defp handle_event(_event, _params, socket), do: {:cont, socket}
 
+  defp handle_info(:rail_tick, socket), do: {:halt, assign(socket, rail_state())}
   defp handle_info({:policy_reloaded, _}, socket), do: {:cont, assign(socket, rail_state())}
   defp handle_info({:policy_error, _}, socket), do: {:cont, assign(socket, rail_state())}
   defp handle_info({:usage_mode_changed, _}, socket), do: {:cont, assign(socket, rail_state())}

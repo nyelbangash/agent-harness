@@ -25,10 +25,12 @@ defmodule Harness.Repos do
 
   @doc "Fresh detached worktree at the default branch tip, under workspaces/."
   @spec create_worktree!(String.t(), String.t()) :: Path.t()
-  def create_worktree!(repo, name), do: GenServer.call(__MODULE__, {:create_worktree, repo, name}, :infinity)
+  def create_worktree!(repo, name),
+    do: GenServer.call(__MODULE__, {:create_worktree, repo, name}, :infinity)
 
   @spec remove_worktree!(String.t(), Path.t()) :: :ok
-  def remove_worktree!(repo, path), do: GenServer.call(__MODULE__, {:remove_worktree, repo, path}, :infinity)
+  def remove_worktree!(repo, path),
+    do: GenServer.call(__MODULE__, {:remove_worktree, repo, path}, :infinity)
 
   @doc "Shallow textual repo map for the triage prompt."
   @spec repo_map(String.t()) :: String.t()
@@ -37,10 +39,23 @@ defmodule Harness.Repos do
   @spec default_branch(String.t()) :: String.t()
   def default_branch(repo), do: GenServer.call(__MODULE__, {:default_branch, repo}, :infinity)
 
-  @doc "Commit PLAN.md/CONTEXT.md in the worktree to `branch` and push it."
+  @doc """
+  Commit PLAN.md/CONTEXT.md in the worktree to `branch` and push it.
+
+  Spec §9.2 pre-push guard (non-negotiable): only `harness/*` branches may
+  ever be pushed, and never the repo's default branch.
+  """
   @spec publish_branch!(String.t(), Path.t(), String.t(), [String.t()], String.t()) :: :ok
   def publish_branch!(repo, worktree, branch, files, message) do
-    GenServer.call(__MODULE__, {:publish_branch, repo, worktree, branch, files, message}, :infinity)
+    unless String.starts_with?(branch, "harness/") and branch != default_branch(repo) do
+      raise "refusing to push #{inspect(branch)} — only harness/* branches may be pushed (§9.2)"
+    end
+
+    GenServer.call(
+      __MODULE__,
+      {:publish_branch, repo, worktree, branch, files, message},
+      :infinity
+    )
   end
 
   # -- server -------------------------------------------------------------------
@@ -54,12 +69,19 @@ defmodule Harness.Repos do
   def handle_call({:ensure_base, repo}, _from, state) do
     path = base_path(repo)
 
-    if File.dir?(Path.join(path, ".git")) do
-      git!(path, ["fetch", "origin", "--prune"], repo)
-    else
-      File.mkdir_p!(Path.dirname(path))
-      git!(Path.dirname(path), ["clone", remote_url(repo), path], repo)
-    end
+    state =
+      if File.dir?(Path.join(path, ".git")) do
+        git!(path, ["fetch", "origin", "--prune"], repo)
+        # fetch only updates remote refs — refresh the checked-out tree too,
+        # or triage sessions read a snapshot from the day of the first clone
+        {branch, state} = fetch_default_branch(repo, state)
+        git!(path, ["reset", "--hard", "origin/#{branch}"], repo)
+        state
+      else
+        File.mkdir_p!(Path.dirname(path))
+        git!(Path.dirname(path), ["clone", remote_url(repo), path], repo)
+        state
+      end
 
     {:reply, path, state}
   end
@@ -132,6 +154,9 @@ defmodule Harness.Repos do
   end
 
   def handle_call({:publish_branch, repo, worktree, branch, files, message}, _from, state) do
+    # defense in depth for the §9.2 guard already enforced in the client fn
+    true = String.starts_with?(branch, "harness/")
+
     git(worktree, ["branch", "-D", branch], repo)
     git!(worktree, ["checkout", "-b", branch], repo)
     git!(worktree, ["add" | files], repo)
@@ -191,33 +216,77 @@ defmodule Harness.Repos do
         output
 
       {output, code} ->
-        raise "git #{Enum.join(scrub(args), " ")} (#{repo}) exited #{code}: #{String.trim(output)}"
+        raise "git #{Enum.join(args, " ")} (#{repo}) exited #{code}: #{String.trim(output)}"
     end
   end
 
+  # Port-based runner (not System.cmd-in-Task): on timeout the git OS process
+  # must actually be signaled — killing only the BEAM task would leak a live
+  # git holding locks on the clone, silently breaking this GenServer's
+  # single-writer guarantee when the Oban retry runs a second git against it.
   defp git(cd, args, _repo) do
     env =
       case Harness.Secrets.github_pat() do
-        {:ok, pat} -> [{"GH_TOKEN", pat}]
+        {:ok, pat} -> [{~c"GH_TOKEN", String.to_charlist(pat)}]
         _ -> []
       end
 
-    task =
-      Task.async(fn ->
-        System.cmd(
-          "git",
-          ["-c", "credential.helper=", "-c", "credential.helper=#{@credential_helper}" | args],
-          cd: cd,
-          env: env,
-          stderr_to_stdout: true
-        )
-      end)
+    git_path = System.find_executable("git")
 
-    case Task.yield(task, @git_timeout) || Task.shutdown(task, :brutal_kill) do
-      {:ok, {output, code}} -> {String.trim_trailing(output), code}
-      nil -> {"git timed out after #{@git_timeout}ms", 124}
-    end
+    port =
+      Port.open({:spawn_executable, "/bin/sh"}, [
+        :binary,
+        :exit_status,
+        :stderr_to_stdout,
+        args: [
+          "-c",
+          ~s(exec "$0" "$@" < /dev/null),
+          git_path,
+          "-c",
+          "credential.helper=",
+          "-c",
+          "credential.helper=#{@credential_helper}" | args
+        ],
+        cd: cd,
+        env: env
+      ])
+
+    os_pid =
+      case Port.info(port, :os_pid) do
+        {:os_pid, pid} -> pid
+        _ -> nil
+      end
+
+    collect_port(port, os_pid, "", System.monotonic_time(:millisecond) + @git_timeout)
   end
 
-  defp scrub(args), do: args
+  defp collect_port(port, os_pid, acc, deadline) do
+    remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    receive do
+      {^port, {:data, chunk}} ->
+        collect_port(port, os_pid, acc <> chunk, deadline)
+
+      {^port, {:exit_status, code}} ->
+        {String.trim_trailing(acc), code}
+    after
+      remaining ->
+        if is_integer(os_pid) do
+          System.cmd("kill", ["-TERM", Integer.to_string(os_pid)], stderr_to_stdout: true)
+          Process.sleep(2_000)
+          System.cmd("kill", ["-KILL", Integer.to_string(os_pid)], stderr_to_stdout: true)
+        end
+
+        # drain whatever the dying process flushes, then close
+        result =
+          receive do
+            {^port, {:exit_status, _}} -> :ok
+          after
+            3_000 -> Port.close(port)
+          end
+
+        _ = result
+        {"git timed out after #{@git_timeout}ms (process killed)", 124}
+    end
+  end
 end

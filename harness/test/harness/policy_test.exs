@@ -133,7 +133,9 @@ defmodule Harness.PolicyTest do
     test "the app-started server serves the fixture policy and hot-reloads" do
       assert %Harness.Policy.Schema{mode: :plan_only} = Policy.get()
 
-      tmp = Path.join(System.tmp_dir!(), "harness-policy-#{System.unique_integer([:positive])}.yaml")
+      tmp =
+        Path.join(System.tmp_dir!(), "harness-policy-#{System.unique_integer([:positive])}.yaml")
+
       original = Application.fetch_env!(:harness, :policy_path)
       File.cp!(original, tmp)
 

@@ -45,7 +45,10 @@ defmodule Mix.Tasks.Harness.Setup do
 
     if status == 0 do
       Harness.Secrets.forget_github_pat()
-      Mix.shell().info("  ✓ PAT stored. Run `mix harness.doctor` to verify against the GitHub API.")
+
+      Mix.shell().info(
+        "  ✓ PAT stored. Run `mix harness.doctor` to verify against the GitHub API."
+      )
     else
       Mix.raise("security add-generic-password exited #{status}")
     end

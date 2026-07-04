@@ -23,7 +23,15 @@ defmodule Harness.Usage.PollWorker do
 
       case strategy.fetch_usage() do
         {:ok, attrs} ->
-          Harness.Usage.record_oauth_sample!(attrs)
+          # a 200 whose shape drifted (all utilizations nil) must count as a
+          # FAILURE — recording it would mark telemetry "fresh" while
+          # mode_for's nil fallback silently paused every lane
+          if utilization_readable?(attrs) do
+            Harness.Usage.record_oauth_sample!(attrs)
+          else
+            Logger.warning("usage endpoint answered 200 but shape unreadable; not recording")
+          end
+
           :ok
 
         {:error, reason} ->
@@ -33,6 +41,17 @@ defmodule Harness.Usage.PollWorker do
     else
       :ok
     end
+  end
+
+  defp utilization_readable?(attrs) do
+    Enum.any?(
+      [
+        attrs[:five_hour_utilization],
+        attrs[:seven_day_utilization],
+        attrs[:seven_day_opus_utilization]
+      ],
+      &is_number/1
+    )
   end
 
   defp due?(policy) do

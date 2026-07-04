@@ -97,7 +97,10 @@ defmodule Harness.GitHub.PollWorkerTest do
     Harness.Repo.delete_all(Oban.Job)
 
     # poll again with a newer updated_at → re-enqueued
-    stub_issues([gh_issue_payload(number: 9, id: issue.github_id, updated_at: "2026-07-04T13:00:00Z")])
+    stub_issues([
+      gh_issue_payload(number: 9, id: issue.github_id, updated_at: "2026-07-04T13:00:00Z")
+    ])
+
     reset_poll_clock()
     assert :ok = perform_job(PollWorker, %{})
 

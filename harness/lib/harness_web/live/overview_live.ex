@@ -32,7 +32,10 @@ defmodule HarnessWeb.OverviewLive do
 
   @impl true
   def handle_info({:run_started, run}, socket) do
-    {:noreply, socket |> assign(:any_runs?, true) |> stream_insert(:activity, run, at: 0)}
+    {:noreply,
+     socket
+     |> assign(:any_runs?, true)
+     |> stream_insert(:activity, run, at: 0, limit: 30)}
   end
 
   def handle_info({:run_updated, run}, socket) do
@@ -49,8 +52,21 @@ defmodule HarnessWeb.OverviewLive do
   end
 
   def handle_info({:usage_sample, _}, socket), do: {:noreply, assign(socket, gauge_assigns())}
-  def handle_info({:usage_mode_changed, _}, socket), do: {:noreply, assign(socket, gauge_assigns())}
-  def handle_info(:tick, socket), do: {:noreply, assign(socket, gauge_assigns())}
+
+  def handle_info({:usage_mode_changed, _}, socket),
+    do: {:noreply, assign(socket, gauge_assigns())}
+
+  def handle_info(:tick, socket) do
+    # stream rows only re-render on insert — refresh running rows so their
+    # elapsed-seconds counters advance
+    socket =
+      Enum.reduce(Runs.running_runs(), assign(socket, gauge_assigns()), fn run, acc ->
+        stream_insert(acc, :activity, run)
+      end)
+
+    {:noreply, socket}
+  end
+
   def handle_info(_message, socket), do: {:noreply, socket}
 
   defp gauge_assigns do
@@ -155,7 +171,11 @@ defmodule HarnessWeb.OverviewLive do
             Activity
           </h2>
           <div id="activity" phx-update="stream" class="divide-y divide-surface-2">
-            <div :for={{dom_id, run} <- @streams.activity} id={dom_id} class="py-2.5 flex items-center gap-3">
+            <div
+              :for={{dom_id, run} <- @streams.activity}
+              id={dom_id}
+              class="py-2.5 flex items-center gap-3"
+            >
               <.status_dot status={run.status} />
               <span class="font-mono text-xs text-ink-dim tabular-nums shrink-0">#{run.id}</span>
               <span class="font-display uppercase tracking-wide text-[11px] text-ink shrink-0">{run.kind}</span>

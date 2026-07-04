@@ -113,13 +113,22 @@ defmodule HarnessWeb.IssuesLive do
         >
           {@issue.repo}#{@issue.number}
         </a>
-        <span :if={@issue.pipeline_state == "failed"} class="font-display uppercase text-[9px] tracking-widest px-1 py-0.5 bg-alert/20 text-alert rounded-sm">
+        <span
+          :if={@issue.pipeline_state == "failed"}
+          class="font-display uppercase text-[9px] tracking-widest px-1 py-0.5 bg-alert/20 text-alert rounded-sm"
+        >
           failed
         </span>
-        <span :if={@issue.pipeline_state == "skipped"} class="font-display uppercase text-[9px] tracking-widest px-1 py-0.5 bg-surface-2 text-ink-dim rounded-sm">
+        <span
+          :if={@issue.pipeline_state == "skipped"}
+          class="font-display uppercase text-[9px] tracking-widest px-1 py-0.5 bg-surface-2 text-ink-dim rounded-sm"
+        >
           skipped
         </span>
-        <span :if={@issue.pipeline_state == "done"} class="font-display uppercase text-[9px] tracking-widest px-1 py-0.5 bg-ok/20 text-ok rounded-sm">
+        <span
+          :if={@issue.pipeline_state == "done"}
+          class="font-display uppercase text-[9px] tracking-widest px-1 py-0.5 bg-ok/20 text-ok rounded-sm"
+        >
           done
         </span>
       </div>

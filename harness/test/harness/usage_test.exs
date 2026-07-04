@@ -113,7 +113,11 @@ defmodule Harness.UsageTest do
       Req.Test.stub(__MODULE__, fn conn ->
         assert ["Bearer test-oauth-token"] = Plug.Conn.get_req_header(conn, "authorization")
         assert ["claude-code/" <> _] = Plug.Conn.get_req_header(conn, "user-agent")
-        Req.Test.json(conn, %{"five_hour" => %{"utilization" => 5}, "seven_day" => %{"utilization" => 20}})
+
+        Req.Test.json(conn, %{
+          "five_hour" => %{"utilization" => 5},
+          "seven_day" => %{"utilization" => 20}
+        })
       end)
 
       assert {:ok, attrs} = SubscriptionPool.fetch_usage()

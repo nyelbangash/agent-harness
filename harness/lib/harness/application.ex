@@ -38,5 +38,4 @@ defmodule Harness.Application do
     HarnessWeb.Endpoint.config_change(changed, removed)
     :ok
   end
-
 end

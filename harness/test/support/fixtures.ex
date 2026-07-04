@@ -81,6 +81,7 @@ defmodule Harness.Fixtures do
     File.write!(Path.join(seed, "README.md"), "# #{repo_name}\n\nFixture repo.\n")
     File.write!(Path.join(seed, "CLAUDE.md"), "Run tests with `mix test`.\n")
     File.write!(Path.join(seed, "src/widget.ex"), "defmodule Widget do\nend\n")
+
     for {path, content} <- extra_files do
       full = Path.join(seed, path)
       File.mkdir_p!(Path.dirname(full))

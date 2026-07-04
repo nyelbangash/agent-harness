@@ -58,7 +58,9 @@ defmodule Harness.Doctor do
       %Check{
         id: :github_pat,
         label: "GitHub PAT in Keychain",
-        boot: :none,
+        # spec §6 lists PAT validity among boot assertions; the Keychain
+        # presence check is network-free so it can safely gate boot
+        boot: :required,
         run: &check_github_pat/0
       },
       %Check{
@@ -167,7 +169,7 @@ defmodule Harness.Doctor do
   defp check_github_pat do
     case Secrets.github_pat() do
       {:ok, _pat} -> {:ok, "service #{Secrets.pat_service()}"}
-      {:error, :not_found} -> {:warn, "no PAT in Keychain — run `mix harness.setup`"}
+      {:error, :not_found} -> {:error, "no PAT in Keychain — run `mix harness.setup`"}
     end
   end
 

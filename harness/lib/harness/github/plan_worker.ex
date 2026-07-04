@@ -14,7 +14,8 @@ defmodule Harness.GitHub.PlanWorker do
   use Oban.Worker,
     queue: :implement,
     max_attempts: 2,
-    unique: [keys: [:issue_id], states: :incomplete]
+    # period :infinity — the 60s default would allow duplicate plan sessions
+    unique: [keys: [:issue_id], states: :incomplete, period: :infinity]
 
   require Logger
 
@@ -41,10 +42,16 @@ defmodule Harness.GitHub.PlanWorker do
   def perform(%Oban.Job{args: %{"issue_id" => issue_id}}) do
     issue = GitHub.get_issue!(issue_id)
 
-    case Policy.gate(:plan) do
-      :ok -> plan(issue)
-      {:snooze, seconds, _reason} -> {:snooze, seconds}
-      {:skip, reason} -> {:cancel, reason}
+    cond do
+      issue.state != "open" or issue.pipeline_state in ~w(done skipped) ->
+        {:cancel, :issue_no_longer_actionable}
+
+      true ->
+        case Policy.gate(:plan) do
+          :ok -> plan(issue)
+          {:snooze, seconds, _reason} -> {:snooze, seconds}
+          {:skip, reason} -> {:cancel, reason}
+        end
     end
   end
 
@@ -119,17 +126,23 @@ defmodule Harness.GitHub.PlanWorker do
       File.cp!(plan_src, plan_path)
       File.cp!(context_src, context_path)
 
+      # record BEFORE the irreversible external publish — a DB failure after
+      # a comment/push would otherwise re-run the whole session on retry and
+      # publish a duplicate
+      plan =
+        GitHub.record_plan!(%{
+          issue_id: issue.id,
+          run_id: result.run_id,
+          plan_path: plan_path,
+          context_path: context_path,
+          summary: plan_path |> File.read!() |> String.slice(0, 500)
+        })
+
       {branch, comment_id} = deliver(issue, policy, worktree)
 
-      GitHub.record_plan!(%{
-        issue_id: issue.id,
-        run_id: result.run_id,
-        plan_path: plan_path,
-        context_path: context_path,
-        branch: branch,
-        issue_comment_id: comment_id,
-        summary: plan_path |> File.read!() |> String.slice(0, 500)
-      })
+      plan
+      |> Harness.GitHub.Plan.changeset(%{branch: branch, issue_comment_id: comment_id})
+      |> Harness.Repo.update!()
 
       GitHub.transition!(issue, "plan_ready")
       :ok

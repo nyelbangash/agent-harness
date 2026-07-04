@@ -62,7 +62,10 @@ defmodule Harness.GitHub.PollWorker do
 
         {:ok, issues, etag} ->
           Enum.each(issues, &handle_issue(repo.name, &1))
-          reconcile_closed(repo.name, issues)
+
+          # absence-from-listing only means "closed" when the listing was
+          # complete — at the page cap an open issue may simply be on page 2
+          if length(issues) < 100, do: reconcile_closed(repo.name, issues)
 
           GitHub.update_repo_state!(state, %{
             etag: etag,

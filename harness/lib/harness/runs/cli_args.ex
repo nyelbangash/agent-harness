@@ -61,7 +61,11 @@ defmodule Harness.Runs.CLIArgs do
       {~c"ANTHROPIC_API_KEY", false},
       {~c"ANTHROPIC_AUTH_TOKEN", false},
       {~c"ANTHROPIC_BASE_URL", false},
-      {~c"CLAUDE_CODE_OAUTH_TOKEN", false}
+      {~c"CLAUDE_CODE_OAUTH_TOKEN", false},
+      # provider redirects would also bypass subscription billing
+      {~c"CLAUDE_CODE_USE_BEDROCK", false},
+      {~c"CLAUDE_CODE_USE_VERTEX", false},
+      {~c"CLAUDE_CODE_USE_FOUNDRY", false}
     ]
   end
 end

@@ -43,10 +43,25 @@ defmodule Harness.GitHub.Triage do
         missing_keys(raw),
         unknown_keys(raw),
         check(raw, "route", &(&1 in @routes), "must be one of #{Enum.join(@routes, "|")}"),
-        check(raw, "confidence", &(is_number(&1) and &1 >= 0 and &1 <= 1), "must be a number in 0..1"),
+        check(
+          raw,
+          "confidence",
+          &(is_number(&1) and &1 >= 0 and &1 <= 1),
+          "must be a number in 0..1"
+        ),
         check(raw, "reasoning", &is_binary/1, "must be a string"),
-        check(raw, "estimated_scope", &(&1 in @scopes), "must be one of #{Enum.join(@scopes, "|")}"),
-        check(raw, "risk_flags", &(is_list(&1) and Enum.all?(&1, fn f -> is_binary(f) end)), "must be a list of strings")
+        check(
+          raw,
+          "estimated_scope",
+          &(&1 in @scopes),
+          "must be one of #{Enum.join(@scopes, "|")}"
+        ),
+        check(
+          raw,
+          "risk_flags",
+          &(is_list(&1) and Enum.all?(&1, fn f -> is_binary(f) end)),
+          "must be a list of strings"
+        )
       ])
 
     case errors do

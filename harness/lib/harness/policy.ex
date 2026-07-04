@@ -72,7 +72,8 @@ defmodule Harness.Policy do
         {:skip, :usage_defers_ideation}
 
       not in_windows?(now, policy.schedule.ideation_windows) ->
-        {:snooze, seconds_until_window(now, policy.schedule.ideation_windows), :outside_ideation_window}
+        {:snooze, seconds_until_window(now, policy.schedule.ideation_windows),
+         :outside_ideation_window}
 
       true ->
         :ok

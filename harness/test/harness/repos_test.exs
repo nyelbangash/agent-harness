@@ -73,7 +73,9 @@ defmodule Harness.ReposTest do
                "Plan packet"
              )
 
-    {refs, 0} = System.cmd("git", ["ls-remote", "file://#{bare}", "refs/heads/harness/plans/issue-1"])
+    {refs, 0} =
+      System.cmd("git", ["ls-remote", "file://#{bare}", "refs/heads/harness/plans/issue-1"])
+
     assert refs =~ "harness/plans/issue-1"
 
     {files, 0} = System.cmd("git", ["ls-tree", "--name-only", "harness/plans/issue-1"], cd: bare)
@@ -82,5 +84,42 @@ defmodule Harness.ReposTest do
     refute files =~ "scratch.tmp"
 
     Repos.remove_worktree!(repo, wt)
+  end
+
+  test "publish_branch! refuses non-harness branches and the default branch (§9.2)", %{repo: repo} do
+    Repos.ensure_base!(repo)
+    wt = Repos.create_worktree!(repo, "guard-wt-#{System.unique_integer([:positive])}")
+    File.write!(Path.join(wt, "PLAN.md"), "x")
+
+    assert_raise RuntimeError, ~r/refusing to push/, fn ->
+      Repos.publish_branch!(repo, wt, "main", ["PLAN.md"], "nope")
+    end
+
+    assert_raise RuntimeError, ~r/refusing to push/, fn ->
+      Repos.publish_branch!(repo, wt, "feature/sneaky", ["PLAN.md"], "nope")
+    end
+
+    Repos.remove_worktree!(repo, wt)
+  end
+
+  test "ensure_base! refreshes the working tree to the remote tip", %{repo: repo, bare: bare} do
+    path = Repos.ensure_base!(repo)
+    refute File.exists?(Path.join(path, "NEW.md"))
+
+    # push a new commit to the remote from a scratch clone
+    scratch = Path.join(System.tmp_dir!(), "scratch-#{System.unique_integer([:positive])}")
+    {_, 0} = System.cmd("git", ["clone", "-q", "file://#{bare}", scratch])
+    File.write!(Path.join(scratch, "NEW.md"), "fresh content")
+    {_, 0} = System.cmd("git", ["add", "-A"], cd: scratch)
+
+    {_, 0} =
+      System.cmd("git", ~w(-c user.name=t -c user.email=t@t commit -q -m update), cd: scratch)
+
+    {_, 0} = System.cmd("git", ["push", "-q"], cd: scratch)
+    File.rm_rf!(scratch)
+
+    # a fresh ensure_base! must surface the new file in the working tree
+    Repos.ensure_base!(repo)
+    assert File.exists?(Path.join(path, "NEW.md"))
   end
 end

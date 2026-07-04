@@ -49,8 +49,20 @@ defmodule HarnessWeb.Components.Gauge do
       <span class="font-display font-semibold uppercase tracking-[0.18em] text-[11px] text-ink-dim">
         {@label}
       </span>
-      <svg viewBox="0 0 200 200" class="w-full max-w-[180px]" role="img" aria-label={"#{@label}: #{@display}"}>
-        <circle cx="100" cy="100" r="92" fill="var(--color-surface)" stroke="var(--color-surface-2)" stroke-width="1" />
+      <svg
+        viewBox="0 0 200 200"
+        class="w-full max-w-[180px]"
+        role="img"
+        aria-label={"#{@label}: #{@display}"}
+      >
+        <circle
+          cx="100"
+          cy="100"
+          r="92"
+          fill="var(--color-surface)"
+          stroke="var(--color-surface-2)"
+          stroke-width="1"
+        />
 
         <path d={@red_arc} fill="none" stroke="var(--color-alert)" stroke-width="5" opacity="0.9" />
 
@@ -74,7 +86,14 @@ defmodule HarnessWeb.Components.Gauge do
           <polygon points="98.6,102 101.4,102 100.4,30 99.6,30" fill="var(--color-ink)" />
           <polygon points="97,108 103,108 101.5,88 98.5,88" fill="var(--color-accent)" opacity="0.6" />
         </g>
-        <circle cx="100" cy="100" r="6" fill="var(--color-surface-2)" stroke="var(--color-ink)" stroke-width="1.5" />
+        <circle
+          cx="100"
+          cy="100"
+          r="6"
+          fill="var(--color-surface-2)"
+          stroke="var(--color-ink)"
+          stroke-width="1.5"
+        />
       </svg>
       <div class="-mt-5 px-3 py-0.5 rounded-sm bg-bg border border-surface-2">
         <span class="font-mono text-sm tabular-nums text-ink" data-testid="gauge-odometer">{@display}</span>

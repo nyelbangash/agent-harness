@@ -23,7 +23,10 @@ defmodule Harness.Policy.Watcher do
         {:ok, %{policy_path: Path.expand(policy_path), timer: nil}}
 
       {:error, reason} ->
-        Logger.warning("policy watcher disabled (#{inspect(reason)}); edits need `Policy.reload/0`")
+        Logger.warning(
+          "policy watcher disabled (#{inspect(reason)}); edits need `Policy.reload/0`"
+        )
+
         :ignore
     end
   end

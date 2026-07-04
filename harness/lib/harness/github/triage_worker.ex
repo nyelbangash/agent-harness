@@ -11,7 +11,9 @@ defmodule Harness.GitHub.TriageWorker do
   use Oban.Worker,
     queue: :triage,
     max_attempts: 2,
-    unique: [keys: [:issue_id], states: :incomplete]
+    # period :infinity — Oban's default unique period is only 60s, which
+    # would let duplicate triage sessions for one issue coexist
+    unique: [keys: [:issue_id], states: :incomplete, period: :infinity]
 
   require Logger
 
@@ -28,12 +30,17 @@ defmodule Harness.GitHub.TriageWorker do
     issue = GitHub.get_issue!(issue_id)
 
     cond do
+      # a snoozed/queued job may execute long after enqueue — never spend
+      # model time on an issue that closed (or was skipped/done) meanwhile
+      issue.state != "open" or issue.pipeline_state in ~w(done skipped) ->
+        {:cancel, :issue_no_longer_actionable}
+
       "human-only" in issue.labels ->
         GitHub.transition!(issue, "skipped")
         :ok
 
       issue.pipeline_state in ~w(planning implementing) ->
-        # already in flight; the poller will re-enqueue when it settles
+        # already in flight; the janitor re-triages if the issue changed
         :ok
 
       true ->
@@ -67,7 +74,9 @@ defmodule Harness.GitHub.TriageWorker do
       finalize(issue, policy, decision, run_id, model, attempt)
     else
       {:contract_failure, run_id, errors} ->
-        Logger.warning("triage contract failed twice for #{issue.repo}##{issue.number}: #{inspect(errors)}")
+        Logger.warning(
+          "triage contract failed twice for #{issue.repo}##{issue.number}: #{inspect(errors)}"
+        )
 
         record_and_route(issue, policy, nil, run_id, %{
           final_route: "plan",
@@ -75,6 +84,12 @@ defmodule Harness.GitHub.TriageWorker do
           model: policy.models.triage,
           attempt: 2
         })
+
+      {:error, :killed} ->
+        # operator hit the kill switch — do NOT let Oban immediately start a
+        # fresh session
+        GitHub.transition!(issue, "failed")
+        {:cancel, :killed}
 
       {:error, reason} ->
         GitHub.transition!(issue, "incoming")

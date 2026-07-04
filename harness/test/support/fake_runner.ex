@@ -53,9 +53,14 @@ defmodule Harness.Runs.FakeRunner do
 
     outcome =
       case response do
-        :no_response -> raise "FakeRunner script exhausted — unexpected execute: #{inspect(spec.kind)}"
-        fun when is_function(fun, 1) -> fun.(spec)
-        canned -> canned
+        :no_response ->
+          raise "FakeRunner script exhausted — unexpected execute: #{inspect(spec.kind)}"
+
+        fun when is_function(fun, 1) ->
+          fun.(spec)
+
+        canned ->
+          canned
       end
 
     case outcome do

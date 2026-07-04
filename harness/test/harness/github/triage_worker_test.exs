@@ -32,7 +32,9 @@ defmodule Harness.GitHub.TriageWorkerTest do
     perform_job(TriageWorker, %{issue_id: issue.id})
   end
 
-  test "happy path: proposed plan → triaged, PlanWorker enqueued, audit row written", %{repo: repo} do
+  test "happy path: proposed plan → triaged, PlanWorker enqueued, audit row written", %{
+    repo: repo
+  } do
     issue = issue_fixture(%{repo: repo})
 
     FakeRunner.script([
@@ -178,5 +180,21 @@ defmodule Harness.GitHub.TriageWorkerTest do
     assert {:error, {:cli_exit, 1}} = perform(issue)
     # issue is parked back in incoming so the retry re-enters cleanly
     assert GitHub.get_issue!(issue.id).pipeline_state == "incoming"
+  end
+
+  test "an operator kill cancels the job instead of retrying a fresh session", %{repo: repo} do
+    issue = issue_fixture(%{repo: repo})
+    FakeRunner.script([{:error, :killed}])
+
+    assert {:cancel, :killed} = perform(issue)
+    assert GitHub.get_issue!(issue.id).pipeline_state == "failed"
+  end
+
+  test "closed issues are never triaged", %{repo: repo} do
+    issue = issue_fixture(%{repo: repo, state: "closed"})
+    FakeRunner.script([])
+
+    assert {:cancel, :issue_no_longer_actionable} = perform(issue)
+    assert FakeRunner.executed_specs() == []
   end
 end

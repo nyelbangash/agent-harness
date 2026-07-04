@@ -53,7 +53,8 @@ defmodule Harness.GitHub.ClientTest do
       Plug.Conn.send_resp(conn, 304, "")
     end)
 
-    assert :not_modified = Client.list_assigned_issues("owner/repo", "nyelbangash", ~s(W/"abc123"))
+    assert :not_modified =
+             Client.list_assigned_issues("owner/repo", "nyelbangash", ~s(W/"abc123"))
   end
 
   test "post_issue_comment returns the comment id" do
