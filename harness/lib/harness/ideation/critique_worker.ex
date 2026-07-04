@@ -42,10 +42,25 @@ defmodule Harness.Ideation.CritiqueWorker do
   def perform(%Oban.Job{args: %{"session_id" => session_id} = args}) do
     session = Ideation.get_session!(session_id)
 
-    if args["final"] do
-      synthesize(session)
-    else
-      critique(session)
+    cond do
+      # the final synthesis must run even for a stopped/operator-stopped
+      # session — it's the wrap-up; only skip it once already synthesized
+      args["final"] ->
+        if session.status == "synthesized",
+          do: {:cancel, :already_synthesized},
+          else: synthesize(session)
+
+      # a mid-run critique on a session that stopped/paused while queued must
+      # not spend an Opus session
+      session.status != "running" ->
+        {:cancel, :session_not_running}
+
+      true ->
+        case Policy.gate(:ideate) do
+          :ok -> critique(session)
+          {:snooze, seconds, _} -> {:snooze, seconds}
+          {:skip, _} -> {:snooze, Policy.get().utilization_gates.poll_minutes * 60}
+        end
     end
   end
 
@@ -96,15 +111,16 @@ defmodule Harness.Ideation.CritiqueWorker do
       "drift=#{out["drift"]} · material_progress=#{out["material_progress"]}"
     ])
 
-    streak =
+    # §5.2: two consecutive CRITIQUES with no material progress stop the run
+    critique_streak =
       if out["material_progress"] == false,
-        do: session.no_progress_streak + 1,
+        do: session.critique_no_progress_streak + 1,
         else: 0
 
     session =
       Ideation.update_session!(session, %{
         critiques: session.critiques + 1,
-        no_progress_streak: streak
+        critique_no_progress_streak: critique_streak
       })
 
     # the next IterationWorker re-checks stop conditions (incl. the streak)

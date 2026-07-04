@@ -30,11 +30,15 @@ defmodule HarnessWeb.IdeationLive do
          assign(socket, session: nil, tree_layout: nil, journal: nil, selected_node: nil)}
 
       id ->
+        # navigating to a session starts with no artifact open
         if connected?(socket), do: Ideation.subscribe(String.to_integer(id))
-        {:noreply, load_session(socket, String.to_integer(id))}
+
+        {:noreply, socket |> assign(:selected_node, nil) |> load_session(String.to_integer(id))}
     end
   end
 
+  # does NOT touch :selected_node, so a live tree update preserves the
+  # operator's open artifact panel
   defp load_session(socket, id) do
     session = Ideation.get_session!(id)
     ideas = Ideation.tree(id)
@@ -43,7 +47,6 @@ defmodule HarnessWeb.IdeationLive do
     |> assign(:session, session)
     |> assign(:tree_layout, Layout.compute(ideas))
     |> assign(:journal, Ideation.read_journal(session))
-    |> assign(:selected_node, nil)
   end
 
   @impl true

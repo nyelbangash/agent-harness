@@ -86,6 +86,23 @@ defmodule Harness.GitHub.Client do
     end
   end
 
+  @doc "Find the open PR whose head is `head` (e.g. \"owner:branch\"), for 422 reconciliation."
+  def find_pull_request(repo, head) do
+    case request(:get, "/repos/#{repo}/pulls", params: [head: head, state: "open", per_page: 1]) do
+      {:ok, %{status: 200, body: [%{"number" => n, "html_url" => u} | _]}} ->
+        {:ok, %{number: n, url: u}}
+
+      {:ok, %{status: 200, body: []}} ->
+        {:error, :not_found}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp request(method, path, opts \\ []) do
     with {:ok, pat} <- Harness.Secrets.github_pat() do
       headers =

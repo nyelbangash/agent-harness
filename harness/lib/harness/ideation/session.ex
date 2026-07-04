@@ -22,6 +22,7 @@ defmodule Harness.Ideation.Session do
     field :iterations, :integer, default: 0
     field :critiques, :integer, default: 0
     field :no_progress_streak, :integer, default: 0
+    field :critique_no_progress_streak, :integer, default: 0
     field :synthesis_path, :string
     field :started_at, :utc_datetime_usec
     field :ended_at, :utc_datetime_usec
@@ -45,6 +46,7 @@ defmodule Harness.Ideation.Session do
       :iterations,
       :critiques,
       :no_progress_streak,
+      :critique_no_progress_streak,
       :synthesis_path,
       :started_at,
       :ended_at

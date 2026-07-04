@@ -2,6 +2,14 @@
 
 (reverse chronological; one entry per working session)
 
+## 2026-07-04 · session 1 (cont.) · Phase 3 built — all four phases now feature-complete
+
+**Done:** Ideation engine (spec §5). Ralph-style: each iteration is a fresh headless session, the on-disk tree is the memory. `Harness.Ideation` owns the tree + frontier selection (`score × novelty_decay(depth)`, decay 0.85 — unit-tested to prefer a shallow 8.0 over a deep 8.5, which is what stops tunnelling). `IterationWorker` alternates diverge (branch 2–4, even depth) / develop (deepen, odd depth) via `--json-schema` structured output; `CritiqueWorker` (Opus, every `critique_every`=5) re-scores, prunes (marks, never deletes), checks seed drift; stop on budget / empty frontier / 2 no-progress critiques → final `SYNTHESIS.md`. Anti-drift: seed included verbatim every iteration; journal capped at 3 lines. Server-computed SVG tidy-tree (`Ideation.Layout`, no JS hook), artifact side panel, journal strip, start form — visually verified against a seeded inbox-app tree (pruned branch dimmed, score-graded node colors). Janitor resumes stalled sessions. **170 tests green.** Fixed mid-build: `:layout` is a reserved Phoenix assign (renamed `:tree_layout`); ideation gate now treats empty windows as unrestricted (low-risk lane).
+
+**Status: all of Phase 0–3 built + unit-tested + visually verified.** Phase 4 (off-machine lanes: GitHub Action, ntfy/macOS notifications, budget panel) is the only remaining spec phase. The live acceptance gates (§10) for Phases 1–3 still need real runs — those need Nyel to flip mode / file an issue / seed a real session with the daemon running.
+
+**Next:** Phase 2+3 adversarial review is in flight; then Phase 4, or run the live gates.
+
 ## 2026-07-04 · session 1 (cont.) · Phase 2 built
 
 **Done:** Auto lane end to end: `ImplementWorker` (worktree implement session → HARD Elixir verification gate via `Harness.Verifier` running the repo's configured test/lint/typecheck commands → up to `max_fix_cycles` feedback loops → still red demotes to plan lane with the failure transcript in the PlanWorker prompt → green means HOST commits/pushes `harness/issue-{n}-{slug}` and opens the PR via `Client.create_pull_request`, comments the issue, `pr_open`). Triage `auto` route now enqueues it. Runs console: session table + live streaming transcript (tool calls collapsed) + kill at `/runs/:id`. Mode toggle in the rail writes `mode:` back to policy.yaml (`Policy.set_mode!`, full-auto requires confirm). Promote-to-auto is live on plan-ready cards (bypasses the mode/window gate — human decision — but never the pause brakes). Board cards link to PRs. **152 tests green.** Verifier bug caught by its own test: `exec cmd` wrapping silently dropped `&& …` compound tails.

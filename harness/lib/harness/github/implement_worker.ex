@@ -115,8 +115,8 @@ defmodule Harness.GitHub.ImplementWorker do
       issue = GitHub.transition!(issue, "implementing")
 
       case fix_cycle_loop(issue, policy, repo_cfg, worktree, prompt, 0, nil) do
-        {:green, run_id} ->
-          publish(issue, worktree, run_id, promoted?)
+        {:green, run_id, approach} ->
+          publish(issue, worktree, run_id, approach, promoted?)
 
         {:red, transcript, _run_id} ->
           Logger.warning(
@@ -160,7 +160,7 @@ defmodule Harness.GitHub.ImplementWorker do
       {:ok, result} ->
         case Verifier.verify(worktree, repo_cfg) do
           :ok ->
-            {:green, result.run_id}
+            {:green, result.run_id, result.result_text}
 
           {:failed, transcript} ->
             if cycle < policy.implement.max_fix_cycles do
@@ -183,8 +183,9 @@ defmodule Harness.GitHub.ImplementWorker do
     end
   end
 
-  defp publish(issue, worktree, run_id, promoted?) do
+  defp publish(issue, worktree, run_id, approach, promoted?) do
     branch = "harness/issue-#{issue.number}-#{slug(issue.title)}"
+    changed = Repos.changed_files(worktree)
 
     Repos.publish_branch!(
       issue.repo,
@@ -196,29 +197,47 @@ defmodule Harness.GitHub.ImplementWorker do
 
     [owner, _name] = String.split(issue.repo, "/")
     base = Repos.default_branch(issue.repo)
-    body = pr_body(issue, run_id)
+    head = "#{owner}:#{branch}"
+    body = pr_body(issue, run_id, approach, changed)
 
-    case Client.create_pull_request(issue.repo, "#{owner}:#{branch}", base, pr_title(issue), body) do
-      {:ok, %{number: pr_number, url: pr_url}} ->
-        Client.post_issue_comment(
-          issue.repo,
-          issue.number,
-          "Opened #{pr_url} for this issue (harness auto lane; verification green)."
-        )
+    case Client.create_pull_request(issue.repo, head, base, pr_title(issue), body) do
+      {:ok, pr} ->
+        record_pr(issue, pr, promoted?)
 
-        issue
-        |> Harness.GitHub.Issue.changeset(%{pr_url: pr_url, pr_number: pr_number})
-        |> Harness.Repo.update!()
-        |> GitHub.transition!("pr_open")
+      # a PR for this head already exists (re-run after a lost response) —
+      # reconcile it instead of misclassifying a real open PR as failed
+      {:error, {:unprocessable, _}} ->
+        case Client.find_pull_request(issue.repo, head) do
+          {:ok, pr} ->
+            record_pr(issue, pr, promoted?)
 
-        if promoted?, do: mark_plan_promoted(issue.id)
-        :ok
+          _ ->
+            Logger.error("PR 422 but no open PR found for #{issue.repo}##{issue.number}")
+            GitHub.transition!(issue, "failed")
+            {:error, :pr_conflict_unresolved}
+        end
 
       {:error, reason} ->
         Logger.error("PR creation failed for #{issue.repo}##{issue.number}: #{inspect(reason)}")
         GitHub.transition!(issue, "failed")
         {:error, {:pr_creation_failed, reason}}
     end
+  end
+
+  defp record_pr(issue, %{number: pr_number, url: pr_url}, promoted?) do
+    Client.post_issue_comment(
+      issue.repo,
+      issue.number,
+      "Opened #{pr_url} for this issue (harness auto lane; verification green)."
+    )
+
+    issue
+    |> Harness.GitHub.Issue.changeset(%{pr_url: pr_url, pr_number: pr_number})
+    |> Harness.Repo.update!()
+    |> GitHub.transition!("pr_open")
+
+    if promoted?, do: mark_plan_promoted(issue.id)
+    :ok
   end
 
   defp demote_to_plan(issue, transcript) do
@@ -243,17 +262,26 @@ defmodule Harness.GitHub.ImplementWorker do
 
   defp pr_title(issue), do: "Fix ##{issue.number}: #{issue.title}"
 
-  defp pr_body(issue, run_id) do
+  # spec §4.3.4: structured body — summary, approach, test evidence, transcript
+  defp pr_body(issue, run_id, approach, changed_files) do
+    test_files = Enum.filter(changed_files, &test_or_ci_file?/1)
+
     """
     ## Summary
 
     Automated fix for ##{issue.number} (#{issue.title}), produced by the harness auto lane.
 
+    ## Approach
+
+    #{approach || "See the linked transcript for the full implementation approach."}
+
     ## Verification
 
-    The repository's configured test#{if run_id, do: "/lint/typecheck", else: ""} commands ran
-    green in the isolated worktree before this branch was pushed (gate enforced by the
-    pipeline, not the agent).
+    The repository's configured test/lint/typecheck commands ran green in the isolated
+    worktree before this branch was pushed (gate enforced by the pipeline, not the agent).
+    #{test_evidence_caveat(test_files)}
+    ## Files changed
+    #{Enum.map_join(changed_files, "\n", &("- `" <> &1 <> "`"))}
 
     ## Transcript
 
@@ -262,6 +290,24 @@ defmodule Harness.GitHub.ImplementWorker do
     ---
     _The harness never merges — review required._
     """
+  end
+
+  # the agent has Write access to the worktree the gate runs in, so surface
+  # any test/CI edits prominently — a reviewer must confirm they weren't
+  # weakened to pass the gate (the gate itself can't detect this)
+  defp test_evidence_caveat([]), do: ""
+
+  defp test_evidence_caveat(test_files) do
+    "\n> ⚠️ This change also modified test/CI files — review these for correctness, " <>
+      "not just green status: #{Enum.map_join(test_files, ", ", &("`" <> &1 <> "`"))}\n"
+  end
+
+  defp test_or_ci_file?(path) do
+    path =~ ~r{(^|/)(test|tests|spec|__tests__)/} or
+      path =~ ~r{_(test|spec)\.\w+$} or
+      path =~ ~r{\.(test|spec)\.\w+$} or
+      path =~ ~r{(^|/)\.github/} or
+      path =~ ~r{(^|/)(ci|\.circleci|\.gitlab-ci)}
   end
 
   defp slug(title) do

@@ -98,11 +98,12 @@ defmodule Harness.Ideation.WorkersTest do
     assert FakeRunner.executed_specs() == []
   end
 
-  test "critique re-scores, prunes, and two no-progress critiques stop the run" do
+  test "critique re-scores, prunes, and TWO consecutive critiques stop the run" do
     %{session: session, root: root} = start()
     a = Ideation.add_child!(session, root, %{title: "weak", score: 6.0}, "")
     b = Ideation.add_child!(session, root, %{title: "strong", score: 6.0}, "")
-    Ideation.update_session!(session, %{iterations: 5, no_progress_streak: 1})
+    # one prior no-progress critique already recorded
+    Ideation.update_session!(session, %{iterations: 5, critique_no_progress_streak: 1})
 
     FakeRunner.script([
       {:ok,
@@ -127,12 +128,66 @@ defmodule Harness.Ideation.WorkersTest do
 
     session = Ideation.get_session!(session.id)
     assert session.critiques == 1
-    # second consecutive no-progress → the next IterationWorker will stop
-    assert session.no_progress_streak == 2
+    # second consecutive no-progress CRITIQUE → the next IterationWorker stops
+    assert session.critique_no_progress_streak == 2
 
     FakeRunner.script([])
     assert :ok = perform_job(IterationWorker, %{session_id: session.id})
     assert Ideation.get_session!(session.id).stop_reason == "no_material_progress"
+  end
+
+  test "malformed iterations alone do NOT stop the session (only critiques do)" do
+    %{session: session} = start()
+    Ideation.update_session!(session, %{iterations: 1})
+
+    # two consecutive malformed-output iterations
+    FakeRunner.script([
+      {:ok, Harness.Fixtures.runner_result(structured_output: %{"garbage" => 1})}
+    ])
+
+    assert :ok = perform_job(IterationWorker, %{session_id: session.id})
+
+    FakeRunner.script([
+      {:ok, Harness.Fixtures.runner_result(structured_output: %{"garbage" => 2})}
+    ])
+
+    assert :ok = perform_job(IterationWorker, %{session_id: session.id})
+
+    # still running — the stop condition is critique-driven, not iteration-driven
+    session = Ideation.get_session!(session.id)
+    assert session.status == "running"
+    assert session.no_progress_streak == 2
+    assert session.critique_no_progress_streak == 0
+  end
+
+  test "a transient utilization defer snoozes the iteration, never kills the session" do
+    %{session: session} = start()
+
+    # age out the fresh usage sample so current_mode fails closed to plan_only
+    # → gate(:ideate) returns {:skip, :usage_defers_ideation}
+    Harness.Repo.update_all(Harness.Usage.Sample,
+      set: [sampled_at: DateTime.add(DateTime.utc_now(), -3600, :second)]
+    )
+
+    FakeRunner.script([])
+    assert {:snooze, _} = perform_job(IterationWorker, %{session_id: session.id})
+
+    # the session is untouched — NOT stopped, no premature synthesis
+    session = Ideation.get_session!(session.id)
+    assert session.status == "running"
+    refute_enqueued(worker: CritiqueWorker)
+  end
+
+  test "a critique queued for a stopped session cancels instead of spending Opus" do
+    %{session: session} = start()
+    Ideation.stop_session!(session, :operator)
+
+    FakeRunner.script([])
+
+    assert {:cancel, :session_not_running} =
+             perform_job(CritiqueWorker, %{session_id: session.id})
+
+    assert FakeRunner.executed_specs() == []
   end
 
   test "final synthesis writes SYNTHESIS.md and marks the session synthesized" do

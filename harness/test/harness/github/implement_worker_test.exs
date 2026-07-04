@@ -119,6 +119,103 @@ defmodule Harness.GitHub.ImplementWorkerTest do
     assert {:ok, []} = File.ls(Application.fetch_env!(:harness, :workspaces_dir))
   end
 
+  test "a 422 (PR already exists, e.g. after a lost response) reconciles the open PR", ctx do
+    put_repo_policy(ctx.repo, "test -f fix.txt")
+    issue = issue_fixture(%{repo: ctx.repo, title: "Retry me", pipeline_state: "triaged"})
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+
+      case {conn.method, conn.request_path} do
+        {"GET", "/repos/" <> _ = path} ->
+          cond do
+            # the reconciliation lookup finds the already-open PR
+            String.ends_with?(path, "/pulls") ->
+              Req.Test.json(conn, [
+                %{"number" => 88, "html_url" => "https://github.com/x/pull/88"}
+              ])
+
+            String.ends_with?(path, "/comments") ->
+              Req.Test.json(conn, [])
+
+            true ->
+              Req.Test.json(conn, %{})
+          end
+
+        {"POST", "/repos/" <> path} ->
+          cond do
+            # create_pull_request returns 422 (already exists)
+            String.ends_with?(path, "/pulls") ->
+              conn |> Plug.Conn.put_status(422) |> Req.Test.json(%{"message" => "already exists"})
+
+            String.ends_with?(path, "/comments") ->
+              conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 1})
+
+            true ->
+              Plug.Conn.send_resp(conn, 500, "")
+          end
+      end
+    end)
+
+    FakeRunner.script([writes_code()])
+    assert :ok = perform_job(ImplementWorker, %{issue_id: issue.id, promoted: true})
+
+    issue = GitHub.get_issue!(issue.id)
+    assert issue.pipeline_state == "pr_open"
+    assert issue.pr_number == 88
+    assert issue.pr_url =~ "/pull/88"
+  end
+
+  test "the PR body flags test/CI file edits the agent made", ctx do
+    put_repo_policy(ctx.repo, "true")
+    issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "plan_ready"})
+
+    captured = start_supervised!({Agent, fn -> nil end})
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      case {conn.method, conn.request_path} do
+        {"GET", p} ->
+          if p =~ "/comments", do: Req.Test.json(conn, []), else: Req.Test.json(conn, %{})
+
+        {"POST", p} ->
+          cond do
+            p =~ "/pulls" ->
+              {:ok, raw, conn} = Plug.Conn.read_body(conn)
+              Agent.update(captured, fn _ -> Jason.decode!(raw)["body"] end)
+
+              conn
+              |> Plug.Conn.put_status(201)
+              |> Req.Test.json(%{"number" => 5, "html_url" => "https://github.com/x/pull/5"})
+
+            p =~ "/comments" ->
+              conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 1})
+
+            true ->
+              Plug.Conn.send_resp(conn, 500, "")
+          end
+      end
+    end)
+
+    FakeRunner.script([
+      fn spec ->
+        File.mkdir_p!(Path.join(spec.cwd, "test"))
+        File.write!(Path.join(spec.cwd, "test/widget_test.exs"), "assert true")
+        File.write!(Path.join(spec.cwd, "lib.ex"), "code")
+
+        {:ok,
+         Harness.Fixtures.runner_result(result_text: "Changed the widget guard and its test.")}
+      end
+    ])
+
+    assert :ok = perform_job(ImplementWorker, %{issue_id: issue.id, promoted: true})
+
+    body = Agent.get(captured, & &1)
+    assert body =~ "## Approach"
+    assert body =~ "Changed the widget guard"
+    assert body =~ "modified test/CI files"
+    assert body =~ "test/widget_test.exs"
+  end
+
   test "red after max_fix_cycles demotes to plan with the failure transcript", ctx do
     put_repo_policy(ctx.repo, "echo boom-#{ctx.repo} && false")
     issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "triaged"})

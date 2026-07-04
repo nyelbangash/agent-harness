@@ -71,14 +71,28 @@ defmodule Harness.Ideation do
     session
   end
 
-  @doc "Stop a session (operator or a stop condition), recording the reason."
-  def stop_session!(%Session{} = session, reason) do
-    update_session!(session, %{
-      status: "stopped",
-      stop_reason: to_string(reason),
-      ended_at: DateTime.utc_now()
-    })
+  @doc """
+  Stop a session (operator or a stop condition), recording the reason and
+  enqueuing the final synthesis (spec §5.2: "On stop, a final Opus synthesis
+  writes SYNTHESIS.md"). Idempotent — a session already past running is left
+  alone so this can't double-enqueue.
+  """
+  def stop_session!(%Session{status: "running"} = session, reason) do
+    session =
+      update_session!(session, %{
+        status: "stopped",
+        stop_reason: to_string(reason),
+        ended_at: DateTime.utc_now()
+      })
+
+    %{session_id: session.id, final: true}
+    |> Harness.Ideation.CritiqueWorker.new()
+    |> Oban.insert()
+
+    session
   end
+
+  def stop_session!(%Session{} = session, _reason), do: session
 
   # -- ideas / tree -----------------------------------------------------------
 

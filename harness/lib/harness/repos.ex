@@ -39,6 +39,24 @@ defmodule Harness.Repos do
   @spec default_branch(String.t()) :: String.t()
   def default_branch(repo), do: GenServer.call(__MODULE__, {:default_branch, repo}, :infinity)
 
+  @doc "Paths the agent touched in the worktree (for the PR body)."
+  @spec changed_files(Path.t()) :: [String.t()]
+  def changed_files(worktree) do
+    # -uall lists individual untracked files rather than collapsing dirs
+    case System.cmd("git", ["-C", worktree, "status", "--porcelain", "-uall"],
+           stderr_to_stdout: true
+         ) do
+      {out, 0} ->
+        out
+        |> String.split("\n", trim: true)
+        |> Enum.map(&(&1 |> String.slice(3..-1//1) |> String.trim()))
+        |> Enum.reject(&(&1 == ""))
+
+      _ ->
+        []
+    end
+  end
+
   @doc """
   Commit PLAN.md/CONTEXT.md in the worktree to `branch` and push it.
 
@@ -179,7 +197,10 @@ defmodule Harness.Repos do
       repo
     )
 
-    git!(worktree, ["push", "--force", "origin", branch], repo)
+    # --force-with-lease, not --force: if commits were layered onto an
+    # earlier harness branch (e.g. a human pushed a fixup), the push fails
+    # loudly rather than silently clobbering them
+    git!(worktree, ["push", "--force-with-lease", "origin", branch], repo)
     {:reply, :ok, state}
   end
 

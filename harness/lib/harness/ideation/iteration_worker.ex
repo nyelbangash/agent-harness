@@ -80,9 +80,17 @@ defmodule Harness.Ideation.IterationWorker do
 
       true ->
         case Policy.gate(:ideate) do
-          :ok -> iterate(session)
-          {:snooze, seconds, _} -> {:snooze, seconds}
-          {:skip, _reason} -> finish(session, :utilization_gate)
+          :ok ->
+            iterate(session)
+
+          # utilization/window defers are TRANSIENT — snooze and retry, never
+          # kill a multi-hour session (which would also burn a premature
+          # synthesis). The budget check above is the real terminator.
+          {:snooze, seconds, _} ->
+            {:snooze, seconds}
+
+          {:skip, _reason} ->
+            {:snooze, Policy.get().utilization_gates.poll_minutes * 60}
         end
     end
   end
@@ -90,7 +98,9 @@ defmodule Harness.Ideation.IterationWorker do
   defp stop_reason(session) do
     cond do
       budget_exhausted?(session) -> :budget_exhausted
-      session.no_progress_streak >= 2 -> :no_material_progress
+      # spec §5.2: two CONSECUTIVE CRITIQUES (not iterations) reporting no
+      # material progress — tracked in its own counter
+      session.critique_no_progress_streak >= 2 -> :no_material_progress
       Ideation.frontier_count(session.id) == 0 and session.iterations > 0 -> :frontier_empty
       true -> nil
     end
@@ -178,6 +188,8 @@ defmodule Harness.Ideation.IterationWorker do
     iteration = session.iterations + 1
     Ideation.append_journal!(session, iteration, journal || [])
 
+    # informational only — the stop condition is critique-driven (§5.2), so a
+    # transient malformed-JSON iteration no longer counts toward termination
     streak = if progress?, do: 0, else: session.no_progress_streak + 1
 
     session =
@@ -196,18 +208,9 @@ defmodule Harness.Ideation.IterationWorker do
     :ok
   end
 
+  # stop_session! records the reason and enqueues the final synthesis
   defp finish(session, reason) do
-    Ideation.update_session!(session, %{
-      status: "stopped",
-      stop_reason: to_string(reason),
-      ended_at: DateTime.utc_now()
-    })
-
-    # a final synthesis pass wraps up the run
-    %{session_id: session.id, final: true}
-    |> Harness.Ideation.CritiqueWorker.new()
-    |> Oban.insert()
-
+    Ideation.stop_session!(session, reason)
     :ok
   end
 
