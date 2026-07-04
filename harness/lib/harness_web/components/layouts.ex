@@ -26,51 +26,112 @@ defmodule HarnessWeb.Layouts do
 
   """
   attr :flash, :map, required: true, doc: "the map of flash messages"
-
-  attr :current_scope, :map,
-    default: nil,
-    doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
+  attr :current_path, :string, default: "/"
+  attr :mode, :atom, default: :plan_only
+  attr :usage_mode, :atom, default: :plan_only
+  attr :usage_health, :atom, default: :ok
 
   slot :inner_block, required: true
 
-  def app(assigns) do
-    ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
-      <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
-          <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
-        </a>
-      </div>
-      <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
-          </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-          <li>
-            <.theme_toggle />
-          </li>
-          <li>
-            <a href="https://phoenix.hexdocs.pm/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
-          </li>
-        </ul>
-      </div>
-    </header>
+  @nav [
+    {"Overview", "/"},
+    {"Issues", "/issues"},
+    {"Runs", "/runs"}
+  ]
+  @nav_later ~w(Ideation Budget Policy)
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
+  def app(assigns) do
+    assigns = assign(assigns, nav: @nav, nav_later: @nav_later)
+
+    ~H"""
+    <div class="min-h-screen md:flex">
+      <aside class="md:w-44 md:min-h-screen shrink-0 border-b md:border-b-0 md:border-r border-surface-2 bg-bg px-4 py-4 md:py-6 flex md:flex-col items-center md:items-stretch gap-4 md:gap-6">
+        <a href="/" class="font-display font-bold tracking-[0.2em] text-ink text-sm uppercase">
+          Harness
+        </a>
+
+        <nav class="flex md:flex-col gap-1 flex-1">
+          <.link
+            :for={{label, path} <- @nav}
+            navigate={path}
+            class={[
+              "font-display uppercase tracking-[0.14em] text-[12px] px-2 py-1.5 rounded-sm",
+              "focus-visible:outline-2 focus-visible:outline-accent",
+              if(@current_path == path,
+                do: "text-bg bg-accent",
+                else: "text-ink-dim hover:text-ink"
+              )
+            ]}
+          >
+            {label}
+          </.link>
+          <span
+            :for={label <- @nav_later}
+            class="hidden md:block font-display uppercase tracking-[0.14em] text-[12px] px-2 py-1.5 text-ink-dim/40 cursor-default"
+            title="Later phase"
+          >
+            {label}
+          </span>
+        </nav>
+
+        <div class="flex md:flex-col items-center md:items-stretch gap-3">
+          <.mode_indicator mode={@mode} usage_mode={@usage_mode} usage_health={@usage_health} />
+
+          <button
+            phx-click="master_kill"
+            data-confirm="Kill every running agent session?"
+            class="font-display uppercase tracking-[0.14em] text-[11px] px-3 py-2 rounded-sm border border-alert text-alert hover:bg-alert hover:text-ink focus-visible:outline-2 focus-visible:outline-alert"
+          >
+            Kill all
+          </button>
+        </div>
+      </aside>
+
+      <main class="flex-1 px-4 sm:px-6 lg:px-8 py-6 max-w-[1400px]">
         {render_slot(@inner_block)}
-      </div>
-    </main>
+      </main>
+    </div>
 
     <.flash_group flash={@flash} />
     """
   end
+
+  attr :mode, :atom, required: true
+  attr :usage_mode, :atom, required: true
+  attr :usage_health, :atom, required: true
+
+  defp mode_indicator(assigns) do
+    ~H"""
+    <div class="flex flex-col items-center md:items-stretch gap-1" data-testid="mode-indicator">
+      <span class={[
+        "font-display uppercase tracking-[0.14em] text-[11px] px-3 py-1.5 rounded-sm border text-center",
+        mode_classes(@mode)
+      ]}>
+        {mode_label(@mode)}
+      </span>
+      <span
+        :if={@usage_health == :stale}
+        class="font-mono text-[10px] text-alert text-center"
+        title="usage telemetry stale — failing closed"
+      >
+        USAGE STALE
+      </span>
+      <span
+        :if={@usage_health == :ok and @mode != :paused}
+        class="font-mono text-[10px] text-ink-dim text-center tabular-nums"
+      >
+        usage: {@usage_mode |> to_string() |> String.replace("_", " ")}
+      </span>
+    </div>
+    """
+  end
+
+  defp mode_label(:plan_only), do: "Plan-Only"
+  defp mode_label(:full_auto), do: "Full Auto"
+  defp mode_label(:paused), do: "Paused"
+
+  defp mode_classes(:paused), do: "border-alert text-alert"
+  defp mode_classes(_), do: "border-accent text-accent"
 
   @doc """
   Shows the flash group with standard titles and content.
@@ -121,40 +182,4 @@ defmodule HarnessWeb.Layouts do
     """
   end
 
-  @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
-
-  See <head> in root.html.heex which applies the theme before page load.
-  """
-  def theme_toggle(assigns) do
-    ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="system"
-      >
-        <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="light"
-      >
-        <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="dark"
-      >
-        <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-    </div>
-    """
-  end
 end

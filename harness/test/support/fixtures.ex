@@ -5,16 +5,19 @@ defmodule Harness.Fixtures do
   alias Harness.Repo
 
   def issue_fixture(attrs \\ %{}) do
+    number = attrs[:number] || System.unique_integer([:positive])
+    repo = attrs[:repo] || "owner/fixture"
+
     defaults = %{
-      repo: "owner/fixture",
-      number: System.unique_integer([:positive]),
+      repo: repo,
+      number: number,
       github_id: System.unique_integer([:positive]),
       title: "Fix the widget",
       body: "The widget is broken in src/widget.ex",
       state: "open",
       labels: [],
       author: "someone",
-      url: "https://github.com/owner/fixture/issues/1",
+      url: "https://github.com/#{repo}/issues/#{number}",
       github_updated_at: DateTime.utc_now(),
       pipeline_state: "incoming"
     }

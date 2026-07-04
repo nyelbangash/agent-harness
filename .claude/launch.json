@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "harness-dev",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/nyelbangash/Documents/ProjectEx/harness && exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN mix phx.server"
+      ],
+      "port": 4000
+    }
+  ]
+}

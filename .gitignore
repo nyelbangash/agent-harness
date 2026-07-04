@@ -21,3 +21,4 @@
 /harness/assets/node_modules/
 harness-*.tar
 erl_crash.dump
+/harness/tmp/

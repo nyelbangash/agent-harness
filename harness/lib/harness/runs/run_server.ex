@@ -63,11 +63,14 @@ defmodule Harness.Runs.RunServer do
         {:noreply, finalize(state, nil, "claude executable not found")}
 
       claude ->
+        # stdin comes from /dev/null (the CLI otherwise pauses ~3s waiting on
+        # the pipe); exec keeps the OS pid == the claude process, so SIGTERM
+        # via os_pid still lands on the right process
         port =
-          Port.open({:spawn_executable, claude}, [
+          Port.open({:spawn_executable, "/bin/sh"}, [
             :binary,
             :exit_status,
-            args: CLIArgs.build(state.spec),
+            args: ["-c", ~s(exec "$0" "$@" < /dev/null), claude | CLIArgs.build(state.spec)],
             cd: state.spec.cwd,
             env: CLIArgs.env()
           ])

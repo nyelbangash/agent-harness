@@ -17,7 +17,11 @@ defmodule HarnessWeb.Router do
   scope "/", HarnessWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live_session :mission_control, on_mount: [HarnessWeb.RailHooks] do
+      live "/", OverviewLive
+      live "/issues", IssuesLive
+      live "/runs", RunsLive
+    end
   end
 
   # Other scopes may use custom stacks.
