@@ -56,6 +56,12 @@ defmodule HarnessWeb.IssuesLiveTest do
     assert in_progress_col =~ "Moving issue"
   end
 
+  test "failed cards show a retry button", %{conn: conn} do
+    issue_fixture(%{title: "Failed card", pipeline_state: "failed"})
+    {:ok, _view, html} = live(conn, ~p"/issues")
+    assert html =~ "Retry"
+  end
+
   test "failed issues land in Done · Failed with the alert treatment", %{conn: conn} do
     issue_fixture(%{title: "Broken issue", pipeline_state: "failed"})
 

@@ -143,6 +143,17 @@ defmodule Harness.Runs do
     |> Repo.one()
   end
 
+  @doc "Kind of the most recent run for an issue, or nil if none exists."
+  def latest_issue_run_kind(issue_id) do
+    from(r in Run,
+      where: r.issue_id == ^issue_id,
+      order_by: [desc: r.id],
+      limit: 1,
+      select: r.kind
+    )
+    |> Repo.one()
+  end
+
   def events(run_id) do
     from(e in RunEvent, where: e.run_id == ^run_id, order_by: e.seq) |> Repo.all()
   end
