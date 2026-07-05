@@ -210,6 +210,7 @@ defmodule Harness.Runs.RunServer do
           state
         else
           state = %{state | turns: state.turns + 1, last_message_id: message_id}
+          Runs.broadcast_counters(state.run.id, state.turns)
 
           if state.turns > state.spec.max_turns and is_nil(state.killed) do
             Logger.warning(
