@@ -285,6 +285,51 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert html =~ ~s(data-viewbox="0 0 #{layout.width} #{layout.height}")
   end
 
+  test "idle inspector shows top-scored nodes in score order", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    _low =
+      Ideation.add_child!(session, root, %{title: "Low Scorer", summary: "l", score: 2.0},
+        "# low body")
+
+    _high =
+      Ideation.add_child!(session, root, %{title: "High Scorer", summary: "h", score: 9.0},
+        "# high body")
+
+    _mid =
+      Ideation.add_child!(session, root, %{title: "Mid Scorer", summary: "m", score: 6.0},
+        "# mid body")
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    assert html =~ "Top nodes"
+    assert html =~ "High Scorer"
+    assert html =~ "Low Scorer"
+
+    # Check order within the leaderboard (after the "Top nodes" heading)
+    {cockpit_start, _} = :binary.match(html, "Top nodes")
+    cockpit_tail = binary_part(html, cockpit_start, byte_size(html) - cockpit_start)
+    {high_pos, _} = :binary.match(cockpit_tail, "High Scorer")
+    {low_pos, _} = :binary.match(cockpit_tail, "Low Scorer")
+    assert high_pos < low_pos
+  end
+
+  test "clicking a leaderboard row fires select_node and shows the node artifact", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    high =
+      Ideation.add_child!(session, root, %{title: "Best Idea", summary: "h", score: 9.0},
+        "# best artifact body")
+
+    {:ok, view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    assert html =~ "Top nodes"
+
+    html = view |> element("button[phx-value-id='#{high.id}']") |> render_click()
+    assert html =~ "best artifact body"
+    assert html =~ "Best Idea"
+  end
+
   test "viewBox height adjusts with tree depth, hugging content tighter than the old formula", %{
     conn: conn
   } do

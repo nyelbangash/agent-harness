@@ -30,6 +30,10 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:policy, policy)
      |> assign(:window_note, Policy.window_note(policy: policy, now: now))
      |> assign(:budget_minutes, budget)
+     |> assign(:top_nodes, [])
+     |> assign(:tokens_in, 0)
+     |> assign(:tokens_out, 0)
+     |> assign(:journal_snippet, nil)
      |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => "#{budget}"}))}
   end
 
@@ -38,7 +42,16 @@ defmodule HarnessWeb.IdeationLive do
     case params["id"] do
       nil ->
         {:noreply,
-         assign(socket, session: nil, tree_layout: nil, journal: nil, selected_node: nil)}
+         assign(socket,
+           session: nil,
+           tree_layout: nil,
+           journal: nil,
+           selected_node: nil,
+           top_nodes: [],
+           tokens_in: 0,
+           tokens_out: 0,
+           journal_snippet: nil
+         )}
 
       id ->
         # navigating to a session starts with no artifact open
@@ -59,11 +72,17 @@ defmodule HarnessWeb.IdeationLive do
   defp load_session(socket, id) do
     session = Ideation.get_session!(id)
     ideas = Ideation.tree(id)
+    journal = Ideation.read_journal(session)
+    {tin, tout} = Ideation.token_totals(id)
 
     socket
     |> assign(:session, session)
     |> assign(:tree_layout, Layout.compute(ideas))
-    |> assign(:journal, Ideation.read_journal(session))
+    |> assign(:journal, journal)
+    |> assign(:top_nodes, Ideation.top_nodes(id))
+    |> assign(:tokens_in, tin)
+    |> assign(:tokens_out, tout)
+    |> assign(:journal_snippet, last_journal_snippet(journal))
   end
 
   def handle_event("fill_seed", %{"seed" => seed}, socket) do
@@ -201,6 +220,18 @@ defmodule HarnessWeb.IdeationLive do
   end
 
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp last_journal_snippet(journal) when is_binary(journal) do
+    case String.split(journal, ~r/(?=## Iteration \d+)/) do
+      parts when length(parts) > 1 ->
+        parts |> List.last() |> String.trim() |> String.slice(0, 400)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp last_journal_snippet(_), do: nil
 
   defp parse_connect_now(nil), do: NaiveDateTime.local_now() |> NaiveDateTime.to_time()
 
@@ -616,8 +647,50 @@ defmodule HarnessWeb.IdeationLive do
                 </div>
 
                 <div class="rounded-sm bg-surface border border-surface-2 p-3 max-h-[60vh] md:max-h-none md:min-h-0 overflow-auto">
-                  <div :if={!@selected_node} class="font-body text-sm text-ink-dim">
-                    Click a node to read its artifact.
+                  <div :if={!@selected_node} id="inspector-cockpit" class="space-y-4">
+                    <div>
+                      <h4 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-1">
+                        Vitals
+                      </h4>
+                      <p class="font-mono text-[11px] text-ink-dim tabular-nums">
+                        {status_line(@session, @policy)}
+                      </p>
+                      <p class="font-mono text-[11px] text-ink-dim tabular-nums mt-0.5">
+                        tokens {@tokens_in + @tokens_out} ({@tokens_in}↑ {@tokens_out}↓)
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-1">
+                        Top nodes
+                      </h4>
+                      <p :if={@top_nodes == []} class="font-body text-[12px] text-ink-dim">
+                        No nodes yet.
+                      </p>
+                      <button
+                        :for={idea <- @top_nodes}
+                        phx-click="select_node"
+                        phx-value-id={idea.id}
+                        class="flex items-center gap-2 w-full text-left px-2 py-1 rounded-sm hover:bg-bg"
+                      >
+                        <span class="font-mono text-[11px] tabular-nums text-ink-dim/70 w-8 text-right shrink-0">
+                          {idea.score}
+                        </span>
+                        <span class="font-body text-[12px] text-ink truncate flex-1">
+                          {idea.title}
+                        </span>
+                        <span class="font-mono text-[10px] text-ink-dim/50 shrink-0">
+                          {idea.status}
+                        </span>
+                      </button>
+                    </div>
+
+                    <div :if={@journal_snippet}>
+                      <h4 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-1">
+                        Last entry
+                      </h4>
+                      <pre class="font-mono text-[10px] text-ink-dim whitespace-pre-wrap line-clamp-6">{@journal_snippet}</pre>
+                    </div>
                   </div>
                   <div :if={@selected_node}>
                     <div class="flex items-center gap-2 mb-2">
