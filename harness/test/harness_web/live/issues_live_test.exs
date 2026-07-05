@@ -5,6 +5,7 @@ defmodule HarnessWeb.IssuesLiveTest do
   import Harness.Fixtures
 
   alias Harness.GitHub
+  alias Harness.Runs
 
   @moduletag :capture_log
 
@@ -62,5 +63,27 @@ defmodule HarnessWeb.IssuesLiveTest do
     [_, done_col] = String.split(html, ~s(data-column="done"))
     assert done_col =~ "Broken issue"
     assert done_col =~ "failed"
+  end
+
+  test "failed issue card shows operator kill reason badge", %{conn: conn} do
+    issue = issue_fixture(%{title: "Killed issue", pipeline_state: "failed"})
+
+    run = Runs.create_run!(%{kind: "implement", ref: "owner/fixture##{issue.number}", model: "sonnet", status: "queued", issue_id: issue.id})
+    Runs.update_run!(run, %{status: "killed", error: "killed by operator"})
+
+    {:ok, _view, html} = live(conn, ~p"/issues")
+    [_, done_col] = String.split(html, ~s(data-column="done"))
+    assert done_col =~ "operator kill"
+  end
+
+  test "failed issue card shows turn cap reason badge with counts", %{conn: conn} do
+    issue = issue_fixture(%{title: "Capped issue", pipeline_state: "failed"})
+
+    run = Runs.create_run!(%{kind: "implement", ref: "owner/fixture##{issue.number}", model: "sonnet", status: "queued", issue_id: issue.id})
+    Runs.update_run!(run, %{status: "killed", error: "turn cap 41/40"})
+
+    {:ok, _view, html} = live(conn, ~p"/issues")
+    [_, done_col] = String.split(html, ~s(data-column="done"))
+    assert done_col =~ "turn cap 41/40"
   end
 end

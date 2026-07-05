@@ -53,6 +53,52 @@ defmodule HarnessWeb.RunsLiveTest do
     assert render(view) =~ "found it in widget.ex"
   end
 
+  test "killed run shows operator kill badge", %{conn: conn} do
+    run = Runs.create_run!(%{kind: "implement", ref: "o/r#2", model: "sonnet", status: "queued"})
+    Runs.update_run!(run, %{status: "killed", error: "killed by operator"})
+
+    {:ok, _view, html} = live(conn, ~p"/runs")
+    assert html =~ "killed"
+    assert html =~ "operator kill"
+  end
+
+  test "killed run shows turn cap badge with counts", %{conn: conn} do
+    run = Runs.create_run!(%{kind: "implement", ref: "o/r#3", model: "sonnet", status: "queued"})
+    Runs.update_run!(run, %{status: "killed", error: "turn cap 41/40"})
+
+    {:ok, _view, html} = live(conn, ~p"/runs")
+    assert html =~ "turn cap 41/40"
+  end
+
+  test "failed run shows orphaned badge when reaped by janitor", %{conn: conn} do
+    run = Runs.create_run!(%{kind: "triage", ref: "o/r#4", model: "sonnet", status: "queued"})
+
+    Runs.update_run!(run, %{
+      status: "failed",
+      error: "reaped: no live run server (daemon restarted mid-run?)"
+    })
+
+    {:ok, _view, html} = live(conn, ~p"/runs")
+    assert html =~ "orphaned by restart"
+  end
+
+  test "failed run shows crashed badge for missing result envelope", %{conn: conn} do
+    run = Runs.create_run!(%{kind: "triage", ref: "o/r#5", model: "sonnet", status: "queued"})
+    Runs.update_run!(run, %{status: "failed", error: "no result envelope (exit 1)"})
+
+    {:ok, _view, html} = live(conn, ~p"/runs")
+    assert html =~ "crashed"
+  end
+
+  test "detail pane shows reason badge next to status", %{conn: conn} do
+    run = Runs.create_run!(%{kind: "plan", ref: "o/r#6", model: "sonnet", status: "queued"})
+    Runs.update_run!(run, %{status: "killed", error: "killed by operator"})
+
+    {:ok, _view, html} = live(conn, ~p"/runs/#{run.id}")
+    assert html =~ "killed"
+    assert html =~ "operator kill"
+  end
+
   test "queue strip shows slot occupancy and waiting depth", %{conn: conn} do
     Oban.insert!(Harness.GitHub.PlanWorker.new(%{issue_id: 1}))
 

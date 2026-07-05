@@ -173,6 +173,8 @@ defmodule Harness.Runs.RunServerTest do
     [run] = Runs.recent_runs(1)
     assert run.status == "killed"
     assert run.error =~ "turn cap"
+    # must include actual/cap counts so the UI can surface "turn cap N/M"
+    assert run.error =~ "/"
   end
 
   test "split assistant events with one message id count as one turn", %{tmp: tmp} do

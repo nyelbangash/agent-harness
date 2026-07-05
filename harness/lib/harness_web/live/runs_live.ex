@@ -147,6 +147,11 @@ defmodule HarnessWeb.RunsLive do
                 <td class="py-2 pr-2 text-right">{duration(run)}</td>
                 <td class="py-2">
                   <span class={status_class(run.status)}>{run.status}</span>
+                  <% badge = reason_badge(run) %>
+                  <span
+                    :if={badge}
+                    class="ml-1.5 font-display text-[9px] uppercase tracking-widest text-alert/70"
+                  >{badge}</span>
                 </td>
               </tr>
             </tbody>
@@ -162,6 +167,10 @@ defmodule HarnessWeb.RunsLive do
               Run #{@selected.id} · {@selected.kind} · {@selected.ref}
             </h2>
             <span class={status_class(@selected.status)}>{@selected.status}</span>
+            <span
+              :if={reason_badge(@selected)}
+              class="font-display text-[9px] uppercase tracking-widest text-alert/70"
+            >{reason_badge(@selected)}</span>
             <button
               :if={@selected.status == "running"}
               phx-click="kill_run"
@@ -266,4 +275,22 @@ defmodule HarnessWeb.RunsLive do
 
   defp status_class("running"), do: "font-mono text-[10px] uppercase text-accent"
   defp status_class(_), do: "font-mono text-[10px] uppercase text-ink-dim"
+
+  # Maps run.error / result_subtype to a short human-readable badge, or nil
+  # when the status carries enough information on its own (succeeded/running/queued).
+  defp reason_badge(%{status: status, error: error, result_subtype: subtype})
+       when status in ["killed", "failed"] do
+    cond do
+      is_binary(error) and String.starts_with?(error, "turn cap ") -> error
+      is_binary(error) and error =~ "operator" -> "operator kill"
+      is_binary(error) and (error =~ "reaped" or error =~ "daemon shutdown") ->
+        "orphaned by restart"
+      is_binary(error) and error =~ "timeout" -> "timeout"
+      is_binary(error) and error =~ "no result envelope" -> "crashed"
+      is_binary(subtype) and subtype != "success" -> String.replace(subtype, "_", " ")
+      true -> nil
+    end
+  end
+
+  defp reason_badge(_), do: nil
 end
