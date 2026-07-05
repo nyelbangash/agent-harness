@@ -25,6 +25,7 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:sessions, Ideation.list_sessions())
      |> assign(:selected_node, nil)
      |> assign(:artifact_open, false)
+     |> assign(:total_tokens, 0)
      |> assign(:policy, policy)
      |> assign(:window_note, Policy.window_note(policy: policy, now: now))
      |> assign(:budget_minutes, budget)
@@ -55,11 +56,13 @@ defmodule HarnessWeb.IdeationLive do
   defp load_session(socket, id) do
     session = Ideation.get_session!(id)
     ideas = Ideation.tree(id)
+    total_tokens = Enum.reduce(ideas, 0, fn i, acc -> acc + (i.tokens_in || 0) + (i.tokens_out || 0) end)
 
     socket
     |> assign(:session, session)
     |> assign(:tree_layout, Layout.compute(ideas))
     |> assign(:journal, Ideation.read_journal(session))
+    |> assign(:total_tokens, total_tokens)
   end
 
   def handle_event("fill_seed", %{"seed" => seed}, socket) do
@@ -546,8 +549,65 @@ defmodule HarnessWeb.IdeationLive do
                 </div>
 
                 <div class="rounded-sm bg-surface border border-surface-2 p-3 max-h-[60vh] md:max-h-none md:min-h-0 overflow-auto">
-                  <div :if={!@selected_node} class="font-body text-sm text-ink-dim">
-                    Click a node to read its artifact.
+                  <div :if={!@selected_node} id="inspector-cockpit" class="space-y-4">
+                    <div>
+                      <h4 class="font-display uppercase tracking-[0.12em] text-[9px] text-ink-dim mb-2">
+                        Vitals
+                      </h4>
+                      <div class="grid grid-cols-3 gap-1.5">
+                        <div class="bg-bg rounded-sm px-2 py-1.5 text-center">
+                          <div class="font-mono text-[9px] text-ink-dim">iter</div>
+                          <div class="font-mono text-xs text-ink tabular-nums">{@session.iterations}</div>
+                        </div>
+                        <div class="bg-bg rounded-sm px-2 py-1.5 text-center">
+                          <div class="font-mono text-[9px] text-ink-dim">crit</div>
+                          <div class="font-mono text-xs text-ink tabular-nums">{@session.critiques}</div>
+                        </div>
+                        <div class="bg-bg rounded-sm px-2 py-1.5 text-center">
+                          <div class="font-mono text-[9px] text-ink-dim">budget</div>
+                          <div class="font-mono text-xs text-ink tabular-nums">{@session.budget_minutes}m</div>
+                        </div>
+                      </div>
+                      <div class="mt-2 font-mono text-[9px] text-ink-dim">
+                        {@total_tokens} tokens burned
+                      </div>
+                    </div>
+                    <div>
+                      <h4 class="font-display uppercase tracking-[0.12em] text-[9px] text-ink-dim mb-1.5">
+                        Top nodes
+                      </h4>
+                      <p :if={@tree_layout.nodes == []} class="font-body text-[11px] text-ink-dim">
+                        No nodes yet.
+                      </p>
+                      <div id="top-nodes-leaderboard" class="space-y-0.5">
+                        <button
+                          :for={n <- top_nodes(@tree_layout.nodes)}
+                          phx-click="select_node"
+                          phx-value-id={n.id}
+                          class="w-full flex items-center gap-2 text-left px-2 py-1 rounded-sm hover:bg-bg"
+                        >
+                          <span class="flex-1 font-body text-[11px] text-ink truncate min-w-0">
+                            {n.title}
+                          </span>
+                          <span class="font-mono text-[10px] text-ink-dim tabular-nums shrink-0">
+                            {n.score}
+                          </span>
+                          <span class={[
+                            "font-mono text-[9px] uppercase shrink-0",
+                            idea_status_class(n.status)
+                          ]}>
+                            {n.status}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                    <% snippet = last_journal_snippet(@journal) %>
+                    <div :if={snippet}>
+                      <h4 class="font-display uppercase tracking-[0.12em] text-[9px] text-ink-dim mb-1">
+                        Latest
+                      </h4>
+                      <pre class="font-mono text-[10px] text-ink-dim whitespace-pre-wrap">{snippet}</pre>
+                    </div>
                   </div>
                   <div :if={@selected_node}>
                     <div class="flex items-center gap-2 mb-2">
@@ -616,6 +676,24 @@ defmodule HarnessWeb.IdeationLive do
     </Layouts.app>
     """
   end
+
+  defp top_nodes(nodes, n \\ 5) do
+    nodes |> Enum.sort_by(& &1.score, :desc) |> Enum.take(n)
+  end
+
+  defp last_journal_snippet(nil), do: nil
+  defp last_journal_snippet(""), do: nil
+
+  defp last_journal_snippet(journal) do
+    case String.split(journal, ~r/\n## Iteration \d+\n/, trim: true) do
+      [_] -> nil
+      parts -> parts |> List.last() |> String.trim()
+    end
+  end
+
+  defp idea_status_class("frontier"), do: "text-accent"
+  defp idea_status_class("expanded"), do: "text-ok"
+  defp idea_status_class(_), do: "text-ink-dim"
 
   # score → color ramp: low = dim, high = accent (no red/green — those are
   # status colors)

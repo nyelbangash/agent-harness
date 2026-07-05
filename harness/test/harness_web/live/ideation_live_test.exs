@@ -138,4 +138,62 @@ defmodule HarnessWeb.IdeationLiveTest do
 
     assert Ideation.get_session!(session.id).status == "stopped"
   end
+
+  test "idle inspector shows session vitals and top-scored nodes in order", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 90})
+
+    Ideation.add_child!(session, root, %{title: "Low Scorer", score: 3.0, summary: "s"}, "")
+    Ideation.add_child!(session, root, %{title: "High Scorer", score: 9.0, summary: "s"}, "")
+    Ideation.add_child!(session, root, %{title: "Mid Scorer", score: 6.0, summary: "s"}, "")
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+
+    # cockpit is visible when no node is selected
+    assert has_element?(view, "#inspector-cockpit")
+    assert has_element?(view, "#top-nodes-leaderboard")
+
+    # vitals show the session budget
+    assert render(view) =~ "90m"
+
+    # all nodes appear in the leaderboard
+    leaderboard = view |> element("#top-nodes-leaderboard") |> render()
+    assert leaderboard =~ "High Scorer"
+    assert leaderboard =~ "Mid Scorer"
+    assert leaderboard =~ "Low Scorer"
+
+    # leaderboard is sorted by score descending
+    high_pos = leaderboard |> :binary.match("High Scorer") |> elem(0)
+    mid_pos = leaderboard |> :binary.match("Mid Scorer") |> elem(0)
+    low_pos = leaderboard |> :binary.match("Low Scorer") |> elem(0)
+    assert high_pos < mid_pos
+    assert mid_pos < low_pos
+  end
+
+  test "clicking a leaderboard row fires select_node and opens the inspector", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    child =
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Select Me", summary: "leaderboard summary", score: 9.0},
+        "# Artifact"
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+
+    # idle state is shown
+    assert has_element?(view, "#top-nodes-leaderboard")
+
+    # click the leaderboard button for the child node
+    html =
+      view
+      |> element("#top-nodes-leaderboard button[phx-value-id='#{child.id}']")
+      |> render_click()
+
+    # the node is now selected and the cockpit is replaced by node details
+    assert html =~ "Select Me"
+    assert html =~ "leaderboard summary"
+    refute has_element?(view, "#inspector-cockpit")
+  end
 end
