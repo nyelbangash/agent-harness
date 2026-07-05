@@ -65,4 +65,32 @@ defmodule Harness.GitHub.ClientTest do
 
     assert {:ok, 987} = Client.post_issue_comment("owner/repo", 5, "plan attached")
   end
+
+  test "get_pull_request returns state/merged/merge_commit_sha" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      Req.Test.json(conn, %{
+        "state" => "closed", "merged" => true, "merge_commit_sha" => "abc123"
+      })
+    end)
+
+    assert {:ok, %{state: "closed", merged: true, merge_commit_sha: "abc123"}} =
+             Client.get_pull_request("owner/repo", 42)
+  end
+
+  test "get_pull_request returns :not_found on 404" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      conn |> Plug.Conn.put_status(404) |> Req.Test.json(%{"message" => "Not Found"})
+    end)
+
+    assert {:error, :not_found} = Client.get_pull_request("owner/repo", 99)
+  end
+
+  test "list_pull_request_commits returns a list of commit objects" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      Req.Test.json(conn, [%{"sha" => "a1"}, %{"sha" => "b2"}])
+    end)
+
+    assert {:ok, [%{"sha" => "a1"}, %{"sha" => "b2"}]} =
+             Client.list_pull_request_commits("owner/repo", 42)
+  end
 end
