@@ -17,7 +17,7 @@ defmodule Harness.GitHub.PollWorker do
   import Ecto.Query
 
   alias Harness.GitHub
-  alias Harness.GitHub.{Client, Issue}
+  alias Harness.GitHub.{Client, Issue, Provenance}
 
   # states it is safe to re-triage from when the issue changes upstream
   @retriageable ~w(incoming triaged plan_ready failed skipped done)
@@ -30,6 +30,8 @@ defmodule Harness.GitHub.PollWorker do
       for repo <- policy.github.repos do
         poll_repo(repo, login, policy.github.poll_minutes)
       end
+
+      :persistent_term.put({__MODULE__, :last_sweep_at}, System.system_time(:second))
     end
 
     :ok
@@ -111,7 +113,7 @@ defmodule Harness.GitHub.PollWorker do
         enqueue_triage(issue)
 
       change == :updated and issue.pipeline_state in @retriageable ->
-        enqueue_triage(issue)
+        unless harness_caused_update?(issue), do: enqueue_triage(issue)
 
       true ->
         :ok
@@ -124,6 +126,29 @@ defmodule Harness.GitHub.PollWorker do
     %{issue_id: issue.id}
     |> Harness.GitHub.TriageWorker.new()
     |> Oban.insert()
+  end
+
+  defp harness_caused_update?(issue) do
+    case Client.newest_issue_comment(issue.repo, issue.number) do
+      {:ok, %{"body" => body, "created_at" => created_at_iso}} ->
+        Provenance.harness_authored?(body) and comment_accounts_for_delta?(created_at_iso, issue)
+
+      _ ->
+        false
+    end
+  end
+
+  defp comment_accounts_for_delta?(created_at_iso, issue) do
+    case DateTime.from_iso8601(created_at_iso) do
+      {:ok, comment_time, _} ->
+        # GitHub sets issue.updated_at = comment.created_at when a comment lands.
+        # If the comment timestamp is >= the stored github_updated_at, the comment
+        # is what caused the delta.
+        DateTime.compare(comment_time, issue.github_updated_at) in [:gt, :eq]
+
+      _ ->
+        false
+    end
   end
 
   # cancel queued/running local pipeline jobs + kill any live session for this
@@ -165,7 +190,75 @@ defmodule Harness.GitHub.PollWorker do
       |> Harness.GitHub.Issue.changeset(%{state: "closed"})
       |> Harness.Repo.update!()
       |> GitHub.transition!("done")
+      |> capture_outcome()
     end)
+  end
+
+  defp capture_outcome(issue) do
+    resolved_at = DateTime.utc_now()
+    days_open = DateTime.diff(resolved_at, issue.inserted_at, :second) / 86400.0
+    triage = GitHub.latest_triage(issue.id)
+
+    {outcome, amend_commit_count} = classify_outcome(issue)
+
+    GitHub.record_triage_outcome!(%{
+      issue_id: issue.id,
+      triage_id: triage && triage.id,
+      outcome: outcome,
+      resolved_at: resolved_at,
+      days_open: days_open,
+      amend_commit_count: amend_commit_count,
+      shadow: false
+    })
+
+    :telemetry.execute(
+      [:harness, :triage, :outcome_recorded],
+      %{count: 1},
+      %{outcome: outcome, issue_id: issue.id, repo: issue.repo}
+    )
+
+    issue
+  end
+
+  defp classify_outcome(%{auto_demoted: true}), do: {"demoted", nil}
+
+  defp classify_outcome(%{pr_number: pr_number, repo: repo} = issue)
+       when not is_nil(pr_number) do
+    case Client.get_pull_request(repo, pr_number) do
+      {:ok, %{merged: true}} ->
+        triage = GitHub.latest_triage(issue.id)
+
+        if triage && triage.final_route == "plan" do
+          {"plan_executed", nil}
+        else
+          count_amendments(repo, pr_number)
+        end
+
+      {:ok, _} ->
+        {"pr_closed_unmerged", nil}
+
+      {:error, reason} ->
+        Logger.warning("outcome PR fetch failed for #{repo}##{issue.number}: #{inspect(reason)}")
+        {"pr_closed_unmerged", nil}
+    end
+  end
+
+  defp classify_outcome(_issue), do: {"issue_closed_no_action", nil}
+
+  defp count_amendments(repo, pr_number) do
+    case Client.list_pull_request_commits(repo, pr_number) do
+      {:ok, commits} ->
+        non_harness = max(0, length(commits) - 1)
+
+        if non_harness == 0 do
+          {"merged_untouched", 0}
+        else
+          {"merged_amended", non_harness}
+        end
+
+      {:error, _} ->
+        {"merged_amended", nil}
+    end
   end
 
   # referenced by moduledoc + tests

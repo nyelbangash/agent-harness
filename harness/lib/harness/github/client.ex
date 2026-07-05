@@ -60,7 +60,28 @@ defmodule Harness.GitHub.Client do
 
   def post_issue_comment(repo, number, body) do
     case request(:post, "/repos/#{repo}/issues/#{number}/comments", json: %{body: body}) do
-      {:ok, %{status: 201, body: %{"id" => id}}} -> {:ok, id}
+      {:ok, %{status: 201, body: %{"id" => id, "created_at" => created_at}}} ->
+        {:ok, id, created_at}
+
+      {:ok, %{status: status}} -> {:error, {:http_status, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def newest_issue_comment(repo, number) do
+    case request(:get, "/repos/#{repo}/issues/#{number}/comments",
+           params: [per_page: 1, direction: "desc"]) do
+      {:ok, %{status: 200, body: [comment | _]}} -> {:ok, comment}
+      {:ok, %{status: 200, body: []}} -> {:ok, nil}
+      {:ok, %{status: status}} -> {:error, {:http_status, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Fetch one issue's current `updated_at` (self-acknowledge after harness writes)."
+  def issue_updated_at(repo, number) do
+    case request(:get, "/repos/#{repo}/issues/#{number}", []) do
+      {:ok, %{status: 200, body: %{"updated_at" => updated_at}}} -> {:ok, updated_at}
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
       {:error, reason} -> {:error, reason}
     end
@@ -77,6 +98,39 @@ defmodule Harness.GitHub.Client do
       {:ok, %{status: 422, body: body}} ->
         # usually "A pull request already exists for ..." on a re-run
         {:error, {:unprocessable, body}}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Fetch a single PR by number. Returns at least state, merged, merge_commit_sha."
+  def get_pull_request(repo, number) do
+    case request(:get, "/repos/#{repo}/pulls/#{number}") do
+      {:ok, %{status: 200, body: %{"state" => state, "merged" => merged,
+                                   "merge_commit_sha" => sha}}} ->
+        {:ok, %{state: state, merged: merged, merge_commit_sha: sha}}
+
+      {:ok, %{status: 404}} ->
+        {:error, :not_found}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "List commits on a PR (up to 100). Used for amended-vs-untouched attribution."
+  def list_pull_request_commits(repo, number) do
+    case request(:get, "/repos/#{repo}/pulls/#{number}/commits",
+                 params: [per_page: 100]) do
+      {:ok, %{status: 200, body: commits}} when is_list(commits) ->
+        {:ok, commits}
 
       {:ok, %{status: status}} ->
         {:error, {:http_status, status}}

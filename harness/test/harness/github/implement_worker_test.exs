@@ -3,6 +3,7 @@ defmodule Harness.GitHub.ImplementWorkerTest do
 
   alias Harness.GitHub
   alias Harness.GitHub.{ImplementWorker, PlanWorker}
+  alias Harness.Runs
   alias Harness.Runs.FakeRunner
 
   @moduletag :capture_log
@@ -280,5 +281,48 @@ defmodule Harness.GitHub.ImplementWorkerTest do
 
     assert {:cancel, :issue_no_longer_actionable} =
              perform_job(ImplementWorker, %{issue_id: pr_open.id, promoted: true})
+  end
+
+  test "phases broadcast in order and phase events appear in event log", ctx do
+    put_repo_policy(ctx.repo, "test -f fix.txt")
+    stub_github_success()
+    issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "triaged"})
+
+    Runs.subscribe()
+    FakeRunner.script([writes_code()])
+    assert :ok = perform_job(ImplementWorker, %{issue_id: issue.id, promoted: true})
+
+    statuses = drain_run_statuses()
+
+    assert "verifying" in statuses
+    assert "pushing" in statuses
+    assert "opening_pr" in statuses
+    assert List.last(statuses) == "succeeded"
+
+    # the phase events are persisted to the event log
+    run =
+      Repo.one(
+        from r in Harness.Runs.Run,
+          where: r.issue_id == ^issue.id,
+          order_by: [desc: r.id],
+          limit: 1
+      )
+
+    events = Runs.events(run.id)
+    phase_events = Enum.filter(events, &(&1.type == "phase"))
+    phase_names = Enum.map(phase_events, & &1.payload["phase"])
+
+    assert "verifying" in phase_names
+    assert "pushing" in phase_names
+    assert "opening_pr" in phase_names
+  end
+
+  defp drain_run_statuses(acc \\ []) do
+    receive do
+      {:run_updated, run} -> drain_run_statuses([run.status | acc])
+      {:run_started, _} -> drain_run_statuses(acc)
+    after
+      50 -> Enum.reverse(acc)
+    end
   end
 end

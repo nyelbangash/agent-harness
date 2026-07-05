@@ -10,7 +10,7 @@ defmodule Harness.Runs.Run do
   import Ecto.Changeset
 
   @kinds ~w(triage implement plan ideate critique)
-  @statuses ~w(queued running verifying succeeded failed killed)
+  @statuses ~w(queued running verifying pushing opening_pr succeeded failed killed)
 
   schema "runs" do
     field :kind, :string

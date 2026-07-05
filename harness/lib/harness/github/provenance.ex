@@ -4,6 +4,13 @@ defmodule Harness.GitHub.Provenance do
   readers must filter with harness_authored?/1 before treating owner-authored
   text as instructions.
 
+  Self-acknowledge rule: any code path that posts a GitHub comment via
+  Client.post_issue_comment/3 MUST immediately advance the stored
+  issues.github_updated_at to the comment's created_at (via
+  GitHub.acknowledge_comment_timestamp!/2). This prevents PollWorker from
+  treating the harness's own comment as operator activity and re-triaging the
+  issue.
+
   The marker is an HTML comment (`<!-- harness:v1 kind=… ref=… -->`), which
   GitHub renders as invisible in issue comments and PR bodies.
   """

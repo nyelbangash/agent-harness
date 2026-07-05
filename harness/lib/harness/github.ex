@@ -7,7 +7,7 @@ defmodule Harness.GitHub do
 
   import Ecto.Query
 
-  alias Harness.GitHub.{Issue, Plan, RepoState, TriageDecision}
+  alias Harness.GitHub.{Issue, Plan, RepoState, TriageDecision, TriageOutcome}
   alias Harness.Repo
 
   @topic "issues"
@@ -56,6 +56,26 @@ defmodule Harness.GitHub do
           {:unchanged,
            existing |> Issue.changeset(%{last_synced_at: attrs.last_synced_at}) |> Repo.update!()}
         end
+    end
+  end
+
+  @doc """
+  Self-acknowledge a GitHub update the harness itself caused (e.g. posting a
+  plan comment): advance the stored `github_updated_at` so the next poll does
+  not read our own write as operator activity and re-enqueue the pipeline
+  (the #4 feedback loop, issue #28).
+  """
+  def acknowledge_self_update!(%Issue{} = issue, updated_at_iso) do
+    case DateTime.from_iso8601(updated_at_iso) do
+      {:ok, dt, _} ->
+        if is_nil(issue.github_updated_at) or DateTime.after?(dt, issue.github_updated_at) do
+          issue |> Issue.changeset(%{github_updated_at: dt}) |> Repo.update!()
+        else
+          issue
+        end
+
+      _ ->
+        issue
     end
   end
 
@@ -191,7 +211,34 @@ defmodule Harness.GitHub do
     |> Repo.one()
   end
 
+  @doc """
+  Insert exactly one outcome row per issue (idempotent — unique index on issue_id,
+  on_conflict: :nothing).
+  """
+  def record_triage_outcome!(attrs) do
+    %TriageOutcome{}
+    |> TriageOutcome.changeset(attrs)
+    |> Repo.insert!(on_conflict: :nothing, conflict_target: [:issue_id])
+  end
+
   # -- plans ------------------------------------------------------------------
+
+  @doc """
+  After posting a harness-authored comment, advance `github_updated_at` in the
+  DB to match the comment's `created_at`. This prevents the next poll sweep from
+  seeing the comment-induced bump as operator activity.
+  """
+  def acknowledge_comment_timestamp!(issue, created_at_iso) do
+    case DateTime.from_iso8601(created_at_iso) do
+      {:ok, dt, _} ->
+        issue
+        |> Issue.changeset(%{github_updated_at: dt})
+        |> Repo.update!()
+
+      _ ->
+        issue
+    end
+  end
 
   def record_plan!(attrs) do
     issue_id = Map.fetch!(attrs, :issue_id)

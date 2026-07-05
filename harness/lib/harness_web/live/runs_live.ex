@@ -72,6 +72,16 @@ defmodule HarnessWeb.RunsLive do
     {:noreply, socket}
   end
 
+  def handle_info({:run_counters, run_id, turns}, socket) do
+    runs =
+      Enum.map(socket.assigns.runs, fn
+        %{id: ^run_id, status: "running"} = run -> %{run | turns: turns}
+        run -> run
+      end)
+
+    {:noreply, assign(socket, :runs, runs)}
+  end
+
   def handle_info({:run_event, event}, socket) do
     if socket.assigns.selected && event.run_id == socket.assigns.selected.id do
       {:noreply, stream_insert(socket, :events, event)}
@@ -256,6 +266,20 @@ defmodule HarnessWeb.RunsLive do
     """
   end
 
+  defp event(%{event: %{type: "phase"}} = assigns) do
+    ~H"""
+    <div class="font-mono text-[10px] text-ink-dim/60 py-0.5 uppercase tracking-wider">
+      ⟳ {@event.payload["phase"]}
+    </div>
+    """
+  end
+
+  defp event(%{event: %{type: "verifier_output"}} = assigns) do
+    ~H"""
+    <div class="font-mono text-[11px] text-ink whitespace-pre-wrap py-0.5">{@event.payload["text"]}</div>
+    """
+  end
+
   defp event(assigns) do
     ~H"""
     <div class="font-mono text-[10px] text-ink-dim/60 py-0.5">
@@ -285,8 +309,9 @@ defmodule HarnessWeb.RunsLive do
   defp duration(%{started_at: %DateTime{} = s, ended_at: %DateTime{} = e}),
     do: "#{DateTime.diff(e, s, :second)}s"
 
-  defp duration(%{started_at: %DateTime{} = s, status: "running"}),
-    do: "#{DateTime.diff(DateTime.utc_now(), s, :second)}s…"
+  defp duration(%{started_at: %DateTime{} = s, status: status})
+       when status in ["running", "verifying", "pushing", "opening_pr"],
+       do: "#{DateTime.diff(DateTime.utc_now(), s, :second)}s…"
 
   defp duration(_), do: "—"
 
@@ -295,7 +320,9 @@ defmodule HarnessWeb.RunsLive do
   defp status_class(status) when status in ["failed", "killed"],
     do: "font-mono text-[10px] uppercase text-alert"
 
-  defp status_class("running"), do: "font-mono text-[10px] uppercase text-accent"
+  defp status_class(status) when status in ["running", "verifying", "pushing", "opening_pr"],
+    do: "font-mono text-[10px] uppercase text-accent"
+
   defp status_class(_), do: "font-mono text-[10px] uppercase text-ink-dim"
 
   # Maps run.error / result_subtype to a short human-readable badge, or nil

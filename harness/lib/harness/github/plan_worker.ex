@@ -177,6 +177,13 @@ defmodule Harness.GitHub.PlanWorker do
 
       case Client.post_issue_comment(issue.repo, issue.number, body) do
         {:ok, comment_id} ->
+          # self-acknowledge: our comment bumped updated_at; swallow it so the
+          # next poll does not re-triage our own write (issue #28)
+          case Client.issue_updated_at(issue.repo, issue.number) do
+            {:ok, updated_at} -> GitHub.acknowledge_self_update!(issue, updated_at)
+            _ -> :ok
+          end
+
           {nil, comment_id}
 
         {:error, reason} ->

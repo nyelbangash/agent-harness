@@ -121,6 +121,7 @@ defmodule Harness.Ideation.IterationWorker do
         # develop on odd depth, diverge on even — alternate breadth and depth
         mode = if rem(node.depth, 2) == 0, do: :diverge, else: :develop
         prompt = Harness.Prompts.ideate(mode, session, node, grounding)
+        Ideation.broadcast_developing(session.id, node.id)
 
         spec = %RunSpec{
           kind: :ideate,

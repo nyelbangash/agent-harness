@@ -16,6 +16,7 @@ defmodule HarnessWeb.OverviewLive do
     if connected?(socket) do
       Runs.subscribe()
       GitHub.subscribe()
+      Harness.Briefing.subscribe()
       :timer.send_interval(30_000, self(), :tick)
     end
 
@@ -26,6 +27,7 @@ defmodule HarnessWeb.OverviewLive do
      |> assign(:page_title, "Overview")
      |> assign(gauge_assigns())
      |> assign(:needs_you, GitHub.needs_attention())
+     |> assign(:briefing, Harness.Briefing.latest_undismissed())
      |> assign(:any_runs?, recent != [])
      |> stream(:activity, recent)}
   end
@@ -67,7 +69,18 @@ defmodule HarnessWeb.OverviewLive do
     {:noreply, socket}
   end
 
+  def handle_info({:briefing_updated, briefing}, socket) do
+    {:noreply, assign(socket, :briefing, briefing)}
+  end
+
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_event("dismiss_briefing", %{"id" => id}, socket) do
+    briefing = Harness.Repo.get!(Harness.Briefing, String.to_integer(id))
+    Harness.Briefing.dismiss!(briefing)
+    {:noreply, assign(socket, :briefing, nil)}
+  end
 
   defp gauge_assigns do
     policy = Policy.get()
@@ -141,6 +154,24 @@ defmodule HarnessWeb.OverviewLive do
       usage_health={@usage_health}
     >
       <div class="page-fit md:flex md:flex-col md:min-h-0 md:overflow-hidden">
+        <div :if={@briefing} class="mb-6 rounded-sm border border-surface-2 bg-surface">
+          <div class="flex items-center justify-between px-4 py-2 border-b border-surface-2">
+            <span class="font-display uppercase tracking-[0.16em] text-[11px] text-ink-dim">
+              Morning briefing · {@briefing.date}
+            </span>
+            <button
+              phx-click="dismiss_briefing"
+              phx-value-id={@briefing.id}
+              class="font-display uppercase text-[10px] tracking-widest px-2 py-0.5 border border-surface-2 text-ink-dim rounded-sm hover:text-ink"
+            >
+              Dismiss
+            </button>
+          </div>
+          <div class="px-4 py-3 prose prose-sm prose-invert max-w-none font-mono text-xs text-ink">
+            {Phoenix.HTML.raw(Earmark.as_html!(@briefing.markdown))}
+          </div>
+        </div>
+
         <div
           :if={@usage_stale}
           class="mb-6 px-4 py-3 rounded-sm border border-alert/60 bg-alert/10 font-mono text-sm text-ink"
@@ -267,17 +298,18 @@ defmodule HarnessWeb.OverviewLive do
     <span
       class={[
         "inline-block size-2 rounded-full shrink-0",
-        @status == "running" && "bg-accent animate-pulse",
+        @status in ["running", "verifying", "pushing", "opening_pr"] && "bg-accent animate-pulse",
         @status == "succeeded" && "bg-ok",
         @status in ["failed", "killed"] && "bg-alert",
-        @status in ["queued", "verifying"] && "bg-ink-dim"
+        @status == "queued" && "bg-ink-dim"
       ]}
       title={@status}
     />
     """
   end
 
-  defp status_text(%{status: "running", started_at: %DateTime{} = started}) do
+  defp status_text(%{status: status, started_at: %DateTime{} = started})
+       when status in ["running", "verifying", "pushing", "opening_pr"] do
     "#{DateTime.diff(DateTime.utc_now(), started, :second)}s"
   end
 

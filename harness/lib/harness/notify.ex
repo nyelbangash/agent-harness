@@ -19,6 +19,7 @@ defmodule Harness.Notify do
           | :gate_tripped
           | :budget_warning
           | :ideation_synthesized
+          | :briefing
 
   @spec notify(event(), String.t(), keyword()) :: :ok
   def notify(event, message, opts \\ []) do
@@ -37,6 +38,7 @@ defmodule Harness.Notify do
   defp title_for(:gate_tripped), do: "Gate tripped"
   defp title_for(:budget_warning), do: "Budget warning"
   defp title_for(:ideation_synthesized), do: "Ideation synthesized"
+  defp title_for(:briefing), do: "Morning briefing"
 
   defp backend, do: Application.get_env(:harness, :notify_backend, __MODULE__.System)
 

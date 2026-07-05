@@ -159,11 +159,32 @@ defmodule Harness.GitHub.ImplementWorker do
 
     case Runs.execute(spec) do
       {:ok, result} ->
-        case Verifier.verify(worktree, repo_cfg) do
+        run = Runs.get_run!(result.run_id)
+        {:ok, counter} = Agent.start_link(fn -> Runs.next_event_seq(run.id) end)
+        next_seq = fn -> Agent.get_and_update(counter, fn s -> {s, s + 1} end) end
+
+        run = Runs.update_run!(run, %{status: "verifying", ended_at: nil})
+        Runs.append_event!(run, next_seq.(), "phase",
+          %{"phase" => "verifying", "ts" => DateTime.to_iso8601(DateTime.utc_now())})
+
+        on_output = fn chunk ->
+          Runs.append_event!(run, next_seq.(), "verifier_output", %{"text" => chunk})
+        end
+
+        verify_result = Verifier.verify(worktree, repo_cfg, on_output: on_output)
+        Agent.stop(counter)
+
+        case verify_result do
           :ok ->
             {:green, result.run_id, result.result_text}
 
           {:failed, transcript} ->
+            Runs.update_run!(run, %{
+              status: "failed",
+              ended_at: DateTime.utc_now(),
+              error: "verification failed"
+            })
+
             if cycle < policy.implement.max_fix_cycles do
               fix_prompt = """
               The verification gate rejected your changes in this worktree.
@@ -185,43 +206,78 @@ defmodule Harness.GitHub.ImplementWorker do
   end
 
   defp publish(issue, worktree, run_id, approach, promoted?) do
-    branch = "harness/issue-#{issue.number}-#{slug(issue.title)}"
-    changed = Repos.changed_files(worktree)
+    run = Runs.get_run!(run_id)
+    {:ok, counter} = Agent.start_link(fn -> Runs.next_event_seq(run.id) end)
+    next_seq = fn -> Agent.get_and_update(counter, fn s -> {s, s + 1} end) end
 
-    Repos.publish_branch!(
-      issue.repo,
-      worktree,
-      branch,
-      :all,
-      "Fix ##{issue.number}: #{issue.title}"
-    )
+    try do
+      Runs.append_event!(run, next_seq.(), "phase",
+        %{"phase" => "pushing", "ts" => DateTime.to_iso8601(DateTime.utc_now())})
 
-    [owner, _name] = String.split(issue.repo, "/")
-    base = Repos.default_branch(issue.repo)
-    head = "#{owner}:#{branch}"
-    body = pr_body(issue, run_id, approach, changed)
+      run = Runs.update_run!(run, %{status: "pushing"})
 
-    case Client.create_pull_request(issue.repo, head, base, pr_title(issue), body) do
-      {:ok, pr} ->
-        record_pr(issue, pr, promoted?)
+      branch = "harness/issue-#{issue.number}-#{slug(issue.title)}"
+      changed = Repos.changed_files(worktree)
 
-      # a PR for this head already exists (re-run after a lost response) —
-      # reconcile it instead of misclassifying a real open PR as failed
-      {:error, {:unprocessable, _}} ->
-        case Client.find_pull_request(issue.repo, head) do
-          {:ok, pr} ->
-            record_pr(issue, pr, promoted?)
+      Repos.publish_branch!(
+        issue.repo,
+        worktree,
+        branch,
+        :all,
+        "Fix ##{issue.number}: #{issue.title}"
+      )
 
-          _ ->
-            Logger.error("PR 422 but no open PR found for #{issue.repo}##{issue.number}")
-            GitHub.transition!(issue, "failed")
-            {:error, :pr_conflict_unresolved}
-        end
+      Runs.append_event!(run, next_seq.(), "phase",
+        %{"phase" => "opening_pr", "ts" => DateTime.to_iso8601(DateTime.utc_now())})
 
-      {:error, reason} ->
-        Logger.error("PR creation failed for #{issue.repo}##{issue.number}: #{inspect(reason)}")
-        GitHub.transition!(issue, "failed")
-        {:error, {:pr_creation_failed, reason}}
+      run = Runs.update_run!(run, %{status: "opening_pr"})
+
+      [owner, _name] = String.split(issue.repo, "/")
+      base = Repos.default_branch(issue.repo)
+      head = "#{owner}:#{branch}"
+      body = pr_body(issue, run_id, approach, changed)
+
+      case Client.create_pull_request(issue.repo, head, base, pr_title(issue), body) do
+        {:ok, pr} ->
+          Runs.update_run!(run, %{status: "succeeded", ended_at: DateTime.utc_now()})
+          record_pr(issue, pr, promoted?)
+
+        # a PR for this head already exists (re-run after a lost response) —
+        # reconcile it instead of misclassifying a real open PR as failed
+        {:error, {:unprocessable, _}} ->
+          case Client.find_pull_request(issue.repo, head) do
+            {:ok, pr} ->
+              Runs.update_run!(run, %{status: "succeeded", ended_at: DateTime.utc_now()})
+              record_pr(issue, pr, promoted?)
+
+            _ ->
+              Runs.update_run!(run, %{
+                status: "failed",
+                ended_at: DateTime.utc_now(),
+                error: "PR conflict unresolved"
+              })
+
+              Logger.error("PR 422 but no open PR found for #{issue.repo}##{issue.number}")
+              GitHub.transition!(issue, "failed")
+              {:error, :pr_conflict_unresolved}
+          end
+
+        {:error, reason} ->
+          Runs.update_run!(run, %{
+            status: "failed",
+            ended_at: DateTime.utc_now(),
+            error: "PR creation failed"
+          })
+
+          Logger.error(
+            "PR creation failed for #{issue.repo}##{issue.number}: #{inspect(reason)}"
+          )
+
+          GitHub.transition!(issue, "failed")
+          {:error, {:pr_creation_failed, reason}}
+      end
+    after
+      Agent.stop(counter)
     end
   end
 
@@ -243,6 +299,13 @@ defmodule Harness.GitHub.ImplementWorker do
   end
 
   defp demote_to_plan(issue, transcript) do
+    # Flag for outcome capture — PollWorker cannot otherwise distinguish a
+    # demoted-auto issue from one that was always plan-routed.
+    issue =
+      issue
+      |> Harness.GitHub.Issue.changeset(%{auto_demoted: true})
+      |> Harness.Repo.update!()
+
     GitHub.transition!(issue, "triaged")
 
     args =
