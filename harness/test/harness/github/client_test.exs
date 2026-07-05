@@ -10,6 +10,21 @@ defmodule Harness.GitHub.ClientTest do
     :ok
   end
 
+  test "newest_issue_comment returns the LAST comment of the created-asc listing" do
+    # the per-issue endpoint ignores direction and lists oldest-first; taking
+    # the head instead of the tail caused the #48 slow loop
+    Req.Test.stub(__MODULE__, fn conn ->
+      assert conn.params["per_page"] == "100"
+
+      Req.Test.json(conn, [
+        %{"id" => 1, "body" => "oldest", "created_at" => "2026-07-01T00:00:00Z"},
+        %{"id" => 2, "body" => "newest", "created_at" => "2026-07-05T00:00:00Z"}
+      ])
+    end)
+
+    assert {:ok, %{"id" => 2, "body" => "newest"}} = Client.newest_issue_comment("o/r", 5)
+  end
+
   test "viewer_login returns the PAT owner's login" do
     Req.Test.stub(__MODULE__, fn conn ->
       assert ["Bearer test-pat"] = Plug.Conn.get_req_header(conn, "authorization")
@@ -68,21 +83,6 @@ defmodule Harness.GitHub.ClientTest do
 
     assert {:ok, 987, "2026-07-05T10:00:00Z"} =
              Client.post_issue_comment("owner/repo", 5, "plan attached")
-  end
-
-  test "newest_issue_comment returns the most recent comment" do
-    Req.Test.stub(__MODULE__, fn conn ->
-      conn = Plug.Conn.fetch_query_params(conn)
-      assert conn.query_params["per_page"] == "1"
-      assert conn.query_params["direction"] == "desc"
-
-      Req.Test.json(conn, [
-        %{"id" => 1, "body" => "hello", "created_at" => "2026-07-05T09:00:00Z"}
-      ])
-    end)
-
-    assert {:ok, %{"id" => 1, "body" => "hello"}} =
-             Client.newest_issue_comment("owner/repo", 5)
   end
 
   test "newest_issue_comment returns nil when there are no comments" do

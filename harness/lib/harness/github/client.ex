@@ -72,10 +72,13 @@ defmodule Harness.GitHub.Client do
   end
 
   def newest_issue_comment(repo, number) do
-    case request(:get, "/repos/#{repo}/issues/#{number}/comments",
-           params: [per_page: 1, direction: "desc"]
-         ) do
-      {:ok, %{status: 200, body: [comment | _]}} -> {:ok, comment}
+    # the per-issue comments endpoint IGNORES sort/direction (fixed created-asc;
+    # only the repo-level /issues/comments endpoint sorts) — per_page:1 + desc
+    # silently returned the OLDEST comment, which made harness_caused_update?
+    # fail for any issue with >1 comment (the #48 slow loop). Fetch a full page
+    # and take the last.
+    case request(:get, "/repos/#{repo}/issues/#{number}/comments", params: [per_page: 100]) do
+      {:ok, %{status: 200, body: [_ | _] = comments}} -> {:ok, List.last(comments)}
       {:ok, %{status: 200, body: []}} -> {:ok, nil}
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
       {:error, reason} -> {:error, reason}
