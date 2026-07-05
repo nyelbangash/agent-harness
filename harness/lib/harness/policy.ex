@@ -13,7 +13,7 @@ defmodule Harness.Policy do
 
   alias Harness.Policy.Schema
 
-  @type action :: :triage | :plan | :implement | :ideate
+  @type action :: :triage | :plan | :implement | :ideate | :review
   @type gate_result :: :ok | {:snooze, pos_integer(), atom()} | {:skip, atom()}
 
   @paused_snooze_seconds 300
@@ -51,7 +51,7 @@ defmodule Harness.Policy do
   @spec gate(action(), keyword()) :: gate_result()
   def gate(action, opts \\ [])
 
-  def gate(action, opts) when action in [:triage, :plan, :implement, :ideate] do
+  def gate(action, opts) when action in [:triage, :plan, :implement, :ideate, :review] do
     policy = Keyword.get(opts, :policy, get())
     usage_mode = Keyword.get_lazy(opts, :usage_mode, &Harness.Usage.current_mode/0)
     now = Keyword.get_lazy(opts, :now, &local_time/0)
@@ -63,10 +63,11 @@ defmodule Harness.Policy do
     end
   end
 
-  # Triage and plan lanes run in every non-paused mode; utilization gating for
-  # them is the global :pause threshold handled above.
+  # Triage, plan, and review lanes run in every non-paused mode; utilization
+  # gating for them is the global :pause threshold handled above.
   defp gate_action(:triage, _policy, _usage, _now), do: :ok
   defp gate_action(:plan, _policy, _usage, _now), do: :ok
+  defp gate_action(:review, _policy, _usage, _now), do: :ok
 
   defp gate_action(:implement, policy, usage_mode, now) do
     cond do

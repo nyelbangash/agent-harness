@@ -30,7 +30,7 @@ config :harness, Harness.Repo,
 config :harness, Oban,
   engine: Oban.Engines.Lite,
   repo: Harness.Repo,
-  queues: [triage: 2, plan: 1, implement: 1, ideate: 1, ops: 2],
+  queues: [triage: 2, plan: 1, implement: 1, review: 1, ideate: 1, ops: 2],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
     Oban.Plugins.Lifeline,

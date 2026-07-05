@@ -247,7 +247,7 @@ defmodule Harness.GitHub.ImplementWorker do
       case Client.create_pull_request(issue.repo, head, base, pr_title(issue), body) do
         {:ok, pr} ->
           Runs.update_run!(run, %{status: "succeeded", ended_at: DateTime.utc_now()})
-          record_pr(issue, pr, promoted?)
+          record_pr(issue, pr, promoted?, branch)
 
         # a PR for this head already exists (re-run after a lost response) —
         # reconcile it instead of misclassifying a real open PR as failed
@@ -255,7 +255,7 @@ defmodule Harness.GitHub.ImplementWorker do
           case Client.find_pull_request(issue.repo, head) do
             {:ok, pr} ->
               Runs.update_run!(run, %{status: "succeeded", ended_at: DateTime.utc_now()})
-              record_pr(issue, pr, promoted?)
+              record_pr(issue, pr, promoted?, branch)
 
             _ ->
               Runs.update_run!(run, %{
@@ -286,7 +286,7 @@ defmodule Harness.GitHub.ImplementWorker do
     end
   end
 
-  defp record_pr(issue, %{number: pr_number, url: pr_url}, promoted?) do
+  defp record_pr(issue, %{number: pr_number, url: pr_url}, promoted?, branch) do
     Client.post_issue_comment(
       issue.repo,
       issue.number,
@@ -297,6 +297,10 @@ defmodule Harness.GitHub.ImplementWorker do
     |> Harness.GitHub.Issue.changeset(%{pr_url: pr_url, pr_number: pr_number})
     |> Harness.Repo.update!()
     |> GitHub.transition!("pr_open")
+
+    %{issue_id: issue.id, pr_number: pr_number, round: 0, branch: branch}
+    |> Harness.GitHub.ReviewWorker.new()
+    |> Oban.insert()
 
     if promoted?, do: mark_plan_promoted(issue.id)
     Harness.Notify.notify(:pr_opened, "PR opened for #{issue.repo}##{issue.number}: #{pr_url}")

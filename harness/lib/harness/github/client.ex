@@ -143,6 +143,22 @@ defmodule Harness.GitHub.Client do
     end
   end
 
+  @doc "Post a PR review. `event` is \"APPROVE\" | \"REQUEST_CHANGES\" | \"COMMENT\"."
+  def create_pull_request_review(repo, pr_number, event, body) do
+    case request(:post, "/repos/#{repo}/pulls/#{pr_number}/reviews",
+           json: %{body: body, event: event}
+         ) do
+      {:ok, %{status: 200, body: %{"id" => id}}} ->
+        {:ok, %{id: id}}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @doc "Find the open PR whose head is `head` (e.g. \"owner:branch\"), for 422 reconciliation."
   def find_pull_request(repo, head) do
     case request(:get, "/repos/#{repo}/pulls", params: [head: head, state: "open", per_page: 1]) do

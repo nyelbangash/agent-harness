@@ -28,6 +28,11 @@ defmodule Harness.Repos do
   def create_worktree!(repo, name),
     do: GenServer.call(__MODULE__, {:create_worktree, repo, name}, :infinity)
 
+  @doc "Fresh detached worktree at an explicit ref (e.g. \"origin/harness/issue-5-…\")."
+  @spec create_worktree_at!(String.t(), String.t(), String.t()) :: Path.t()
+  def create_worktree_at!(repo, name, ref),
+    do: GenServer.call(__MODULE__, {:create_worktree_at, repo, name, ref}, :infinity)
+
   @spec remove_worktree!(String.t(), Path.t()) :: :ok
   def remove_worktree!(repo, path),
     do: GenServer.call(__MODULE__, {:remove_worktree, repo, path}, :infinity)
@@ -116,6 +121,16 @@ defmodule Harness.Repos do
     if File.exists?(wt), do: git(base, ["worktree", "remove", "--force", wt], repo)
     git!(base, ["worktree", "add", "--detach", wt, "origin/#{branch}"], repo)
 
+    {:reply, wt, state}
+  end
+
+  def handle_call({:create_worktree_at, repo, name, ref}, _from, state) do
+    base = base_path(repo)
+    branch = String.replace_prefix(ref, "origin/", "")
+    git(base, ["fetch", "origin", branch], repo)
+    wt = Path.join(Application.fetch_env!(:harness, :workspaces_dir), name)
+    if File.exists?(wt), do: git(base, ["worktree", "remove", "--force", wt], repo)
+    git!(base, ["worktree", "add", "--detach", wt, ref], repo)
     {:reply, wt, state}
   end
 
