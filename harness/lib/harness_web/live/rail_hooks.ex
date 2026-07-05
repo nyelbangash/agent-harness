@@ -58,11 +58,13 @@ defmodule HarnessWeb.RailHooks do
   defp handle_event("promote_to_auto", %{"id" => id}, socket) do
     issue_id = String.to_integer(id)
 
-    %{issue_id: issue_id, promoted: true}
-    |> Harness.GitHub.ImplementWorker.new()
-    |> Oban.insert()
+    case Harness.GitHub.promote_to_auto(issue_id) do
+      {:ok, _issue} ->
+        {:halt, put_flash(socket, :info, "Promoted to auto — implement session queued")}
 
-    {:halt, put_flash(socket, :info, "Promoted to auto — implement session queued")}
+      {:already_queued, _issue} ->
+        {:halt, put_flash(socket, :info, "Already queued for implementation")}
+    end
   end
 
   defp handle_event(_event, _params, socket), do: {:cont, socket}

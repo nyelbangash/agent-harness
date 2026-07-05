@@ -1,10 +1,11 @@
 defmodule HarnessWeb.OverviewLiveTest do
   use HarnessWeb.ConnCase, async: false
+  use Oban.Testing, repo: Harness.Repo, engine: Oban.Engines.Lite
 
   import Phoenix.LiveViewTest
   import Harness.Fixtures
 
-  alias Harness.{Runs, Usage}
+  alias Harness.{GitHub, Runs, Usage}
 
   @moduletag :capture_log
 
@@ -87,5 +88,59 @@ defmodule HarnessWeb.OverviewLiveTest do
     assert html =~ "Plan-Only"
     assert html =~ "Kill all"
     assert html =~ "Kill every running agent session?"
+  end
+
+  test "promote_to_auto removes the card from needs-you immediately", %{conn: conn} do
+    issue = issue_fixture(%{title: "Accelerate the tachyon", pipeline_state: "triaged"})
+    run = Runs.create_run!(%{kind: "plan", status: "succeeded", issue_id: issue.id})
+
+    GitHub.record_plan!(%{
+      issue_id: issue.id,
+      run_id: run.id,
+      plan_path: "/tmp/PLAN.md",
+      context_path: "/tmp/CONTEXT.md",
+      branch: "harness/plans/issue-#{issue.number}",
+      summary: "A plan"
+    })
+
+    GitHub.transition!(issue, "plan_ready")
+
+    {:ok, view, html} = live(conn, ~p"/")
+    assert html =~ "Accelerate the tachyon"
+    assert html =~ "plan ready"
+
+    render_click(view, "promote_to_auto", %{"id" => "#{issue.id}"})
+
+    html = render(view)
+    refute html =~ "Accelerate the tachyon"
+    assert GitHub.get_issue!(issue.id).pipeline_state == "implementing"
+  end
+
+  test "promote_to_auto double-click enqueues exactly one implement job", %{conn: conn} do
+    issue = issue_fixture(%{title: "Deduplicate me", pipeline_state: "triaged"})
+    run = Runs.create_run!(%{kind: "plan", status: "succeeded", issue_id: issue.id})
+
+    GitHub.record_plan!(%{
+      issue_id: issue.id,
+      run_id: run.id,
+      plan_path: "/tmp/PLAN.md",
+      context_path: "/tmp/CONTEXT.md",
+      branch: "harness/plans/issue-#{issue.number}",
+      summary: "A plan"
+    })
+
+    GitHub.transition!(issue, "plan_ready")
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    # first promotion: transitions and enqueues
+    render_click(view, "promote_to_auto", %{"id" => "#{issue.id}"})
+    # second promotion: active job detected, no second insert
+    render_click(view, "promote_to_auto", %{"id" => "#{issue.id}"})
+
+    jobs = all_enqueued(worker: Harness.GitHub.ImplementWorker)
+    assert length(jobs) == 1
+    assert hd(jobs).args["issue_id"] == issue.id
+    assert hd(jobs).args["promoted"] == true
   end
 end

@@ -129,6 +129,39 @@ defmodule Harness.GitHub do
     |> Repo.all()
   end
 
+  @doc """
+  Promote an issue to the auto lane. Transitions to "implementing", broadcasts
+  the change so OverviewLive re-renders immediately, and inserts an
+  ImplementWorker job with `promoted: true`. Guards against double-promotion:
+  if an active implement job already exists for the issue, returns
+  `{:already_queued, issue}` without inserting a second job.
+  """
+  def promote_to_auto(issue_id) do
+    issue = get_issue!(issue_id)
+
+    active? =
+      from(j in Oban.Job,
+        where:
+          j.worker == "Harness.GitHub.ImplementWorker" and
+            j.state in ["available", "scheduled", "executing", "retryable"] and
+            fragment("json_extract(?, '$.issue_id') = ?", j.args, ^issue.id),
+        limit: 1
+      )
+      |> Repo.exists?()
+
+    if active? do
+      {:already_queued, issue}
+    else
+      issue = transition!(issue, "implementing")
+
+      %{issue_id: issue.id, promoted: true}
+      |> Harness.GitHub.ImplementWorker.new()
+      |> Oban.insert()
+
+      {:ok, issue}
+    end
+  end
+
   # -- triages ----------------------------------------------------------------
 
   def record_triage!(attrs) do
