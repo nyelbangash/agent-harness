@@ -11,14 +11,18 @@ defmodule HarnessWeb.RunsLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket), do: Runs.subscribe()
+    if connected?(socket) do
+      Runs.subscribe()
+      :timer.send_interval(5_000, :queue_tick)
+    end
 
     {:ok,
      socket
      |> assign(:page_title, "Runs")
      |> assign(:selected, nil)
      |> stream(:events, [])
-     |> assign(:runs, Runs.recent_runs(100))}
+     |> assign(:runs, Runs.recent_runs(100))
+     |> assign(:queues, Runs.queue_stats())}
   end
 
   @impl true
@@ -42,11 +46,21 @@ defmodule HarnessWeb.RunsLive do
 
   @impl true
   def handle_info({:run_started, _run}, socket) do
-    {:noreply, assign(socket, :runs, Runs.recent_runs(100))}
+    {:noreply,
+     socket
+     |> assign(:runs, Runs.recent_runs(100))
+     |> assign(:queues, Runs.queue_stats())}
+  end
+
+  def handle_info(:queue_tick, socket) do
+    {:noreply, assign(socket, :queues, Runs.queue_stats())}
   end
 
   def handle_info({:run_updated, run}, socket) do
-    socket = assign(socket, :runs, Runs.recent_runs(100))
+    socket =
+      socket
+      |> assign(:runs, Runs.recent_runs(100))
+      |> assign(:queues, Runs.queue_stats())
 
     socket =
       if socket.assigns.selected && socket.assigns.selected.id == run.id do
@@ -78,7 +92,25 @@ defmodule HarnessWeb.RunsLive do
       usage_mode={@usage_mode}
       usage_health={@usage_health}
     >
-      <h1 class="font-display uppercase tracking-[0.16em] text-sm text-ink-dim mb-6">Runs</h1>
+      <h1 class="font-display uppercase tracking-[0.16em] text-sm text-ink-dim mb-4">Runs</h1>
+
+      <div
+        :if={@queues != []}
+        aria-label="queues"
+        class="flex flex-wrap items-center gap-x-8 gap-y-2 mb-6"
+      >
+        <div :for={q <- @queues} class="flex items-center gap-2 font-mono text-[11px] tabular-nums">
+          <span class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim">
+            {q.label}
+          </span>
+          <span aria-hidden="true"><span
+              :for={i <- 1..max(q.limit, 1)//1}
+              class={if i <= q.running, do: "text-accent", else: "text-ink-dim/30"}
+            >▮</span></span>
+          <span class="text-ink">{q.running}/{q.limit}</span>
+          <span class="text-ink-dim">· {q.waiting} waiting</span>
+        </div>
+      </div>
 
       <div class="grid xl:grid-cols-2 gap-8">
         <section aria-label="sessions">

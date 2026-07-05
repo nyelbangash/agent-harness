@@ -29,6 +29,47 @@ defmodule Harness.Runs do
 
   def get_run!(id), do: Repo.get!(Run, id)
 
+  @doc """
+  Slot occupancy and waiting depth per Oban queue, in config order.
+
+  `limits` defaults to the configured queues (keyword of queue → limit);
+  returns `[]` when Oban runs queueless (tests pass limits explicitly).
+  """
+  def queue_stats(limits \\ nil) do
+    limits = limits || Application.get_env(:harness, Oban, [])[:queues] || []
+
+    counts =
+      from(j in "oban_jobs",
+        where: j.state in ["executing", "available", "scheduled", "retryable"],
+        group_by: [j.queue, j.state],
+        select: {j.queue, j.state, count(j.id)}
+      )
+      |> Repo.all()
+      |> Enum.group_by(fn {queue, _state, _n} -> queue end)
+
+    for {queue, limit} <- limits do
+      name = Atom.to_string(queue)
+      rows = Map.get(counts, name, [])
+      running = for({_, "executing", n} <- rows, do: n) |> Enum.sum()
+      waiting = for({_, state, n} <- rows, state != "executing", do: n) |> Enum.sum()
+
+      %{
+        queue: name,
+        label: queue_label(name),
+        limit: normalize_limit(limit),
+        running: running,
+        waiting: waiting
+      }
+    end
+  end
+
+  # plans share the :implement queue (PlanWorker + ImplementWorker)
+  defp queue_label("implement"), do: "plan+implement"
+  defp queue_label(name), do: name
+
+  defp normalize_limit(limit) when is_integer(limit), do: limit
+  defp normalize_limit(opts) when is_list(opts), do: Keyword.get(opts, :limit, 1)
+
   def create_run!(attrs) do
     run = %Run{} |> Run.changeset(attrs) |> Repo.insert!()
     broadcast({:run_started, run})
