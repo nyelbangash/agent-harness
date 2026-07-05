@@ -5,7 +5,7 @@ defmodule HarnessWeb.OverviewLiveTest do
   import Phoenix.LiveViewTest
   import Harness.Fixtures
 
-  alias Harness.{GitHub, Runs, Usage}
+  alias Harness.{Briefing, GitHub, Repo, Runs, Usage}
 
   @moduletag :capture_log
 
@@ -150,6 +150,43 @@ defmodule HarnessWeb.OverviewLiveTest do
     html = render_click(view, "retry_issue", %{"id" => "#{issue.id}"})
     assert html =~ "Already queued"
     assert length(all_enqueued(worker: Harness.GitHub.TriageWorker)) == 1
+  end
+
+  test "briefing card renders when an undismissed briefing exists", %{conn: conn} do
+    _briefing = briefing_fixture(%{markdown: "## PRs\n\nFoo"})
+    {:ok, _view, html} = live(conn, ~p"/")
+    assert html =~ "Morning briefing"
+    assert html =~ "Dismiss"
+  end
+
+  test "dismiss sets dismissed_at and hides the card", %{conn: conn} do
+    briefing = briefing_fixture(%{markdown: "## Quiet night"})
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    render_click(view, "dismiss_briefing", %{"id" => "#{briefing.id}"})
+
+    html = render(view)
+    refute html =~ "Dismiss"
+    assert Repo.get!(Briefing, briefing.id).dismissed_at
+  end
+
+  test "new briefing pushed via PubSub appears without reload", %{conn: conn} do
+    {:ok, view, html} = live(conn, ~p"/")
+    refute html =~ "Morning briefing"
+
+    briefing = briefing_fixture(%{markdown: "## PRs\nFoo"})
+    Phoenix.PubSub.broadcast(Harness.PubSub, "briefings", {:briefing_updated, briefing})
+
+    html = render(view)
+    assert html =~ "Morning briefing"
+  end
+
+  test "dismissed briefing does not render on next page load", %{conn: conn} do
+    briefing = briefing_fixture()
+    Briefing.dismiss!(briefing)
+
+    {:ok, _view, html} = live(conn, ~p"/")
+    refute html =~ "Morning briefing"
   end
 
   test "promote_to_auto double-click enqueues exactly one implement job", %{conn: conn} do
