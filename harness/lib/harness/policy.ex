@@ -142,6 +142,27 @@ defmodule Harness.Policy do
     |> Enum.min()
   end
 
+  @doc """
+  Human-readable window status for the ideation composer.
+  Returns "starts immediately" when inside a window (or no windows configured),
+  otherwise "will start at HH:MM" for the next opening.
+  Accepts `policy:` and `now:` keyword overrides for testability.
+  """
+  @spec window_note(keyword()) :: String.t()
+  def window_note(opts \\ []) do
+    policy = Keyword.get(opts, :policy, get())
+    now = Keyword.get_lazy(opts, :now, &local_time/0)
+    windows = policy.schedule.ideation_windows
+
+    if windows == [] or in_windows?(now, windows) do
+      "starts immediately"
+    else
+      secs = seconds_until_window(now, windows)
+      next_time = Time.add(now, secs, :second)
+      Calendar.strftime(next_time, "will start at %H:%M")
+    end
+  end
+
   defp usage_snooze(policy), do: policy.utilization_gates.poll_minutes * 60
 
   defp local_time do

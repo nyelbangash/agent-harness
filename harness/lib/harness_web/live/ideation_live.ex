@@ -9,17 +9,25 @@ defmodule HarnessWeb.IdeationLive do
 
   alias Harness.Ideation
   alias Harness.Ideation.Layout
+  alias Harness.Policy
 
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: Ideation.subscribe()
+
+    policy = Policy.get()
+    now = parse_connect_now(get_connect_params(socket))
+    budget = policy.ideate.default_budget_minutes
 
     {:ok,
      socket
      |> assign(:page_title, "Ideation")
      |> assign(:sessions, Ideation.list_sessions())
      |> assign(:selected_node, nil)
-     |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => "180"}))}
+     |> assign(:policy, policy)
+     |> assign(:window_note, Policy.window_note(policy: policy, now: now))
+     |> assign(:budget_minutes, budget)
+     |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => "#{budget}"}))}
   end
 
   @impl true
@@ -47,6 +55,22 @@ defmodule HarnessWeb.IdeationLive do
     |> assign(:session, session)
     |> assign(:tree_layout, Layout.compute(ideas))
     |> assign(:journal, Ideation.read_journal(session))
+  end
+
+  def handle_event("fill_seed", %{"seed" => seed}, socket) do
+    form =
+      to_form(%{
+        "seed_prompt" => seed,
+        "budget_minutes" => to_string(socket.assigns.budget_minutes)
+      })
+
+    {:noreply, assign(socket, :form, form)}
+  end
+
+  def handle_event("form_change", params, socket) do
+    budget = parse_int(params["budget_minutes"], socket.assigns.budget_minutes)
+    form = to_form(%{"seed_prompt" => params["seed_prompt"] || "", "budget_minutes" => to_string(budget)})
+    {:noreply, socket |> assign(:budget_minutes, budget) |> assign(:form, form)}
   end
 
   @impl true
@@ -87,7 +111,32 @@ defmodule HarnessWeb.IdeationLive do
     {:noreply, socket}
   end
 
+  def handle_info({:policy_reloaded, _}, socket) do
+    policy = Policy.get()
+    now = NaiveDateTime.local_now() |> NaiveDateTime.to_time()
+
+    {:noreply,
+     socket
+     |> assign(:policy, policy)
+     |> assign(:window_note, Policy.window_note(policy: policy, now: now))}
+  end
+
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp parse_connect_now(nil), do: NaiveDateTime.local_now() |> NaiveDateTime.to_time()
+
+  defp parse_connect_now(params) do
+    case params["test_now"] do
+      nil ->
+        NaiveDateTime.local_now() |> NaiveDateTime.to_time()
+
+      hhmm ->
+        case Time.from_iso8601(hhmm <> ":00") do
+          {:ok, t} -> t
+          _ -> NaiveDateTime.local_now() |> NaiveDateTime.to_time()
+        end
+    end
+  end
 
   defp parse_int(value, default) do
     case Integer.parse(to_string(value)) do
@@ -108,7 +157,7 @@ defmodule HarnessWeb.IdeationLive do
     >
       <div class="grid lg:grid-cols-4 gap-6">
         <aside class="lg:col-span-1 space-y-4">
-          <form phx-submit="start" class="space-y-2">
+          <form phx-submit="start" phx-change="form_change" class="space-y-2">
             <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim">
               Seed a session
             </h2>
@@ -117,19 +166,30 @@ defmodule HarnessWeb.IdeationLive do
               rows="4"
               placeholder="One broad product or feature thought…"
               class="w-full bg-surface border border-surface-2 rounded-sm px-2 py-1.5 font-body text-sm text-ink focus:outline-2 focus:outline-accent"
-            ></textarea>
+            >{@form[:seed_prompt].value}</textarea>
             <div class="flex items-center gap-2">
-              <label class="font-mono text-[11px] text-ink-dim">budget min</label>
+              <label class="font-mono text-[11px] text-ink-dim">budget</label>
               <input
-                type="number"
+                type="range"
                 name="budget_minutes"
-                value="180"
-                min="1"
-                class="w-20 bg-surface border border-surface-2 rounded-sm px-2 py-1 font-mono text-xs text-ink"
+                value={@budget_minutes}
+                min="30"
+                max="360"
+                step="30"
+                class="flex-1 accent-accent"
               />
-              <button class="ml-auto font-display uppercase text-[10px] tracking-widest px-3 py-1.5 bg-accent text-bg rounded-sm">
+              <span class="font-mono text-[11px] text-ink-dim tabular-nums w-14 text-right">
+                {@budget_minutes} min
+              </span>
+              <button class="font-display uppercase text-[10px] tracking-widest px-3 py-1.5 bg-accent text-bg rounded-sm">
                 Start
               </button>
+            </div>
+            <div class="font-mono text-[10px] text-ink-dim/70 mt-1 space-y-0.5">
+              <div>ideate: {@policy.models.ideate} · critique: {@policy.models.critique}</div>
+              <div class={if String.starts_with?(@window_note, "starts"), do: "text-ok", else: "text-accent"}>
+                {@window_note}
+              </div>
             </div>
           </form>
 
@@ -162,8 +222,142 @@ defmodule HarnessWeb.IdeationLive do
         </aside>
 
         <section class="lg:col-span-3">
-          <div :if={!@session} class="font-body text-sm text-ink-dim">
-            Select a session to watch its idea tree grow.
+          <div :if={!@session} class="space-y-8 py-4">
+            <div>
+              <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim mb-3">
+                How ideation works
+              </h2>
+              <svg
+                viewBox="0 0 320 80"
+                class="w-full max-w-sm"
+                aria-label="Ideation loop: diverge, develop, critique, synthesize"
+              >
+                <defs>
+                  <marker id="arr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                    <path d="M0,0 L6,3 L0,6 Z" fill="var(--color-surface-2)" />
+                  </marker>
+                </defs>
+                <line
+                  x1="46"
+                  y1="40"
+                  x2="74"
+                  y2="40"
+                  stroke="var(--color-surface-2)"
+                  stroke-width="1.5"
+                  marker-end="url(#arr)"
+                />
+                <line
+                  x1="126"
+                  y1="40"
+                  x2="154"
+                  y2="40"
+                  stroke="var(--color-surface-2)"
+                  stroke-width="1.5"
+                  marker-end="url(#arr)"
+                />
+                <line
+                  x1="206"
+                  y1="40"
+                  x2="234"
+                  y2="40"
+                  stroke="var(--color-surface-2)"
+                  stroke-width="1.5"
+                  marker-end="url(#arr)"
+                />
+                <circle
+                  cx="30"
+                  cy="40"
+                  r="14"
+                  fill="var(--color-surface)"
+                  stroke="var(--color-accent)"
+                  stroke-width="1.5"
+                />
+                <circle
+                  cx="110"
+                  cy="40"
+                  r="14"
+                  fill="var(--color-surface)"
+                  stroke="var(--color-surface-2)"
+                  stroke-width="1.5"
+                />
+                <circle
+                  cx="190"
+                  cy="40"
+                  r="14"
+                  fill="var(--color-surface)"
+                  stroke="var(--color-surface-2)"
+                  stroke-width="1.5"
+                />
+                <circle
+                  cx="270"
+                  cy="40"
+                  r="14"
+                  fill="var(--color-surface)"
+                  stroke="var(--color-ok)"
+                  stroke-width="1.5"
+                />
+                <text
+                  x="30"
+                  y="64"
+                  text-anchor="middle"
+                  font-size="8"
+                  fill="var(--color-ink-dim)"
+                  class="font-mono"
+                >
+                  diverge
+                </text>
+                <text
+                  x="110"
+                  y="64"
+                  text-anchor="middle"
+                  font-size="8"
+                  fill="var(--color-ink-dim)"
+                  class="font-mono"
+                >
+                  develop
+                </text>
+                <text
+                  x="190"
+                  y="64"
+                  text-anchor="middle"
+                  font-size="8"
+                  fill="var(--color-ink-dim)"
+                  class="font-mono"
+                >
+                  critique
+                </text>
+                <text
+                  x="270"
+                  y="64"
+                  text-anchor="middle"
+                  font-size="8"
+                  fill="var(--color-ink-dim)"
+                  class="font-mono"
+                >
+                  synthesize
+                </text>
+              </svg>
+              <p class="font-body text-[12px] text-ink-dim mt-2 max-w-sm">
+                Each iteration branches the top-scoring frontier nodes, then a critique trims the weak ones. After {@policy.ideate.default_budget_minutes} min the tree collapses to SYNTHESIS.md.
+              </p>
+            </div>
+
+            <div>
+              <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim mb-2">
+                Try a sample idea
+              </h2>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  :for={seed <- sample_seeds()}
+                  type="button"
+                  phx-click="fill_seed"
+                  phx-value-seed={seed}
+                  class="font-body text-[12px] text-ink border border-surface-2 rounded-sm px-2.5 py-1.5 hover:bg-surface hover:border-accent text-left"
+                >
+                  {seed}
+                </button>
+              </div>
+            </div>
           </div>
 
           <div :if={@session}>
@@ -277,4 +471,12 @@ defmodule HarnessWeb.IdeationLive do
   defp session_status_class("running"), do: "font-mono text-[10px] uppercase text-accent"
   defp session_status_class("synthesized"), do: "font-mono text-[10px] uppercase text-ok"
   defp session_status_class(_), do: "font-mono text-[10px] uppercase text-ink-dim"
+
+  defp sample_seeds do
+    [
+      "A smarter PR triage that learns from past false positives",
+      "Daily cost summaries pushed to mobile when the budget crosses 50%",
+      "Adaptive ideation windows that shift based on rolling utilization"
+    ]
+  end
 end
