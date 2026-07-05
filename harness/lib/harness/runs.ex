@@ -132,6 +132,17 @@ defmodule Harness.Runs do
     from(r in Run, where: r.status == "running") |> Repo.all()
   end
 
+  @doc "Error string from the most recent terminal (failed/killed) run for an issue, or nil."
+  def latest_terminal_run_error(issue_id) do
+    from(r in Run,
+      where: r.issue_id == ^issue_id and r.status in ["failed", "killed"],
+      order_by: [desc: r.id],
+      limit: 1,
+      select: r.error
+    )
+    |> Repo.one()
+  end
+
   def events(run_id) do
     from(e in RunEvent, where: e.run_id == ^run_id, order_by: e.seq) |> Repo.all()
   end

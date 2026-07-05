@@ -9,6 +9,7 @@ defmodule HarnessWeb.IssuesLive do
   use HarnessWeb, :live_view
 
   alias Harness.GitHub
+  alias Harness.Runs
 
   @columns [
     {:incoming, "Incoming"},
@@ -40,6 +41,7 @@ defmodule HarnessWeb.IssuesLive do
     |> assign(:board, board)
     |> assign(:empty?, board == %{})
     |> attach_triages(board)
+    |> attach_run_errors(board)
   end
 
   # confidence/route chips come from the latest triage per issue
@@ -51,6 +53,16 @@ defmodule HarnessWeb.IssuesLive do
       |> Map.new(fn issue -> {issue.id, GitHub.latest_triage(issue.id)} end)
 
     assign(socket, :triages, triages)
+  end
+
+  # failure reason badges come from the latest terminal run for failed issues
+  defp attach_run_errors(socket, board) do
+    run_errors =
+      Map.get(board, :done, [])
+      |> Enum.filter(&(&1.pipeline_state == "failed"))
+      |> Map.new(fn issue -> {issue.id, Runs.latest_terminal_run_error(issue.id)} end)
+
+    assign(socket, :run_errors, run_errors)
   end
 
   @impl true
@@ -83,6 +95,7 @@ defmodule HarnessWeb.IssuesLive do
               :for={issue <- Map.get(@board, key, [])}
               issue={issue}
               triage={@triages[issue.id]}
+              run_error={@run_errors[issue.id]}
             />
           </div>
         </section>
@@ -93,6 +106,7 @@ defmodule HarnessWeb.IssuesLive do
 
   attr :issue, :map, required: true
   attr :triage, :map, default: nil
+  attr :run_error, :string, default: nil
 
   defp issue_card(assigns) do
     ~H"""
@@ -119,6 +133,10 @@ defmodule HarnessWeb.IssuesLive do
         >
           failed
         </span>
+        <span
+          :if={@issue.pipeline_state == "failed" and run_reason_badge(@run_error)}
+          class="font-display uppercase text-[9px] tracking-widest text-alert/70"
+        >{run_reason_badge(@run_error)}</span>
         <span
           :if={@issue.pipeline_state == "skipped"}
           class="font-display uppercase text-[9px] tracking-widest px-1 py-0.5 bg-surface-2 text-ink-dim rounded-sm"
@@ -181,4 +199,18 @@ defmodule HarnessWeb.IssuesLive do
   defp route_chip("plan"), do: "bg-surface-2 text-ink"
   defp route_chip("skip"), do: "bg-surface-2 text-ink-dim"
   defp route_chip(_), do: "bg-surface-2 text-ink-dim"
+
+  # Maps a run error string to the short badge shown on failed issue cards.
+  defp run_reason_badge(nil), do: nil
+
+  defp run_reason_badge(error) do
+    cond do
+      String.starts_with?(error, "turn cap ") -> error
+      error =~ "operator" -> "operator kill"
+      error =~ "reaped" or error =~ "daemon shutdown" -> "orphaned by restart"
+      error =~ "timeout" -> "timeout"
+      error =~ "no result envelope" -> "crashed"
+      true -> nil
+    end
+  end
 end

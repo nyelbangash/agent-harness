@@ -349,7 +349,8 @@ defmodule Harness.Runs.RunServer do
         {"killed", "wall-clock timeout", {:error, :timeout}}
 
       state.killed == :turn_cap ->
-        {"killed", "exceeded Elixir-side turn cap", {:error, {:run_failed, :turn_cap}}}
+        {"killed", "turn cap #{state.turns}/#{state.spec.max_turns}",
+         {:error, {:run_failed, :turn_cap}}}
 
       startup_error ->
         {"failed", startup_error, {:error, {:spawn_failed, startup_error}}}
