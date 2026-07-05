@@ -330,6 +330,58 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert html =~ "Best Idea"
   end
 
+  test "journal renders two iterations newest-first as cards with rendered markdown", %{
+    conn: conn
+  } do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    _child =
+      Ideation.add_child!(session, root, %{title: "Alpha Node", summary: "s", score: 7.0},
+        "# alpha")
+
+    Ideation.append_journal!(session, 1, ["explored **Alpha Node** idea"])
+    Ideation.append_journal!(session, 2, ["pruned Alpha Node after review"])
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    # Both iteration labels are present
+    assert html =~ "Iteration 1"
+    assert html =~ "Iteration 2"
+
+    # Markdown rendered — bold becomes <strong>, raw ** should not appear
+    assert html =~ "<strong>"
+    refute html =~ "**Alpha Node**"
+
+    # Newest-first: Iteration 2 appears before Iteration 1 in the document
+    {pos2, _} = :binary.match(html, "Iteration 2")
+    {pos1, _} = :binary.match(html, "Iteration 1")
+    assert pos2 < pos1
+  end
+
+  test "journal node-title link fires select_node and opens the artifact", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    child =
+      Ideation.add_child!(session, root, %{title: "Beta Node", summary: "s", score: 7.0},
+        "# beta artifact body")
+
+    Ideation.append_journal!(session, 1, ["explored Beta Node in depth"])
+
+    {:ok, view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    # The node title in the journal is a phx-click button
+    assert html =~ ~s(phx-value-id="#{child.id}")
+    assert html =~ ~s(journal-node-link)
+
+    # Clicking the journal link selects the node and shows its artifact
+    html =
+      view
+      |> element("button.journal-node-link[phx-value-id='#{child.id}']")
+      |> render_click()
+
+    assert html =~ "beta artifact body"
+  end
+
   test "viewBox height adjusts with tree depth, hugging content tighter than the old formula", %{
     conn: conn
   } do

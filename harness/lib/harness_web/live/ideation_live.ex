@@ -264,6 +264,50 @@ defmodule HarnessWeb.IdeationLive do
     end
   end
 
+  # Parse journal text into [{iteration_number, safe_html}] newest-first.
+  # Each entry body is rendered via Earmark and node-title occurrences are
+  # replaced with phx-click buttons so they select the node in the tree.
+  defp journal_entries(journal, nodes) when is_binary(journal) do
+    journal
+    |> String.split(~r/(?=## Iteration \d+)/, trim: true)
+    |> Enum.flat_map(fn part ->
+      case Regex.run(~r/\A## Iteration (\d+)\s*\n(.*)\z/s, String.trim(part)) do
+        [_, num_str, body] ->
+          [{String.to_integer(num_str), journal_body_html(body, nodes)}]
+
+        _ ->
+          []
+      end
+    end)
+    |> Enum.sort_by(fn {num, _} -> num end, :desc)
+  end
+
+  defp journal_entries(_, _), do: []
+
+  defp journal_body_html(markdown, nodes) do
+    html =
+      case Earmark.as_html(markdown) do
+        {:ok, h, _} -> h
+        {:error, h, _} -> h
+      end
+
+    # Sort longest titles first so "Advanced Feature X" matches before "Feature X"
+    nodes
+    |> Enum.sort_by(fn n -> -byte_size(n.title) end)
+    |> Enum.reduce(html, fn node, acc ->
+      escaped = node.title |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
+
+      link =
+        ~s|<button phx-click="select_node" phx-value-id="#{node.id}" | <>
+          ~s|class="journal-node-link text-accent hover:underline cursor-pointer">| <>
+          escaped <>
+          "</button>"
+
+      String.replace(acc, escaped, link)
+    end)
+    |> Phoenix.HTML.raw()
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -717,10 +761,20 @@ defmodule HarnessWeb.IdeationLive do
               </div>
 
               <div class="mt-4 rounded-sm bg-surface border border-surface-2 p-3">
-                <h3 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-1">
+                <h3 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-2">
                   Journal
                 </h3>
-                <pre class="font-mono text-[11px] text-ink-dim whitespace-pre-wrap max-h-40 overflow-auto">{@journal}</pre>
+                <div class="space-y-3 max-h-60 overflow-auto">
+                  <div
+                    :for={{num, html} <- journal_entries(@journal, @tree_layout.nodes)}
+                    class="rounded-sm border border-surface-2 px-3 py-2"
+                  >
+                    <div class="font-mono text-[9px] text-ink-dim/60 uppercase tracking-wider mb-1">
+                      Iteration {num}
+                    </div>
+                    <div class="artifact-prose text-[12px]">{html}</div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
