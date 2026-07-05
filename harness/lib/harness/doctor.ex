@@ -157,10 +157,12 @@ defmodule Harness.Doctor do
   defp check_policy do
     path = Application.fetch_env!(:harness, :policy_path)
 
-    with {:ok, raw} <- YamlElixir.read_from_file(path),
+    with true <- File.exists?(path) || :missing,
+         {:ok, raw} <- YamlElixir.read_from_file(path),
          {:ok, policy} <- Harness.Policy.Schema.parse(raw) do
       {:ok, "mode: #{policy.mode}, repos: #{length(policy.github.repos)}"}
     else
+      :missing -> {:error, "#{path} not found — cp ops/policy.example.yaml ops/policy.yaml"}
       {:error, errors} when is_list(errors) -> {:error, Enum.join(errors, "; ")}
       {:error, reason} -> {:error, "#{path}: #{inspect(reason)}"}
     end

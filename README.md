@@ -7,11 +7,12 @@ Personal, always-on agentic development system. One Phoenix app (`harness/`) wit
 3. **Mission Control** — real-time dashboard: vintage-VDO gauge cluster, issue board, run console with live transcripts, ideation tree, budget panel, mode toggle, and kill switches.
 4. **Off-machine lanes** — a GitHub Action lane (`agent-cloud` label) for when the Mac is off, plus notifications (macOS + optional ntfy.sh).
 
-**Start with [`MANUAL.md`](MANUAL.md)** — the user manual (setup, daily operation, every view, troubleshooting). `HANDOFF-agentic-harness.md` is the full spec, `PROGRESS.md` the build journal, `ops/ROUTINES.md` the off-machine lanes.
+**Start with [`MANUAL.md`](MANUAL.md)** — the user manual (setup, daily operation, every view, troubleshooting). `ops/ROUTINES.md` covers the off-machine lanes.
 
 ## Quickstart
 
 ```sh
+cp ops/policy.example.yaml ops/policy.yaml   # your live policy — gitignored
 cd harness
 mix deps.get
 mix ecto.migrate

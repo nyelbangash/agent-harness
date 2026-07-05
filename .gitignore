@@ -1,6 +1,13 @@
 # unrelated pre-existing file, kept on disk but out of the repo
 /dashboard.html
 
+# personal / machine-specific — kept on disk, not in the public repo
+# (ops/policy.example.yaml is the committed template)
+/ops/policy.yaml
+/.claude/
+/PROGRESS.md
+/HANDOFF-agentic-harness.md
+
 # per-run git worktrees
 /workspaces/*
 !/workspaces/.gitkeep

@@ -2,10 +2,12 @@ defmodule Mix.Tasks.Harness.Install do
   @shortdoc "Install the launchd LaunchAgent for always-on operation"
 
   @moduledoc """
-  Prepares prod (secret key, compiled assets), copies
-  `ops/com.nyel.harness.plist` into `~/Library/LaunchAgents/`, and bootstraps
-  it into the gui launchd domain. The gui domain matters: Keychain reads
-  (Claude OAuth, GitHub PAT) only work in a logged-in user session.
+  Prepares prod (secret key, compiled assets), generates the LaunchAgent
+  plist (paths resolved from this checkout) into `~/Library/LaunchAgents/`,
+  and bootstraps it into the gui launchd domain. The gui domain matters:
+  Keychain reads (Claude OAuth, GitHub PAT) only work in a logged-in user
+  session. Re-run after moving the repo — the installed plist embeds
+  absolute paths.
 
       mix harness.install
   """
@@ -35,13 +37,10 @@ defmodule Mix.Tasks.Harness.Install do
       Mix.raise("prod build failed")
     end
 
-    plist_source =
-      Path.join(Application.fetch_env!(:harness, :project_root), "ops/#{@label}.plist")
-
     plist_dest = Path.expand("~/Library/LaunchAgents/#{@label}.plist")
 
     File.mkdir_p!(Path.dirname(plist_dest))
-    File.cp!(plist_source, plist_dest)
+    File.write!(plist_dest, plist_content(home))
     Mix.shell().info("  ✓ #{plist_dest}")
 
     # Re-bootstrap if already loaded
@@ -67,5 +66,30 @@ defmodule Mix.Tasks.Harness.Install do
   defp uid do
     {uid, 0} = System.cmd("id", ["-u"])
     String.trim(uid)
+  end
+
+  defp plist_content(home) do
+    app_dir = Path.join(Application.fetch_env!(:harness, :project_root), "harness")
+
+    """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+      "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0"><dict>
+      <key>Label</key><string>#{@label}</string>
+      <key>ProgramArguments</key>
+      <array>
+        <string>/bin/zsh</string><string>-lc</string>
+        <string>caffeinate -is mix phx.server</string>
+      </array>
+      <key>WorkingDirectory</key><string>#{app_dir}</string>
+      <key>RunAtLoad</key><true/>
+      <key>KeepAlive</key><true/>
+      <key>StandardOutPath</key><string>#{home}/logs/harness.out.log</string>
+      <key>StandardErrorPath</key><string>#{home}/logs/harness.err.log</string>
+      <key>EnvironmentVariables</key>
+      <dict><key>MIX_ENV</key><string>prod</string></dict>
+    </dict></plist>
+    """
   end
 end

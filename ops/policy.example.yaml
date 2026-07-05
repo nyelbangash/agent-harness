@@ -1,3 +1,5 @@
+# Copy to ops/policy.yaml and edit. The live file is gitignored (it names your
+# repos and budgets) and hot-reloads while the harness is running.
 mode: plan_only # plan_only | full_auto | paused — flippable from Mission Control
 models:
   triage: sonnet
@@ -15,7 +17,6 @@ budgets:
   overflow_usd_weekly_cap: 25 # hard stop on API-rate overflow spend
   implement_max_turns: 60
   ideate_iteration_max_turns: 25
-  # additions to spec §7 (flagged in the approved plan):
   triage_max_turns: 12
   plan_max_turns: 40
 utilization_gates: # polled from https://claude.ai/api/oauth/usage
@@ -26,21 +27,20 @@ utilization_gates: # polled from https://claude.ai/api/oauth/usage
   pause_above: 0.90
 triage:
   auto_threshold: 0.75
-  low_confidence_floor: 0.4 # addition: §4.2's opus re-triage threshold
+  low_confidence_floor: 0.4 # below this, a second opus triage pass runs
 plan:
-  post_to_issue: false # addition: referenced by spec §4.4
+  post_to_issue: false
 implement:
   max_fix_cycles: 2
 ideate:
   critique_every: 5
   default_budget_minutes: 180
 github:
-  repos: ["nyelbangash/FitnessTracker"] # "owner/name" or {name: "owner/name", test_command: "mix test"}
+  repos: [] # "owner/name" or {name: "owner/name", test_command: "mix test"} — the auto lane needs a test command
   poll_minutes: 2
 notify:
   macos: true # osascript banner
-  ntfy_topic: null # e.g. "harness-nyel-7f3a" for phone push via ntfy.sh
+  ntfy_topic: null # e.g. "harness-<random-suffix>" for phone push via ntfy.sh
   budget_warn_fraction: 0.80 # notify when a weekly cap crosses this
-billing_model: subscription_pool # subscription_pool | sdk_credit — see §11
-calendar_notes:
-  - "2026-07-13: temporary +50% weekly limit expires; expect thresholds to bite sooner"
+billing_model: subscription_pool # subscription_pool | sdk_credit
+calendar_notes: [] # dated reminders surfaced in Mission Control, e.g. "2026-08-01: quota change"

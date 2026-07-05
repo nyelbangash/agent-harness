@@ -5,8 +5,8 @@ your GitHub issues, triages them, writes implementation plans (or implements
 them outright and opens PRs), runs multi-hour ideation sessions, and shows
 everything on a real-time dashboard called **Mission Control**.
 
-This manual covers day-to-day operation. For the design rationale see
-`HANDOFF-agentic-harness.md`; for build history see `PROGRESS.md`.
+This manual covers day-to-day operation. `ops/ROUTINES.md` covers the
+off-machine lanes (GitHub Action, cloud/local session teleport).
 
 ---
 
