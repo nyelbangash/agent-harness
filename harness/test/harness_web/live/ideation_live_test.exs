@@ -121,6 +121,79 @@ defmodule HarnessWeb.IdeationLiveTest do
     refute html =~ ~s(id="artifact-modal")
   end
 
+  test "modal for a mid-tree node shows its ancestor breadcrumb and children list", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    parent =
+      Ideation.add_child!(session, root, %{title: "Parent Node", summary: "p", score: 7.0},
+        "# parent body"
+      )
+
+    child =
+      Ideation.add_child!(session, parent, %{title: "Child Node", summary: "c", score: 6.0},
+        "# child body"
+      )
+
+    _leaf =
+      Ideation.add_child!(session, child, %{title: "Grandchild", summary: "g", score: 5.0},
+        "# grand body"
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+    html = view |> element("g[phx-value-id='#{child.id}']") |> render_click()
+
+    # breadcrumb shows ancestors (root and parent, not the current node)
+    assert html =~ "Seed"
+    assert html =~ "Parent Node"
+
+    # children section lists the grandchild
+    assert html =~ "Grandchild"
+  end
+
+  test "arrow keydown moves between siblings", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    sib_a =
+      Ideation.add_child!(session, root, %{title: "Sibling A", summary: "a", score: 6.0},
+        "# artifact a"
+      )
+
+    _sib_b =
+      Ideation.add_child!(session, root, %{title: "Sibling B", summary: "b", score: 5.0},
+        "# artifact b"
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+    view |> element("g[phx-value-id='#{sib_a.id}']") |> render_click()
+
+    # arrow right moves to Sibling B
+    html = render_keydown(element(view, "#artifact-modal"), %{"key" => "ArrowRight"})
+    assert html =~ "artifact b"
+    refute html =~ "artifact a"
+  end
+
+  test "breadcrumb click swaps modal to the ancestor node", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    parent =
+      Ideation.add_child!(session, root, %{title: "Mid Node", summary: "m", score: 7.0},
+        "# mid artifact"
+      )
+
+    leaf =
+      Ideation.add_child!(session, parent, %{title: "Leaf Node", summary: "l", score: 6.0},
+        "# leaf artifact"
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+    view |> element("g[phx-value-id='#{leaf.id}']") |> render_click()
+
+    # breadcrumb contains a button for the parent; click it
+    html = view |> element("button[phx-value-id='#{parent.id}']") |> render_click()
+    assert html =~ "mid artifact"
+    refute html =~ "leaf artifact"
+  end
+
   test "pruned nodes are dimmed, not hidden", %{conn: conn} do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
     child = Ideation.add_child!(session, root, %{title: "Dead End", score: 2.0}, "")

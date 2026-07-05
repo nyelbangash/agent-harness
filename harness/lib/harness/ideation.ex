@@ -181,6 +181,18 @@ defmodule Harness.Ideation do
     |> Enum.map(fn {title, score} -> "#{title} (score #{score})" end)
   end
 
+  @doc "Direct children of a node, ordered by insertion."
+  def children(%Idea{id: id}) do
+    from(i in Idea, where: i.parent_id == ^id, order_by: [asc: i.id]) |> Repo.all()
+  end
+
+  @doc "All siblings (including self), ordered by insertion — for arrow-key navigation."
+  def siblings(%Idea{parent_id: nil}), do: []
+
+  def siblings(%Idea{parent_id: pid}) do
+    from(i in Idea, where: i.parent_id == ^pid, order_by: [asc: i.id]) |> Repo.all()
+  end
+
   def frontier_count(session_id) do
     Repo.aggregate(
       from(i in Idea, where: i.session_id == ^session_id and i.status == "frontier"),
