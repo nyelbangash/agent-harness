@@ -80,6 +80,11 @@ defmodule Harness.Runs do
     run
   end
 
+  @doc "Broadcast live counter state for a running row (turn count mid-run)."
+  def broadcast_counters(run_id, turns) do
+    broadcast({:run_counters, run_id, turns})
+  end
+
   @doc "Append one decoded NDJSON event and broadcast it on the run's topic."
   def append_event!(%Run{} = run, seq, type, payload) do
     event =
