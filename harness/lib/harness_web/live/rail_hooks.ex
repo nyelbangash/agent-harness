@@ -87,7 +87,11 @@ defmodule HarnessWeb.RailHooks do
 
       "implement" ->
         Harness.GitHub.transition!(issue, "triaged")
-        %{issue_id: issue.id, promoted: true} |> Harness.GitHub.ImplementWorker.new() |> Oban.insert()
+
+        %{issue_id: issue.id, promoted: true}
+        |> Harness.GitHub.ImplementWorker.new()
+        |> Oban.insert()
+
         {:halt, put_flash(socket, :info, "Implement re-queued")}
 
       _ ->

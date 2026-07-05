@@ -116,7 +116,9 @@ defmodule HarnessWeb.OverviewLiveTest do
     assert GitHub.get_issue!(issue.id).pipeline_state == "implementing"
   end
 
-  test "retry button on failed issue enqueues correct worker and clears failed state", %{conn: conn} do
+  test "retry button on failed issue enqueues correct worker and clears failed state", %{
+    conn: conn
+  } do
     issue = issue_fixture(%{title: "Broken plan issue", pipeline_state: "triaged"})
     Runs.create_run!(%{kind: "plan", status: "failed", issue_id: issue.id})
     GitHub.transition!(issue, "failed")
@@ -133,7 +135,9 @@ defmodule HarnessWeb.OverviewLiveTest do
     assert reloaded.pipeline_state == "triaged"
   end
 
-  test "second retry click while job is pending shows flash and does not double-enqueue", %{conn: conn} do
+  test "second retry click while job is pending shows flash and does not double-enqueue", %{
+    conn: conn
+  } do
     issue = issue_fixture(%{title: "Double-retry issue", pipeline_state: "triaged"})
     Runs.create_run!(%{kind: "triage", status: "failed", issue_id: issue.id})
     GitHub.transition!(issue, "failed")

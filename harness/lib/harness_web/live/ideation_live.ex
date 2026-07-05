@@ -449,13 +449,17 @@ defmodule HarnessWeb.IdeationLive do
                         }, {passive: false})
 
                         svg.addEventListener("pointerdown", e => {
-                          this.dragging = {x: e.clientX, y: e.clientY, moved: false}
-                          svg.setPointerCapture(e.pointerId)
+                          // NO capture here: a captured pointer retargets the click
+                          // to the svg, which kills phx-click on the node circles
+                          this.dragging = {x: e.clientX, y: e.clientY, id: e.pointerId, moved: false}
                         })
                         svg.addEventListener("pointermove", e => {
                           if (!this.dragging) return
                           const dx = e.clientX - this.dragging.x, dy = e.clientY - this.dragging.y
-                          if (Math.abs(dx) + Math.abs(dy) > 4) this.dragging.moved = true
+                          if (!this.dragging.moved && Math.abs(dx) + Math.abs(dy) > 4) {
+                            this.dragging.moved = true
+                            svg.setPointerCapture(this.dragging.id)
+                          }
                           if (!this.dragging.moved) return
                           const vb = this.viewBox()
                           const rect = svg.getBoundingClientRect()
