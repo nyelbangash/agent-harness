@@ -8,7 +8,7 @@
     <string>/bin/zsh</string><string>-lc</string>
     <string>caffeinate -is mix phx.server</string>
   </array>
-  <key>WorkingDirectory</key><string>/Users/nyelbangash/Documents/ProjectEx/harness</string>
+  <key>WorkingDirectory</key><string>/Users/nyelbangash/Documents/agent-harness/harness</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardOutPath</key><string>/Users/nyelbangash/.harness/logs/harness.out.log</string>

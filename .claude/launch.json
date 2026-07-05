@@ -6,7 +6,7 @@
       "runtimeExecutable": "/bin/sh",
       "runtimeArgs": [
         "-c",
-        "cd /Users/nyelbangash/Documents/ProjectEx/harness && exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN PORT=4399 mix phx.server"
+        "cd /Users/nyelbangash/Documents/agent-harness/harness && exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN PORT=4399 mix phx.server"
       ],
       "port": 4399
     }
