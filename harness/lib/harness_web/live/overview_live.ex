@@ -239,6 +239,15 @@ defmodule HarnessWeb.OverviewLive do
                     Promote to auto
                   </button>
                 </div>
+                <button
+                  :if={issue.pipeline_state == "failed"}
+                  phx-click="retry_issue"
+                  phx-value-id={issue.id}
+                  data-confirm={"Retry #{issue.repo}##{issue.number}?"}
+                  class="px-1.5 py-0.5 border border-alert text-alert rounded-sm hover:bg-alert hover:text-bg font-display uppercase text-[10px] tracking-widest"
+                >
+                  Retry
+                </button>
               </div>
               <p :if={@needs_you == []} class="font-body text-sm text-ink-dim py-4">
                 Nothing needs you. Plans ready for review and failed runs land here.

@@ -203,6 +203,15 @@ defmodule HarnessWeb.IssuesLive do
           {flag}
         </span>
       </div>
+      <button
+        :if={@issue.pipeline_state == "failed"}
+        phx-click="retry_issue"
+        phx-value-id={@issue.id}
+        data-confirm={"Retry #{@issue.repo}##{@issue.number}?"}
+        class="mt-1.5 font-display uppercase text-[10px] tracking-widest px-1.5 py-0.5 border border-alert text-alert rounded-sm hover:bg-alert hover:text-bg"
+      >
+        Retry
+      </button>
     </article>
     """
   end

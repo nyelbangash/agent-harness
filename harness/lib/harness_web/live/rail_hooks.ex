@@ -67,6 +67,37 @@ defmodule HarnessWeb.RailHooks do
     end
   end
 
+  defp handle_event("retry_issue", %{"id" => id}, socket) do
+    issue_id = String.to_integer(id)
+
+    if Harness.GitHub.active_pipeline_job?(issue_id) do
+      {:halt, put_flash(socket, :info, "Already queued or running — nothing to do")}
+    else
+      issue = Harness.GitHub.get_issue!(issue_id)
+      enqueue_retry(issue, socket)
+    end
+  end
+
+  defp enqueue_retry(issue, socket) do
+    case Harness.Runs.latest_issue_run_kind(issue.id) do
+      "triage" ->
+        Harness.GitHub.transition!(issue, "incoming")
+        %{issue_id: issue.id} |> Harness.GitHub.TriageWorker.new() |> Oban.insert()
+        {:halt, put_flash(socket, :info, "Triage re-queued")}
+
+      "implement" ->
+        Harness.GitHub.transition!(issue, "triaged")
+        %{issue_id: issue.id, promoted: true} |> Harness.GitHub.ImplementWorker.new() |> Oban.insert()
+        {:halt, put_flash(socket, :info, "Implement re-queued")}
+
+      _ ->
+        # "plan" run kind or nil (no run record) — re-queue PlanWorker
+        Harness.GitHub.transition!(issue, "triaged")
+        %{issue_id: issue.id} |> Harness.GitHub.PlanWorker.new() |> Oban.insert()
+        {:halt, put_flash(socket, :info, "Plan re-queued")}
+    end
+  end
+
   defp handle_event(_event, _params, socket), do: {:cont, socket}
 
   defp handle_info(:rail_tick, socket), do: {:halt, assign(socket, rail_state())}

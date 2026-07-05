@@ -116,6 +116,38 @@ defmodule HarnessWeb.OverviewLiveTest do
     assert GitHub.get_issue!(issue.id).pipeline_state == "implementing"
   end
 
+  test "retry button on failed issue enqueues correct worker and clears failed state", %{conn: conn} do
+    issue = issue_fixture(%{title: "Broken plan issue", pipeline_state: "triaged"})
+    Runs.create_run!(%{kind: "plan", status: "failed", issue_id: issue.id})
+    GitHub.transition!(issue, "failed")
+
+    {:ok, view, html} = live(conn, ~p"/")
+    assert html =~ "Broken plan issue"
+    assert html =~ "failed"
+    assert html =~ "Retry"
+
+    render_click(view, "retry_issue", %{"id" => "#{issue.id}"})
+
+    assert_enqueued(worker: Harness.GitHub.PlanWorker, args: %{"issue_id" => issue.id})
+    reloaded = GitHub.get_issue!(issue.id)
+    assert reloaded.pipeline_state == "triaged"
+  end
+
+  test "second retry click while job is pending shows flash and does not double-enqueue", %{conn: conn} do
+    issue = issue_fixture(%{title: "Double-retry issue", pipeline_state: "triaged"})
+    Runs.create_run!(%{kind: "triage", status: "failed", issue_id: issue.id})
+    GitHub.transition!(issue, "failed")
+
+    {:ok, view, _} = live(conn, ~p"/")
+
+    render_click(view, "retry_issue", %{"id" => "#{issue.id}"})
+    assert_enqueued(worker: Harness.GitHub.TriageWorker, args: %{"issue_id" => issue.id})
+
+    html = render_click(view, "retry_issue", %{"id" => "#{issue.id}"})
+    assert html =~ "Already queued"
+    assert length(all_enqueued(worker: Harness.GitHub.TriageWorker)) == 1
+  end
+
   test "promote_to_auto double-click enqueues exactly one implement job", %{conn: conn} do
     issue = issue_fixture(%{title: "Deduplicate me", pipeline_state: "triaged"})
     run = Runs.create_run!(%{kind: "plan", status: "succeeded", issue_id: issue.id})
