@@ -92,7 +92,7 @@ defmodule HarnessWeb.RunsLive do
       usage_mode={@usage_mode}
       usage_health={@usage_health}
     >
-      <div class="page-fit xl:flex xl:flex-col xl:min-h-0 xl:overflow-hidden">
+      <div class="page-fit md:flex md:flex-col md:min-h-0 md:overflow-hidden">
         <h1 class="font-display uppercase tracking-[0.16em] text-sm text-ink-dim mb-4">Runs</h1>
 
         <div
@@ -113,9 +113,9 @@ defmodule HarnessWeb.RunsLive do
           </div>
         </div>
 
-        <div class="grid xl:grid-cols-2 gap-8 xl:flex-1 xl:min-h-0">
-          <section aria-label="sessions" class="xl:flex xl:flex-col xl:min-h-0">
-            <div class="xl:flex-1 xl:min-h-0 xl:overflow-y-auto">
+        <div class="grid gap-8 xl:grid-cols-2 md:flex-1 md:min-h-0 md:auto-rows-fr">
+          <section aria-label="sessions" class="md:flex md:flex-col md:min-h-0">
+            <div class="md:flex-1 md:min-h-0 md:overflow-y-auto">
               <table class="w-full text-left tabular">
                 <thead class="sticky top-0 bg-bg">
                   <tr class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim border-b border-surface-2">
@@ -162,7 +162,7 @@ defmodule HarnessWeb.RunsLive do
           <section
             :if={@selected}
             aria-label="transcript"
-            class="min-w-0 xl:flex xl:flex-col xl:min-h-0"
+            class="min-w-0 md:flex md:flex-col md:min-h-0"
           >
             <div class="flex items-center gap-3 mb-3">
               <h2 class="font-display uppercase tracking-[0.16em] text-[12px] text-ink-dim">
@@ -202,7 +202,7 @@ defmodule HarnessWeb.RunsLive do
               id="transcript"
               phx-update="stream"
               phx-hook=".AutoScroll"
-              class="space-y-1 max-h-[70vh] xl:max-h-none xl:flex-1 xl:min-h-0 overflow-y-auto rounded-sm bg-surface border border-surface-2 p-3"
+              class="space-y-1 max-h-[70vh] md:max-h-none md:flex-1 md:min-h-0 overflow-y-auto rounded-sm bg-surface border border-surface-2 p-3"
             >
               <div :for={{dom_id, event} <- @streams.events} id={dom_id}>
                 <.event event={event} />

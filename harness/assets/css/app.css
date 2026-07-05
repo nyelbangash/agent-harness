@@ -151,9 +151,22 @@ body {
   }
 }
 
+/* app shell: min-h-screen inflates 1.2× under zoom, making every page
+   scroll ~20% past its content — divide the zoom back out like .rail-fit */
+.shell-fit {
+  min-height: 100vh;
+}
+
+@media (min-width: 768px) {
+  .shell-fit {
+    min-height: calc(100vh / var(--app-zoom));
+  }
+}
+
 /* fixed-viewport pages (Runs): content fills the window exactly and panes
-   scroll internally — same zoom arithmetic as .rail-fit, minus main's py-6 */
-@media (min-width: 1280px) {
+   scroll internally — same zoom arithmetic as .rail-fit, minus main's py-6.
+   md+ (where the zoom lives); phones keep natural page flow. */
+@media (min-width: 768px) {
   .page-fit {
     height: calc(100vh / var(--app-zoom) - 3rem);
   }
