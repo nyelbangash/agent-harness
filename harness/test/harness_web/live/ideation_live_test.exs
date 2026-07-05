@@ -4,6 +4,7 @@ defmodule HarnessWeb.IdeationLiveTest do
   import Phoenix.LiveViewTest
 
   alias Harness.Ideation
+  alias Harness.Ideation.Layout
 
   @moduletag :capture_log
 
@@ -137,5 +138,74 @@ defmodule HarnessWeb.IdeationLiveTest do
     view |> element("button", "Stop") |> render_click()
 
     assert Ideation.get_session!(session.id).status == "stopped"
+  end
+
+  test "status line renders iteration and critique counts", %{conn: conn} do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 60})
+    Ideation.update_session!(session, %{iterations: 7, critiques: 2})
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    assert html =~ "iteration 7"
+    assert html =~ "critique 2/"
+    assert html =~ "60"
+  end
+
+  test "broadcasting a developing_node marks that node with a data-developing attr", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 60})
+    {:ok, view, html} = live(conn, ~p"/ideation/#{session.id}")
+    refute html =~ ~s(data-developing="true")
+
+    send(view.pid, {:developing_node, root.id})
+
+    html = render(view)
+    assert html =~ ~s(data-developing="true")
+
+    # a session_updated clears the pulse
+    send(view.pid, {:session_updated, Ideation.get_session!(session.id)})
+    refute render(view) =~ ~s(data-developing="true")
+  end
+
+  test "broadcasting critique_running shows the critique indicator", %{conn: conn} do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 60})
+    {:ok, view, html} = live(conn, ~p"/ideation/#{session.id}")
+    refute html =~ "critique in progress"
+
+    send(view.pid, {:critique_running, session.id})
+
+    assert render(view) =~ "critique in progress"
+
+    # cleared when session updates
+    send(view.pid, {:session_updated, Ideation.get_session!(session.id)})
+    refute render(view) =~ "critique in progress"
+  end
+
+  test "viewBox hugs content bounds for a seeded tree", %{conn: conn} do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 60})
+    ideas = Ideation.tree(session.id)
+    layout = Layout.compute(ideas)
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    assert html =~ ~s(viewBox="0 0 #{layout.width} #{layout.height}")
+    assert html =~ ~s(data-viewbox="0 0 #{layout.width} #{layout.height}")
+  end
+
+  test "viewBox height adjusts with tree depth, hugging content tighter than the old formula", %{
+    conn: conn
+  } do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 60})
+    _child = Ideation.add_child!(session, root, %{title: "Child", summary: "s", score: 7.0}, "")
+
+    ideas = Ideation.tree(session.id)
+    layout = Layout.compute(ideas)
+
+    # root at depth 0 (y=40), child at depth 1 (y=130); content height = 130 + margin(40) = 170
+    # the old formula gave @margin*2 + 1*@y_gap + 40 = 210 — 40 units tighter now
+    assert layout.height == 170
+    assert layout.height < 210
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+    assert html =~ ~s(viewBox="0 0 #{layout.width} #{layout.height}")
   end
 end

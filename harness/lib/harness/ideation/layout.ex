@@ -42,9 +42,13 @@ defmodule Harness.Ideation.Layout do
         %{x1: parent.x, y1: parent.y, x2: child.x, y2: child.y}
       end
 
-    width = @margin * 2 + max(next_x - 1, 0) * @x_gap + 40
-    max_depth = ideas |> Enum.map(& &1.depth) |> Enum.max(fn -> 0 end)
-    height = @margin * 2 + max_depth * @y_gap + 40
+    # Hug the content bounding box: viewBox = actual node extents + one margin on each side.
+    # Label text sits at y+26 (baseline); with font-size 9 the rendered bottom ≈ y+28.
+    # @margin (40) gives enough clearance above/right; y+@margin covers the label below.
+    max_node_x = nodes |> Enum.map(& &1.x) |> Enum.max(fn -> @margin end)
+    max_node_y = nodes |> Enum.map(& &1.y) |> Enum.max(fn -> @margin end)
+    width = max_node_x + @margin
+    height = max_node_y + @margin
 
     %{nodes: nodes, edges: edges, width: max(width, 200), height: max(height, 120), by_id: by_id}
   end

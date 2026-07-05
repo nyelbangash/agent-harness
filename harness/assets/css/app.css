@@ -235,6 +235,24 @@ body {
   }
 }
 
+/* active-node pulse: the circle stroke breathes to show the iteration in flight */
+@keyframes node-pulse {
+  0%, 100% { stroke: var(--color-accent); stroke-width: 2; stroke-opacity: 1; }
+  50%       { stroke: var(--color-accent); stroke-width: 4; stroke-opacity: 0.55; }
+}
+
+.node-developing {
+  animation: node-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-developing {
+    animation: none;
+    stroke: var(--color-accent);
+    stroke-width: 3;
+  }
+}
+
 /* Add variants based on LiveView classes */
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
