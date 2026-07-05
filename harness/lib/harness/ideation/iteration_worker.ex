@@ -111,13 +111,16 @@ defmodule Harness.Ideation.IterationWorker do
   end
 
   defp iterate(session) do
-    case Ideation.select_frontier(session.id) do
+    {node, session} = resolve_node(session)
+
+    case node do
       nil ->
         finish(session, :frontier_empty)
 
       node ->
         # develop on odd depth, diverge on even — alternate breadth and depth
         mode = if rem(node.depth, 2) == 0, do: :diverge, else: :develop
+        nudge = session.nudge
         prompt = Harness.Prompts.ideate(mode, session, node)
 
         spec = %RunSpec{
@@ -134,14 +137,26 @@ defmodule Harness.Ideation.IterationWorker do
         }
 
         case Runs.execute(spec) do
-          {:ok, result} -> apply_result(session, node, mode, result)
+          {:ok, result} -> apply_result(session, node, mode, result, nudge)
           {:error, :killed} -> {:cancel, :killed}
           {:error, reason} -> {:error, reason}
         end
     end
   end
 
-  defp apply_result(session, node, :diverge, %{structured_output: %{"children" => children} = out}) do
+  # Use the operator-focused node (cleared immediately so it fires exactly once),
+  # or fall back to the normal frontier heuristic.
+  defp resolve_node(%{focus_node_id: nil} = session) do
+    {Ideation.select_frontier(session.id), session}
+  end
+
+  defp resolve_node(session) do
+    node = Ideation.get_idea!(session.focus_node_id)
+    session = Ideation.update_session!(session, %{focus_node_id: nil})
+    {node, session}
+  end
+
+  defp apply_result(session, node, :diverge, %{structured_output: %{"children" => children} = out}, nudge) do
     Ideation.mark_expanded!(node)
 
     for child <- children do
@@ -158,10 +173,10 @@ defmodule Harness.Ideation.IterationWorker do
       )
     end
 
-    advance(session, out["journal"], length(children) > 0)
+    advance(session, out["journal"], length(children) > 0, nudge)
   end
 
-  defp apply_result(session, node, :develop, %{structured_output: %{"artifact" => _} = out}) do
+  defp apply_result(session, node, :develop, %{structured_output: %{"artifact" => _} = out}, nudge) do
     Ideation.add_child!(
       session,
       node,
@@ -175,25 +190,30 @@ defmodule Harness.Ideation.IterationWorker do
     )
 
     Ideation.mark_expanded!(node)
-    advance(session, out["journal"], true)
+    advance(session, out["journal"], true, nudge)
   end
 
   # malformed structured output — count as a no-progress iteration, don't crash
-  defp apply_result(session, _node, _mode, _result) do
+  defp apply_result(session, _node, _mode, _result, nudge) do
     Logger.warning("ideation #{session.id}: iteration produced no usable output")
-    advance(session, ["iteration produced no usable structured output"], false)
+    advance(session, ["iteration produced no usable structured output"], false, nudge)
   end
 
-  defp advance(session, journal, progress?) do
+  defp advance(session, journal, progress?, nudge) do
     iteration = session.iterations + 1
-    Ideation.append_journal!(session, iteration, journal || [])
+
+    # log nudge consumption first so it's always captured even if model output is sparse
+    nudge_entry = if nudge, do: ["NUDGE consumed: #{String.slice(nudge, 0, 160)}"], else: []
+    Ideation.append_journal!(session, iteration, nudge_entry ++ List.wrap(journal))
 
     # informational only — the stop condition is critique-driven (§5.2), so a
     # transient malformed-JSON iteration no longer counts toward termination
     streak = if progress?, do: 0, else: session.no_progress_streak + 1
 
-    session =
-      Ideation.update_session!(session, %{iterations: iteration, no_progress_streak: streak})
+    update_attrs = %{iterations: iteration, no_progress_streak: streak}
+    update_attrs = if nudge, do: Map.put(update_attrs, :nudge, nil), else: update_attrs
+
+    session = Ideation.update_session!(session, update_attrs)
 
     critique_every = Policy.get().ideate.critique_every
 

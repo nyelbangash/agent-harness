@@ -214,4 +214,107 @@ defmodule Harness.Ideation.WorkersTest do
 
     assert {:cancel, :killed} = perform_job(IterationWorker, %{session_id: session.id})
   end
+
+  test "a stored nudge appears in the iteration prompt exactly once then is cleared" do
+    %{session: session} = start()
+    session = Ideation.set_nudge!(session, "explore the async angle")
+
+    FakeRunner.script([
+      {:ok,
+       Harness.Fixtures.runner_result(
+         structured_output:
+           diverge_output([
+             %{"title" => "branch A", "summary" => "a", "score" => 7.0, "artifact" => "x"},
+             %{"title" => "branch B", "summary" => "b", "score" => 6.0, "artifact" => "y"}
+           ])
+       )}
+    ])
+
+    assert :ok = perform_job(IterationWorker, %{session_id: session.id})
+
+    [spec] = FakeRunner.executed_specs()
+    assert spec.prompt =~ "explore the async angle"
+
+    # nudge is consumed — cleared from session after the iteration
+    session = Ideation.get_session!(session.id)
+    assert is_nil(session.nudge)
+
+    # second iteration: nudge no longer present in prompt
+    FakeRunner.script([
+      {:ok,
+       Harness.Fixtures.runner_result(
+         structured_output: %{
+           "title" => "a-developed",
+           "summary" => "deeper",
+           "score" => 7.5,
+           "artifact" => "developed artifact",
+           "journal" => ["went deeper"]
+         }
+       )}
+    ])
+
+    assert :ok = perform_job(IterationWorker, %{session_id: session.id})
+    [spec2] = FakeRunner.executed_specs()
+    # the dedicated nudge section must not appear; the nudge may linger in the journal as history
+    refute spec2.prompt =~ "## Operator nudge"
+  end
+
+  test "a focused node is chosen regardless of frontier score" do
+    %{session: session, root: root} = start()
+
+    # two frontier children: one high-scorer that would normally win,
+    # one low-scorer that the operator explicitly focuses
+    _high = Ideation.add_child!(session, root, %{title: "high-scorer", score: 9.0}, "")
+    low = Ideation.add_child!(session, root, %{title: "low-focus", score: 2.0}, "")
+
+    session = Ideation.focus_node!(session, low.id)
+
+    FakeRunner.script([
+      {:ok,
+       Harness.Fixtures.runner_result(
+         structured_output: %{
+           "title" => "developed low",
+           "summary" => "focused branch developed",
+           "score" => 4.0,
+           "artifact" => "focused content",
+           "journal" => ["followed operator focus"]
+         }
+       )}
+    ])
+
+    assert :ok = perform_job(IterationWorker, %{session_id: session.id})
+
+    [spec] = FakeRunner.executed_specs()
+    # the prompt was built for the focused (low-score) node, not the high-scorer
+    assert spec.prompt =~ "low-focus"
+
+    # focus cleared after one use
+    session = Ideation.get_session!(session.id)
+    assert is_nil(session.focus_node_id)
+  end
+
+  test "synthesize_now! stops the session and enqueues synthesis with operator_synthesis stop_reason" do
+    %{session: session} = start()
+
+    Ideation.synthesize_now!(session)
+
+    session = Ideation.get_session!(session.id)
+    assert session.status == "stopped"
+    assert session.stop_reason == "operator_synthesis"
+    assert_enqueued(worker: CritiqueWorker, args: %{session_id: session.id, final: true})
+
+    # running the final synthesis marks it synthesized with the operator_synthesis reason
+    FakeRunner.script([
+      fn spec ->
+        File.write!(Path.join(spec.cwd, "SYNTHESIS.md"), "# Synthesis\n\noperator triggered")
+        {:ok, Harness.Fixtures.runner_result()}
+      end
+    ])
+
+    assert :ok = perform_job(CritiqueWorker, %{session_id: session.id, final: true})
+
+    session = Ideation.get_session!(session.id)
+    assert session.status == "synthesized"
+    assert session.stop_reason == "operator_synthesis"
+  end
 end

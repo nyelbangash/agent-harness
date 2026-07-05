@@ -71,6 +71,21 @@ defmodule Harness.Ideation do
     session
   end
 
+  @doc "Store an operator nudge; the next iteration must address it (consumed once)."
+  def set_nudge!(%Session{} = session, nudge) do
+    update_session!(session, %{nudge: nudge})
+  end
+
+  @doc "Override frontier selection for exactly one iteration to develop the given node."
+  def focus_node!(%Session{} = session, idea_id) do
+    update_session!(session, %{focus_node_id: idea_id})
+  end
+
+  @doc "Stop the session immediately and trigger synthesis (stop_reason: operator_synthesis)."
+  def synthesize_now!(%Session{} = session) do
+    stop_session!(session, :operator_synthesis)
+  end
+
   @doc """
   Stop a session (operator or a stop condition), recording the reason and
   enqueuing the final synthesis (spec §5.2: "On stop, a final Opus synthesis

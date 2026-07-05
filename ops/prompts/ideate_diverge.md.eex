@@ -19,7 +19,10 @@ Current node: <%= @node_title %> (depth <%= @node_depth %>, score <%= @node_scor
 
 ## Running journal (what's been tried, what surprised, what's next)
 <%= @journal %>
-
+<%= if @nudge != "" do %>
+## Operator nudge (address this in your response before exploring further)
+<%= @nudge %>
+<% end %>
 ## Your task
 Produce 2–4 children. For each: a short title, a one-paragraph summary, a
 calibrated score 0–10 for how promising it is relative to the seed, and an

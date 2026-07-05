@@ -15,7 +15,10 @@ web search available; use it to find prior art, evidence, and sharp edges.
 
 ## Running journal
 <%= @journal %>
-
+<%= if @nudge != "" do %>
+## Operator nudge (address this in your response before exploring further)
+<%= @nudge %>
+<% end %>
 ## Your task
 Produce ONE deepened idea: a refined title, a tighter summary, a calibrated
 score 0–10, and an "artifact" — several paragraphs that genuinely advance the

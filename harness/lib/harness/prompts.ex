@@ -61,6 +61,7 @@ defmodule Harness.Prompts do
     render(template,
       # seed is trusted operator input, included verbatim (anti-drift §5.2)
       seed_prompt: session.seed_prompt,
+      nudge: session.nudge || "",
       node_title: node.title,
       node_depth: node.depth,
       node_score: node.score,
