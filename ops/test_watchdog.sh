@@ -30,15 +30,18 @@ check() {
 # Stub builtins — these are shell functions that override the external commands.
 # They persist across multiple sources of watchdog.sh because sourcing runs in
 # the current shell (same function namespace). watchdog.sh does not define
-# osascript/curl/date, so the stubs below are never overwritten by the source.
+# osascript/curl/date/jq, so the stubs below are never overwritten by the source.
 
 NOTIFIED=""
 STUB_EXIT=1
 FAKE_NOW=1000
+STUB_BODY=""
+STUB_STALE=false
 
 osascript() { NOTIFIED="${NOTIFIED}notified:$*|"; }
-curl() { return "${STUB_EXIT}"; }
+curl() { printf '%s' "${STUB_BODY}"; return "${STUB_EXIT}"; }
 date() { echo "${FAKE_NOW}"; }
+jq() { printf '%s' "${STUB_STALE}"; }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -84,6 +87,45 @@ STUB_EXIT=0
 FAKE_NOW=6000
 . "${SCRIPT_DIR}/watchdog.sh"
 check "up→up is silent" "0" "$(printf '%s' "${NOTIFIED}" | grep -c notified)"
+
+# --- Test 6: first tick stale → no alert, stale_ts recorded ---
+printf 'up 7000 0\n' > "${STATE_FILE}"
+NOTIFIED=""
+STUB_EXIT=0
+STUB_STALE=true
+FAKE_NOW=8000
+. "${SCRIPT_DIR}/watchdog.sh"
+check "first stale tick is silent" "0" "$(printf '%s' "${NOTIFIED}" | grep -c notified)"
+check "stale_ts recorded on first tick" "8000" "$(awk '{print $3}' "${STATE_FILE}")"
+
+# --- Test 7: stale but age < 600 → no alert, stale_ts unchanged ---
+printf 'up 7000 8000\n' > "${STATE_FILE}"
+NOTIFIED=""
+STUB_EXIT=0
+STUB_STALE=true
+FAKE_NOW=8500
+. "${SCRIPT_DIR}/watchdog.sh"
+check "stale age<600 is silent" "0" "$(printf '%s' "${NOTIFIED}" | grep -c notified)"
+check "stale_ts unchanged when age<600" "8000" "$(awk '{print $3}' "${STATE_FILE}")"
+
+# --- Test 8: stale, age ≥ 600 → alert fires ---
+printf 'up 7000 8000\n' > "${STATE_FILE}"
+NOTIFIED=""
+STUB_EXIT=0
+STUB_STALE=true
+FAKE_NOW=9000
+. "${SCRIPT_DIR}/watchdog.sh"
+check "stale age>=600 triggers notification" "1" "$(printf '%s' "${NOTIFIED}" | grep -c notified)"
+
+# --- Test 9: stale_code clears → stale_ts reset to 0 ---
+printf 'up 7000 8000\n' > "${STATE_FILE}"
+NOTIFIED=""
+STUB_EXIT=0
+STUB_STALE=false
+FAKE_NOW=9500
+. "${SCRIPT_DIR}/watchdog.sh"
+check "stale cleared is silent" "0" "$(printf '%s' "${NOTIFIED}" | grep -c notified)"
+check "stale_ts reset to 0 when not stale" "0" "$(awk '{print $3}' "${STATE_FILE}")"
 
 echo ""
 echo "Results: ${pass} passed, ${fail} failed"
