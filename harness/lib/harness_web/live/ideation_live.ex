@@ -34,6 +34,7 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:tokens_in, 0)
      |> assign(:tokens_out, 0)
      |> assign(:journal_snippet, nil)
+     |> assign(:synthesis_open, false)
      |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => "#{budget}"}))}
   end
 
@@ -50,7 +51,8 @@ defmodule HarnessWeb.IdeationLive do
            top_nodes: [],
            tokens_in: 0,
            tokens_out: 0,
-           journal_snippet: nil
+           journal_snippet: nil,
+           synthesis_open: false
          )}
 
       id ->
@@ -63,6 +65,7 @@ defmodule HarnessWeb.IdeationLive do
          |> assign(:artifact_open, false)
          |> assign(:active_node_id, nil)
          |> assign(:critique_running, false)
+         |> assign(:synthesis_open, false)
          |> load_session(String.to_integer(id))}
     end
   end
@@ -184,6 +187,46 @@ defmodule HarnessWeb.IdeationLive do
     {:noreply, put_flash(socket, :info, "Session stopping after the current iteration.")}
   end
 
+  def handle_event("synthesize_now", %{"id" => id}, socket) do
+    id
+    |> String.to_integer()
+    |> Ideation.get_session!()
+    |> Ideation.stop_session!(:operator_synthesis)
+
+    {:noreply, put_flash(socket, :info, "Synthesis running — SYNTHESIS.md will open when ready.")}
+  end
+
+  def handle_event("submit_nudge", %{"session_id" => id, "nudge" => nudge}, socket) do
+    nudge = String.trim(nudge)
+
+    if nudge == "" do
+      {:noreply, socket}
+    else
+      id |> String.to_integer() |> Ideation.get_session!() |> Ideation.set_nudge!(nudge)
+      {:noreply, put_flash(socket, :info, "Nudge stored — next iteration will address it.")}
+    end
+  end
+
+  def handle_event("focus_node", %{"id" => id}, socket) do
+    node_id = String.to_integer(id)
+    Ideation.set_forced_node!(socket.assigns.session, node_id)
+    {:noreply, put_flash(socket, :info, "Next iteration will develop this branch.")}
+  end
+
+  def handle_event("open_synthesis", _params, socket) do
+    {:noreply, assign(socket, :synthesis_open, true)}
+  end
+
+  def handle_event("close_synthesis", _params, socket) do
+    {:noreply, assign(socket, :synthesis_open, false)}
+  end
+
+  def handle_event("synthesis_keydown", %{"key" => "Escape"}, socket) do
+    {:noreply, assign(socket, :synthesis_open, false)}
+  end
+
+  def handle_event("synthesis_keydown", _params, socket), do: {:noreply, socket}
+
   @impl true
   def handle_info({event, _}, socket)
       when event in [:session_started, :session_updated] do
@@ -197,6 +240,15 @@ defmodule HarnessWeb.IdeationLive do
       if socket.assigns[:session],
         do: load_session(socket, socket.assigns.session.id),
         else: socket
+
+    # Auto-open synthesis modal when an operator_synthesis run completes.
+    socket =
+      with %{status: "synthesized", stop_reason: "operator_synthesis"} <- socket.assigns[:session],
+           false <- socket.assigns[:synthesis_open] do
+        assign(socket, :synthesis_open, true)
+      else
+        _ -> socket
+      end
 
     {:noreply, socket}
   end
@@ -541,15 +593,33 @@ defmodule HarnessWeb.IdeationLive do
                 <span :if={@session.stop_reason} class="font-mono text-[10px] text-ink-dim">
                   {String.replace(@session.stop_reason, "_", " ")}
                 </span>
-                <button
-                  :if={@session.status == "running"}
-                  phx-click="stop_session"
-                  phx-value-id={@session.id}
-                  data-confirm="Stop this ideation session?"
-                  class="ml-auto font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-alert text-alert rounded-sm hover:bg-alert hover:text-ink"
-                >
-                  Stop
-                </button>
+                <div class="ml-auto flex items-center gap-2">
+                  <button
+                    :if={@session.status == "synthesized" && @session.synthesis_path}
+                    phx-click="open_synthesis"
+                    class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-ok text-ok rounded-sm hover:bg-ok/10"
+                  >
+                    Open synthesis
+                  </button>
+                  <button
+                    :if={@session.status == "running"}
+                    phx-click="synthesize_now"
+                    phx-value-id={@session.id}
+                    data-confirm="Run final synthesis over the current tree now?"
+                    class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-ok text-ok rounded-sm hover:bg-ok/10"
+                  >
+                    Synthesize
+                  </button>
+                  <button
+                    :if={@session.status == "running"}
+                    phx-click="stop_session"
+                    phx-value-id={@session.id}
+                    data-confirm="Stop this ideation session?"
+                    class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-alert text-alert rounded-sm hover:bg-alert hover:text-ink"
+                  >
+                    Stop
+                  </button>
+                </div>
               </div>
               <div class="flex items-center gap-3 mb-3">
                 <span class="font-mono text-[10px] text-ink-dim tabular-nums">
@@ -562,6 +632,26 @@ defmodule HarnessWeb.IdeationLive do
                   critique in progress
                 </span>
               </div>
+              <form
+                :if={@session.status == "running"}
+                phx-submit="submit_nudge"
+                class="mb-3 flex gap-2"
+              >
+                <input type="hidden" name="session_id" value={@session.id} />
+                <input
+                  name="nudge"
+                  type="text"
+                  placeholder="Nudge next iteration…"
+                  autocomplete="off"
+                  class="flex-1 bg-surface border border-surface-2 rounded-sm px-2 py-1 font-mono text-[11px] text-ink focus:outline-2 focus:outline-accent"
+                />
+                <button
+                  type="submit"
+                  class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
+                >
+                  Nudge
+                </button>
+              </form>
 
               <div class="grid xl:grid-cols-3 gap-4 md:flex-1 md:min-h-0 md:auto-rows-fr">
                 <div class="xl:col-span-2 rounded-sm bg-surface border border-surface-2 overflow-hidden max-h-[60vh] md:max-h-none md:min-h-0 relative">
@@ -746,15 +836,26 @@ defmodule HarnessWeb.IdeationLive do
                     <p class="font-body text-[13px] text-ink-dim mb-2">
                       {@selected_node.idea.summary}
                     </p>
-                    <div :if={@selected_node.artifact}>
+                    <div class="flex gap-2 mb-2">
                       <button
+                        :if={@selected_node.artifact}
                         phx-click="select_node"
                         phx-value-id={@selected_node.idea.id}
-                        class="font-display uppercase text-[10px] tracking-widest px-2 py-1 mb-2 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
+                        class="font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
                       >
                         Expand
                       </button>
-                      <div class="artifact-prose">{artifact_html(@selected_node.artifact)}</div>
+                      <button
+                        :if={@session && @session.status == "running" && @selected_node.idea.status == "frontier"}
+                        phx-click="focus_node"
+                        phx-value-id={@selected_node.idea.id}
+                        class="font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
+                      >
+                        Focus
+                      </button>
+                    </div>
+                    <div :if={@selected_node.artifact} class="artifact-prose">
+                      {artifact_html(@selected_node.artifact)}
                     </div>
                   </div>
                 </div>
@@ -843,6 +944,37 @@ defmodule HarnessWeb.IdeationLive do
                 {child.title} · {child.score}
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+      <div
+        :if={@synthesis_open && @session && @session.synthesis_path}
+        id="synthesis-modal"
+        phx-window-keydown="synthesis_keydown"
+        class="fixed inset-0 z-50 flex items-center justify-center p-6"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div
+          class="absolute inset-0 bg-bg/85"
+          phx-click="close_synthesis"
+          aria-hidden="true"
+        >
+        </div>
+        <div class="relative w-full max-w-3xl max-h-[80vh] flex flex-col rounded-sm bg-surface border border-surface-2 shadow-2xl">
+          <div class="flex items-center gap-3 px-5 py-3 border-b border-surface-2 shrink-0">
+            <span class="font-display text-sm text-ink">SYNTHESIS.md</span>
+            <span class="font-mono text-[10px] text-ink-dim">session #{@session.id}</span>
+            <button
+              phx-click="close_synthesis"
+              aria-label="close"
+              class="ml-auto font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-alert hover:text-alert"
+            >
+              Close
+            </button>
+          </div>
+          <div class="artifact-prose overflow-y-auto px-5 py-4 min-h-0">
+            {artifact_html(Ideation.read_synthesis(@session) || "(synthesis not yet written)")}
           </div>
         </div>
       </div>

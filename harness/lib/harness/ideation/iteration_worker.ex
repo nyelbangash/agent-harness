@@ -112,15 +112,37 @@ defmodule Harness.Ideation.IterationWorker do
 
   defp iterate(session) do
     grounding = Ideation.grounding_repos(session)
+    nudge = session.nudge
+    forced_id = session.forced_node_id
 
-    case Ideation.select_frontier(session.id) do
+    # Consume steering inputs before using them: if the job crashes mid-run, a
+    # retry on the next Oban attempt won't replay a stale nudge or forced node.
+    session = consume_steering(session, nudge, forced_id)
+
+    node = resolve_node(session, forced_id)
+
+    case node do
       nil ->
         finish(session, :frontier_empty)
 
       node ->
+        was_forced = !is_nil(forced_id) && node.id == forced_id
+
+        if nudge do
+          Ideation.append_journal!(session, session.iterations, [
+            "Operator nudge applied: #{String.slice(nudge, 0, 180)}"
+          ])
+        end
+
+        if was_forced do
+          Ideation.append_journal!(session, session.iterations, [
+            "Operator focus: developing #{node.title} (score #{node.score}, override)"
+          ])
+        end
+
         # develop on odd depth, diverge on even — alternate breadth and depth
         mode = if rem(node.depth, 2) == 0, do: :diverge, else: :develop
-        prompt = Harness.Prompts.ideate(mode, session, node, grounding)
+        prompt = Harness.Prompts.ideate(mode, session, node, grounding, nudge)
         Ideation.broadcast_developing(session.id, node.id)
 
         spec = %RunSpec{
@@ -141,6 +163,29 @@ defmodule Harness.Ideation.IterationWorker do
           {:error, :killed} -> {:cancel, :killed}
           {:error, reason} -> {:error, reason}
         end
+    end
+  end
+
+  # Clear nudge/forced_node before the iteration runs so a crash doesn't replay them.
+  defp consume_steering(session, nil, nil), do: session
+
+  defp consume_steering(session, nudge, forced_id) do
+    updates =
+      [nudge && {:nudge, nil}, forced_id && {:forced_node_id, nil}]
+      |> Enum.filter(& &1)
+      |> Map.new()
+
+    Ideation.update_session!(session, updates)
+  end
+
+  # Use the forced node if it's still a frontier node; otherwise fall back to
+  # normal heuristic selection.
+  defp resolve_node(session, nil), do: Ideation.select_frontier(session.id)
+
+  defp resolve_node(session, forced_id) do
+    case Harness.Repo.get(Harness.Ideation.Idea, forced_id) do
+      %{status: "frontier"} = node -> node
+      _ -> Ideation.select_frontier(session.id)
     end
   end
 

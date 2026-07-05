@@ -67,7 +67,7 @@ defmodule Harness.Prompts do
 
   alias Harness.Ideation
 
-  def ideate(mode, session, node, grounding_repos \\ []) do
+  def ideate(mode, session, node, grounding_repos \\ [], nudge \\ nil) do
     template = if mode == :diverge, do: "ideate_diverge.md.eex", else: "ideate_develop.md.eex"
 
     render(template,
@@ -80,7 +80,8 @@ defmodule Harness.Prompts do
       ancestor_chain: format_ancestors(node),
       sibling_summaries: format_siblings(node),
       journal: truncate(Ideation.read_journal(session), 8_000),
-      grounding_repos: grounding_repos
+      grounding_repos: grounding_repos,
+      nudge: nudge
     )
   end
 
