@@ -102,6 +102,27 @@ defmodule Harness.ReposTest do
     Repos.remove_worktree!(repo, wt)
   end
 
+  test "ensure_base! rebuilds a clone whose origin is not the configured remote", %{
+    repo: repo,
+    bare: bare
+  } do
+    path = Repos.ensure_base!(repo)
+
+    # the shape a clone left by an earlier test run has: its file:// remote
+    # was deleted, and :github_remote_base now points at a fresh fixture that
+    # happens to reuse the same repo name
+    File.rm_rf!(bare)
+    tmp2 = Path.join(System.tmp_dir!(), "repos-test-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(tmp2)
+    create_git_remote!(tmp2, repo)
+    Application.put_env(:harness, :github_remote_base, "file://#{tmp2}/")
+    on_exit(fn -> File.rm_rf!(tmp2) end)
+
+    assert Repos.ensure_base!(repo) == path
+    {url, 0} = System.cmd("git", ["-C", path, "remote", "get-url", "origin"])
+    assert String.trim(url) == "file://#{tmp2}/#{repo}.git"
+  end
+
   test "ensure_base! refreshes the working tree to the remote tip", %{repo: repo, bare: bare} do
     path = Repos.ensure_base!(repo)
     refute File.exists?(Path.join(path, "NEW.md"))

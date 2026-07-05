@@ -88,7 +88,7 @@ defmodule Harness.Repos do
     path = base_path(repo)
 
     state =
-      if File.dir?(Path.join(path, ".git")) do
+      if reusable_clone?(path, repo) do
         git!(path, ["fetch", "origin", "--prune"], repo)
         # fetch only updates remote refs — refresh the checked-out tree too,
         # or triage sessions read a snapshot from the day of the first clone
@@ -96,9 +96,13 @@ defmodule Harness.Repos do
         git!(path, ["reset", "--hard", "origin/#{branch}"], repo)
         state
       else
+        # missing, half-cloned, or tracking a different remote — rebuild
+        # rather than fetch from the wrong place
+        File.rm_rf!(path)
         File.mkdir_p!(Path.dirname(path))
         git!(Path.dirname(path), ["clone", remote_url(repo), path], repo)
-        state
+        # a default branch learned from the old remote doesn't carry over
+        %{state | default_branches: Map.delete(state.default_branches, repo)}
       end
 
     {:reply, path, state}
@@ -222,6 +226,18 @@ defmodule Harness.Repos do
           end
 
         {branch, put_in(state.default_branches[repo], branch)}
+    end
+  end
+
+  # A clone is only reusable if it tracks the remote we would clone from
+  # today: `:github_remote_base` is configurable, so a clone made under an
+  # earlier configuration must be rebuilt, not fetched.
+  defp reusable_clone?(path, repo) do
+    with true <- File.dir?(Path.join(path, ".git")),
+         {url, 0} <- git(path, ["remote", "get-url", "origin"], repo) do
+      String.trim(url) == remote_url(repo)
+    else
+      _ -> false
     end
   end
 
