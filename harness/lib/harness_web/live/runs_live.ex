@@ -72,6 +72,16 @@ defmodule HarnessWeb.RunsLive do
     {:noreply, socket}
   end
 
+  def handle_info({:run_counters, run_id, turns}, socket) do
+    runs =
+      Enum.map(socket.assigns.runs, fn
+        %{id: ^run_id, status: "running"} = run -> %{run | turns: turns}
+        run -> run
+      end)
+
+    {:noreply, assign(socket, :runs, runs)}
+  end
+
   def handle_info({:run_event, event}, socket) do
     if socket.assigns.selected && event.run_id == socket.assigns.selected.id do
       {:noreply, stream_insert(socket, :events, event)}

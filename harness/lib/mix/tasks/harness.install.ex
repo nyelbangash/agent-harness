@@ -16,6 +16,7 @@ defmodule Mix.Tasks.Harness.Install do
 
   @requirements ["app.config"]
   @label "com.nyel.harness"
+  @watchdog_label "com.nyel.harness.watchdog"
 
   @impl Mix.Task
   def run(_args) do
@@ -61,11 +62,81 @@ defmodule Mix.Tasks.Harness.Install do
       {output, code} ->
         Mix.raise("launchctl bootstrap exited #{code}: #{String.trim(output)}")
     end
+
+    install_watchdog(home)
   end
 
   defp uid do
     {uid, 0} = System.cmd("id", ["-u"])
     String.trim(uid)
+  end
+
+  defp install_watchdog(home) do
+    project_root = Application.fetch_env!(:harness, :project_root)
+    src = Path.join([project_root, "ops", "watchdog.sh"])
+    dest = Path.join(home, "watchdog.sh")
+
+    File.cp!(src, dest)
+    File.chmod!(dest, 0o755)
+    Mix.shell().info("  ✓ #{dest}")
+
+    ntfy_topic = read_ntfy_topic()
+    watchdog_plist = Path.expand("~/Library/LaunchAgents/#{@watchdog_label}.plist")
+    File.write!(watchdog_plist, watchdog_plist_content(dest, ntfy_topic))
+    Mix.shell().info("  ✓ #{watchdog_plist}")
+
+    System.cmd("launchctl", ["bootout", "gui/#{uid()}/#{@watchdog_label}"],
+      stderr_to_stdout: true
+    )
+
+    case System.cmd("launchctl", ["bootstrap", "gui/#{uid()}", watchdog_plist],
+           stderr_to_stdout: true
+         ) do
+      {_, 0} ->
+        Mix.shell().info("  ✓ bootstrapped gui/#{uid()}/#{@watchdog_label}")
+
+      {output, code} ->
+        Mix.raise("launchctl bootstrap (watchdog) exited #{code}: #{String.trim(output)}")
+    end
+  end
+
+  defp read_ntfy_topic do
+    path = Application.fetch_env!(:harness, :policy_path)
+
+    case YamlElixir.read_from_file(path) do
+      {:ok, %{"notify" => %{"ntfy_topic" => topic}}} when is_binary(topic) and topic != "" ->
+        topic
+
+      _ ->
+        nil
+    end
+  end
+
+  defp watchdog_plist_content(script_path, ntfy_topic) do
+    env_block =
+      if ntfy_topic do
+        "\n    <key>NTFY_TOPIC</key><string>#{ntfy_topic}</string>"
+      else
+        ""
+      end
+
+    """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+      "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0"><dict>
+      <key>Label</key><string>#{@watchdog_label}</string>
+      <key>ProgramArguments</key>
+      <array>
+        <string>/bin/sh</string><string>#{script_path}</string>
+      </array>
+      <key>StartInterval</key><integer>300</integer>
+      <key>RunAtLoad</key><true/>
+      <key>EnvironmentVariables</key>
+      <dict>#{env_block}
+      </dict>
+    </dict></plist>
+    """
   end
 
   defp plist_content(home) do

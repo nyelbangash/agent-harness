@@ -7,7 +7,7 @@ defmodule Harness.GitHub do
 
   import Ecto.Query
 
-  alias Harness.GitHub.{Issue, Plan, RepoState, TriageDecision}
+  alias Harness.GitHub.{Issue, Plan, RepoState, TriageDecision, TriageOutcome}
   alias Harness.Repo
 
   @topic "issues"
@@ -56,6 +56,26 @@ defmodule Harness.GitHub do
           {:unchanged,
            existing |> Issue.changeset(%{last_synced_at: attrs.last_synced_at}) |> Repo.update!()}
         end
+    end
+  end
+
+  @doc """
+  Self-acknowledge a GitHub update the harness itself caused (e.g. posting a
+  plan comment): advance the stored `github_updated_at` so the next poll does
+  not read our own write as operator activity and re-enqueue the pipeline
+  (the #4 feedback loop, issue #28).
+  """
+  def acknowledge_self_update!(%Issue{} = issue, updated_at_iso) do
+    case DateTime.from_iso8601(updated_at_iso) do
+      {:ok, dt, _} ->
+        if is_nil(issue.github_updated_at) or DateTime.after?(dt, issue.github_updated_at) do
+          issue |> Issue.changeset(%{github_updated_at: dt}) |> Repo.update!()
+        else
+          issue
+        end
+
+      _ ->
+        issue
     end
   end
 
@@ -189,6 +209,16 @@ defmodule Harness.GitHub do
   def latest_triage(issue_id) do
     from(t in TriageDecision, where: t.issue_id == ^issue_id, order_by: [desc: t.id], limit: 1)
     |> Repo.one()
+  end
+
+  @doc """
+  Insert exactly one outcome row per issue (idempotent — unique index on issue_id,
+  on_conflict: :nothing).
+  """
+  def record_triage_outcome!(attrs) do
+    %TriageOutcome{}
+    |> TriageOutcome.changeset(attrs)
+    |> Repo.insert!(on_conflict: :nothing, conflict_target: [:issue_id])
   end
 
   # -- plans ------------------------------------------------------------------

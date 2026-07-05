@@ -88,6 +88,10 @@ defmodule Harness.GitHub.PlanWorkerTest do
           Agent.update(captured, fn _ -> Jason.decode!(raw)["body"] end)
           conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 4242, "created_at" => "2026-07-05T10:00:00Z"})
 
+        {"GET", false} ->
+          # the self-acknowledge fetch after posting (issue #28)
+          Req.Test.json(conn, %{"updated_at" => "2030-01-01T00:00:00Z"})
+
         _ ->
           Plug.Conn.send_resp(conn, 500, "")
       end
@@ -119,8 +123,10 @@ defmodule Harness.GitHub.PlanWorkerTest do
     body = Agent.get(captured, & &1)
     assert Harness.GitHub.Provenance.harness_authored?(body)
 
-    refreshed = GitHub.get_issue!(issue.id)
-    assert DateTime.compare(refreshed.github_updated_at, ~U[2026-07-05 10:00:00Z]) == :eq
+    # self-acknowledge: the stored updated_at swallowed our own comment bump,
+    # so the next poll will not re-triage this issue (the #4 feedback loop)
+    assert GitHub.get_issue!(issue.id).github_updated_at ==
+             ~U[2030-01-01 00:00:00.000000Z]
   end
 
   test "a run that writes no artifacts fails the issue", ctx do

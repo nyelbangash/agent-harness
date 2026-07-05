@@ -61,5 +61,11 @@ defmodule Mix.Tasks.Harness.Stop do
       {_, _} ->
         Mix.shell().info("  · daemon was not running under launchd")
     end
+
+    System.cmd("launchctl", ["bootout", "gui/#{uid}/com.nyel.harness.watchdog"],
+      stderr_to_stdout: true
+    )
+
+    Mix.shell().info("  · watchdog stopped (resumes after next harness.install)")
   end
 end

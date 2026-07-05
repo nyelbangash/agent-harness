@@ -101,6 +101,19 @@ defmodule HarnessWeb.RunsLiveTest do
     assert html =~ "operator kill"
   end
 
+  test "running row's turn counter updates via PubSub without page reload", %{conn: conn} do
+    run = Runs.create_run!(%{kind: "plan", ref: "o/r#99", model: "sonnet", status: "running"})
+    {:ok, view, html} = live(conn, ~p"/runs")
+
+    assert html =~ "0"
+
+    Runs.broadcast_counters(run.id, 7)
+    assert render(view) =~ "7"
+
+    Runs.update_run!(run, %{status: "succeeded", turns: 9, ended_at: DateTime.utc_now()})
+    assert render(view) =~ "9"
+  end
+
   test "queue strip shows slot occupancy and waiting depth", %{conn: conn} do
     Oban.insert!(Harness.GitHub.PlanWorker.new(%{issue_id: 1}))
 
