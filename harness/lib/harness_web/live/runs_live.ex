@@ -149,6 +149,11 @@ defmodule HarnessWeb.RunsLive do
                     <td class="py-2 pr-2 text-right">{duration(run)}</td>
                     <td class="py-2">
                       <span class={status_class(run.status)}>{run.status}</span>
+                      <% badge = reason_badge(run) %>
+                      <span
+                        :if={badge}
+                        class="ml-1.5 font-display text-[9px] uppercase tracking-widest text-alert/70"
+                      >{badge}</span>
                     </td>
                   </tr>
                 </tbody>
@@ -169,6 +174,10 @@ defmodule HarnessWeb.RunsLive do
                 Run #{@selected.id} · {@selected.kind} · {@selected.ref}
               </h2>
               <span class={status_class(@selected.status)}>{@selected.status}</span>
+              <span
+                :if={reason_badge(@selected)}
+                class="font-display text-[9px] uppercase tracking-widest text-alert/70"
+              >{reason_badge(@selected)}</span>
               <button
                 :if={@selected.status == "running"}
                 phx-click="kill_run"
@@ -176,51 +185,9 @@ defmodule HarnessWeb.RunsLive do
                 data-confirm={"Kill run ##{@selected.id}?"}
                 class="ml-auto font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-alert text-alert rounded-sm hover:bg-alert hover:text-ink"
               >
-                <td class="py-2 pr-2 text-ink-dim">{run.id}</td>
-                <td class="py-2 pr-2 uppercase text-[10px] font-display tracking-wide text-ink">
-                  {run.kind}
-                </td>
-                <td class="py-2 pr-2 text-ink-dim truncate max-w-[16ch]">{run.ref}</td>
-                <td class="py-2 pr-2 text-ink-dim">{run.model}</td>
-                <td class="py-2 pr-2 text-right">{run.turns}</td>
-                <td class="py-2 pr-2 text-right">{run.tokens_out}</td>
-                <td class="py-2 pr-2 text-right">{duration(run)}</td>
-                <td class="py-2">
-                  <span class={status_class(run.status)}>{run.status}</span>
-                  <% badge = reason_badge(run) %>
-                  <span
-                    :if={badge}
-                    class="ml-1.5 font-display text-[9px] uppercase tracking-widest text-alert/70"
-                  >{badge}</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <p :if={@runs == []} class="font-body text-sm text-ink-dim py-4">
-            No sessions yet.
-          </p>
-        </section>
-
-        <section :if={@selected} aria-label="transcript" class="min-w-0">
-          <div class="flex items-center gap-3 mb-3">
-            <h2 class="font-display uppercase tracking-[0.16em] text-[12px] text-ink-dim">
-              Run #{@selected.id} · {@selected.kind} · {@selected.ref}
-            </h2>
-            <span class={status_class(@selected.status)}>{@selected.status}</span>
-            <span
-              :if={reason_badge(@selected)}
-              class="font-display text-[9px] uppercase tracking-widest text-alert/70"
-            >{reason_badge(@selected)}</span>
-            <button
-              :if={@selected.status == "running"}
-              phx-click="kill_run"
-              phx-value-id={@selected.id}
-              data-confirm={"Kill run ##{@selected.id}?"}
-              class="ml-auto font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-alert text-alert rounded-sm hover:bg-alert hover:text-ink"
-            >
-              Kill
-            </button>
-          </div>
+                Kill
+              </button>
+            </div>
 
             <div class="font-mono text-[11px] text-ink-dim mb-3 tabular-nums">
               model {@selected.model} · {@selected.turns} turns · {@selected.tokens_in}/{@selected.tokens_out} tok ·
@@ -332,18 +299,30 @@ defmodule HarnessWeb.RunsLive do
   defp status_class(_), do: "font-mono text-[10px] uppercase text-ink-dim"
 
   # Maps run.error / result_subtype to a short human-readable badge, or nil
-  # when the status carries enough information on its own (succeeded/running/queued).
+  # when the status carries enough information on its own.
   defp reason_badge(%{status: status, error: error, result_subtype: subtype})
        when status in ["killed", "failed"] do
     cond do
-      is_binary(error) and String.starts_with?(error, "turn cap ") -> error
-      is_binary(error) and error =~ "operator" -> "operator kill"
+      is_binary(error) and String.starts_with?(error, "turn cap ") ->
+        error
+
+      is_binary(error) and error =~ "operator" ->
+        "operator kill"
+
       is_binary(error) and (error =~ "reaped" or error =~ "daemon shutdown") ->
         "orphaned by restart"
-      is_binary(error) and error =~ "timeout" -> "timeout"
-      is_binary(error) and error =~ "no result envelope" -> "crashed"
-      is_binary(subtype) and subtype != "success" -> String.replace(subtype, "_", " ")
-      true -> nil
+
+      is_binary(error) and error =~ "timeout" ->
+        "timeout"
+
+      is_binary(error) and error =~ "no result envelope" ->
+        "crashed"
+
+      is_binary(subtype) and subtype != "success" ->
+        String.replace(subtype, "_", " ")
+
+      true ->
+        nil
     end
   end
 
