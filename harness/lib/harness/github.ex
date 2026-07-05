@@ -59,6 +59,26 @@ defmodule Harness.GitHub do
     end
   end
 
+  @doc """
+  Self-acknowledge a GitHub update the harness itself caused (e.g. posting a
+  plan comment): advance the stored `github_updated_at` so the next poll does
+  not read our own write as operator activity and re-enqueue the pipeline
+  (the #4 feedback loop, issue #28).
+  """
+  def acknowledge_self_update!(%Issue{} = issue, updated_at_iso) do
+    case DateTime.from_iso8601(updated_at_iso) do
+      {:ok, dt, _} ->
+        if is_nil(issue.github_updated_at) or DateTime.after?(dt, issue.github_updated_at) do
+          issue |> Issue.changeset(%{github_updated_at: dt}) |> Repo.update!()
+        else
+          issue
+        end
+
+      _ ->
+        issue
+    end
+  end
+
   defp changed?(existing, attrs) do
     not same_instant?(existing.github_updated_at, attrs.github_updated_at) or
       existing.state != attrs.state or existing.labels != attrs.labels

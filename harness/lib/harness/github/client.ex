@@ -66,6 +66,15 @@ defmodule Harness.GitHub.Client do
     end
   end
 
+  @doc "Fetch one issue's current `updated_at` (self-acknowledge after harness writes)."
+  def issue_updated_at(repo, number) do
+    case request(:get, "/repos/#{repo}/issues/#{number}", []) do
+      {:ok, %{status: 200, body: %{"updated_at" => updated_at}}} -> {:ok, updated_at}
+      {:ok, %{status: status}} -> {:error, {:http_status, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @doc "Open a PR. Returns `{:ok, %{number: n, url: html_url}}`."
   def create_pull_request(repo, head, base, title, body) do
     case request(:post, "/repos/#{repo}/pulls",
