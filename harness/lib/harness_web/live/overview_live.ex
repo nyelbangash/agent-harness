@@ -87,7 +87,7 @@ defmodule HarnessWeb.OverviewLive do
     gates = policy.utilization_gates
     samples = Usage.latest_samples()
     oauth = samples["oauth_api"]
-    stale = Usage.health() == :stale
+    stale = Usage.health() in [:stale, :schema_drift]
 
     five_hour = (oauth && oauth.five_hour_utilization) || 0.0
     seven_day = (oauth && oauth.seven_day_utilization) || 0.0
@@ -173,7 +173,15 @@ defmodule HarnessWeb.OverviewLive do
         </div>
 
         <div
-          :if={@usage_stale}
+          :if={@usage_stale and @usage_health == :schema_drift}
+          class="mb-6 px-4 py-3 rounded-sm border border-alert/60 bg-alert/10 font-mono text-sm text-ink"
+          data-testid="stale-banner"
+        >
+          <span class="text-alert font-medium">USAGE SCHEMA DRIFT</span>
+          — last 3 oauth_api samples parsed to nil utilization; the claude.ai usage endpoint shape may have changed. Run <code>mix harness.doctor</code>.
+        </div>
+        <div
+          :if={@usage_stale and @usage_health != :schema_drift}
           class="mb-6 px-4 py-3 rounded-sm border border-alert/60 bg-alert/10 font-mono text-sm text-ink"
           data-testid="stale-banner"
         >

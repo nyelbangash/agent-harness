@@ -74,6 +74,12 @@ defmodule Harness.Doctor do
         label: "launchd agent",
         boot: :none,
         run: &check_launchd/0
+      },
+      %Check{
+        id: :usage_schema,
+        label: "usage endpoint schema (schema drift?)",
+        boot: :none,
+        run: &check_usage_schema/0
       }
     ]
   end
@@ -217,6 +223,24 @@ defmodule Harness.Doctor do
   # header arrives as "2027-07-04 00:00:00 UTC" or ISO8601 depending on era
   defp normalize_expiry(raw) do
     raw |> String.replace(" UTC", "Z") |> String.replace(" ", "T")
+  end
+
+  @drift_window 3
+
+  defp check_usage_schema do
+    case Harness.Usage.health() do
+      :schema_drift ->
+        {:warn,
+         "Last #{@drift_window} oauth_api samples all parsed nil utilization — " <>
+           "the claude.ai usage endpoint schema may have changed. " <>
+           "Inspect recent usage_samples.raw rows and update SubscriptionPool.parse/1."}
+
+      :stale ->
+        {:warn, "No fresh usage sample — poller may be paused or endpoint unreachable"}
+
+      :ok ->
+        {:ok, "fresh sample, utilization readable"}
+    end
   end
 
   defp check_launchd do

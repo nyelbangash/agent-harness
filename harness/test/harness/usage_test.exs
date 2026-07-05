@@ -70,6 +70,22 @@ defmodule Harness.UsageTest do
       assert Usage.health() == :stale
       assert Usage.current_mode() == :plan_only
     end
+
+    test "3 consecutive nil-util oauth samples → health :schema_drift" do
+      for _ <- 1..3 do
+        Usage.record_oauth_sample!(%{raw: %{"rate_limit_info" => %{}}})
+      end
+
+      assert Usage.health() == :schema_drift
+    end
+
+    test "fewer than 3 nil-util oauth samples → health :stale not :schema_drift" do
+      for _ <- 1..2 do
+        Usage.record_oauth_sample!(%{raw: %{"rate_limit_info" => %{}}})
+      end
+
+      assert Usage.health() == :stale
+    end
   end
 
   describe "record_oauth_sample!/1" do
@@ -104,6 +120,68 @@ defmodule Harness.UsageTest do
       assert attrs.seven_day_utilization == 63.5
       assert attrs.seven_day_opus_utilization == 12.0
       assert %DateTime{} = attrs.five_hour_resets_at
+    end
+
+    test "parses the new rate_limit_info shape when isUsingOverage is true" do
+      attrs =
+        SubscriptionPool.parse(%{
+          "rate_limit_info" => %{
+            "rateLimitType" => "five_hour",
+            "resetsAt" => 1_783_212_000,
+            "isUsingOverage" => true,
+            "overageStatus" => "allowed",
+            "overageResetsAt" => 1_783_200_600
+          }
+        })
+
+      assert attrs.five_hour_utilization == 90.0
+      assert %DateTime{} = attrs.five_hour_resets_at
+      assert is_nil(attrs.seven_day_utilization)
+      assert is_nil(attrs.seven_day_opus_utilization)
+      refute is_nil(attrs.raw)
+    end
+
+    test "new rate_limit_info shape with overageStatus paused infers 100% utilization" do
+      attrs =
+        SubscriptionPool.parse(%{
+          "rate_limit_info" => %{
+            "rateLimitType" => "five_hour",
+            "resetsAt" => 1_783_212_000,
+            "isUsingOverage" => true,
+            "overageStatus" => "paused"
+          }
+        })
+
+      assert attrs.five_hour_utilization == 100.0
+    end
+
+    test "new rate_limit_info shape with no overage infers nil utilization" do
+      attrs =
+        SubscriptionPool.parse(%{
+          "rate_limit_info" => %{
+            "rateLimitType" => "five_hour",
+            "resetsAt" => 1_783_212_000,
+            "isUsingOverage" => false,
+            "overageStatus" => "allowed",
+            "overageResetsAt" => 1_783_200_600
+          }
+        })
+
+      assert is_nil(attrs.five_hour_utilization)
+      refute is_nil(attrs.raw)
+    end
+
+    test "falls back to legacy shape when rate_limit_info is absent" do
+      attrs =
+        SubscriptionPool.parse(%{
+          "five_hour" => %{"utilization" => 42, "resets_at" => "2026-07-04T20:00:00Z"},
+          "seven_day" => %{"utilization" => 63.5, "resets_at" => "2026-07-11T00:00:00Z"},
+          "seven_day_opus" => %{"utilization" => 12}
+        })
+
+      assert attrs.five_hour_utilization == 42.0
+      assert attrs.seven_day_utilization == 63.5
+      assert attrs.seven_day_opus_utilization == 12.0
     end
 
     test "fetch_usage sends the OAuth bearer + claude-code user-agent" do

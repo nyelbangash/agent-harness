@@ -48,9 +48,39 @@ defmodule Harness.Usage do
     (overflow_usd_this_week() || 0.0) >= policy.budgets.overflow_usd_weekly_cap
   end
 
-  @spec health() :: :ok | :stale
+  @drift_window 3
+
+  @spec health() :: :ok | :stale | :schema_drift
   def health do
-    if fresh_oauth_sample(Harness.Policy.get()), do: :ok, else: :stale
+    sample = fresh_oauth_sample(Harness.Policy.get())
+
+    cond do
+      readable_sample?(sample) -> :ok
+      schema_drift?() -> :schema_drift
+      true -> :stale
+    end
+  end
+
+  defp readable_sample?(nil), do: false
+
+  defp readable_sample?(%Sample{} = s) do
+    is_number(s.five_hour_utilization) or
+      is_number(s.seven_day_utilization) or
+      is_number(s.seven_day_opus_utilization)
+  end
+
+  defp schema_drift? do
+    samples =
+      from(s in Sample,
+        where: s.source == "oauth_api",
+        order_by: [desc: s.sampled_at],
+        limit: @drift_window,
+        select: {s.five_hour_utilization, s.seven_day_utilization, s.seven_day_opus_utilization}
+      )
+      |> Repo.all()
+
+    length(samples) >= @drift_window and
+      Enum.all?(samples, fn {a, b, c} -> is_nil(a) and is_nil(b) and is_nil(c) end)
   end
 
   @doc "Derive the §7 gate mode from a sample's utilizations (0–100 scale)."

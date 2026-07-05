@@ -134,6 +134,13 @@ defmodule HarnessWeb.Layouts do
         USAGE STALE
       </span>
       <span
+        :if={@usage_health == :schema_drift}
+        class="font-mono text-[10px] text-alert text-center"
+        title="usage endpoint schema may have changed — run mix harness.doctor"
+      >
+        SCHEMA DRIFT
+      </span>
+      <span
         :if={@usage_health == :ok and @mode != :paused}
         class="font-mono text-[10px] text-ink-dim text-center tabular-nums"
       >
