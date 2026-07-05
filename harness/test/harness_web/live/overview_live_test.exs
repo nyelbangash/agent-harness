@@ -189,6 +189,32 @@ defmodule HarnessWeb.OverviewLiveTest do
     refute html =~ "Morning briefing"
   end
 
+  test "lamp strip is hidden when no lamps are on", %{conn: conn} do
+    for lamp <- ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
+      Harness.Manager.LampServer.clear(lamp)
+    end
+
+    {:ok, view, html} = live(conn, ~p"/")
+    refute html =~ "manager lamps"
+    refute has_element?(view, "[aria-label='manager lamps']")
+  end
+
+  test "lamp strip appears when a lamp is set via PubSub", %{conn: conn} do
+    for lamp <- ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
+      Harness.Manager.LampServer.clear(lamp)
+    end
+
+    {:ok, view, html} = live(conn, ~p"/")
+    refute html =~ "loop signature"
+
+    Harness.Manager.LampServer.set(:loop_signature, "#42×6")
+
+    html = render(view)
+    assert has_element?(view, "[aria-label='manager lamps']")
+    assert html =~ "loop signature"
+    assert html =~ "#42×6"
+  end
+
   test "promote_to_auto double-click enqueues exactly one implement job", %{conn: conn} do
     issue = issue_fixture(%{title: "Deduplicate me", pipeline_state: "triaged"})
     run = Runs.create_run!(%{kind: "plan", status: "succeeded", issue_id: issue.id})

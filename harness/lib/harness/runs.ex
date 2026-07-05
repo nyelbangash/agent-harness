@@ -134,11 +134,14 @@ defmodule Harness.Runs do
   # -- queries ----------------------------------------------------------------
 
   def recent_runs(limit \\ 30) do
-    from(r in Run, order_by: [desc: r.id], limit: ^limit) |> Repo.all()
+    from(r in Run, where: r.kind != "manager", order_by: [desc: r.id], limit: ^limit)
+    |> Repo.all()
   end
 
   def running_runs do
-    from(r in Run, where: r.status in ["running", "verifying", "pushing", "opening_pr"])
+    from(r in Run,
+      where: r.status in ["running", "verifying", "pushing", "opening_pr"] and r.kind != "manager"
+    )
     |> Repo.all()
   end
 
