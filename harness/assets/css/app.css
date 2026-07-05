@@ -253,6 +253,14 @@ body {
   }
 }
 
+/* Semantic zoom for the idea tree: label/score visibility by zoom level */
+#idea-tree .tree-score { display: none; }
+#idea-tree[data-zoom-level="dots"] .tree-label { display: none; }
+#idea-tree[data-zoom-level="badges"] .tree-score { display: inline; }
+
+/* Tree search: dim non-matching nodes below matching ones */
+#idea-tree g[data-match="false"] { opacity: 0.12 !important; }
+
 /* Add variants based on LiveView classes */
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);

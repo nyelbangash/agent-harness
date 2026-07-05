@@ -35,6 +35,7 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:tokens_out, 0)
      |> assign(:journal_snippet, nil)
      |> assign(:synthesis_open, false)
+     |> assign(:search_query, "")
      |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => "#{budget}"}))}
   end
 
@@ -52,7 +53,8 @@ defmodule HarnessWeb.IdeationLive do
            tokens_in: 0,
            tokens_out: 0,
            journal_snippet: nil,
-           synthesis_open: false
+           synthesis_open: false,
+           search_query: ""
          )}
 
       id ->
@@ -66,6 +68,7 @@ defmodule HarnessWeb.IdeationLive do
          |> assign(:active_node_id, nil)
          |> assign(:critique_running, false)
          |> assign(:synthesis_open, false)
+         |> assign(:search_query, "")
          |> load_session(String.to_integer(id))}
     end
   end
@@ -180,6 +183,10 @@ defmodule HarnessWeb.IdeationLive do
     new_idx = Integer.mod(idx + dir, length(siblings))
     sibling = Enum.at(siblings, new_idx)
     handle_event("select_node", %{"id" => to_string(sibling.id)}, socket)
+  end
+
+  def handle_event("tree_search", %{"q" => q}, socket) do
+    {:noreply, assign(socket, :search_query, String.trim(q))}
   end
 
   def handle_event("stop_session", %{"id" => id}, socket) do
@@ -658,10 +665,28 @@ defmodule HarnessWeb.IdeationLive do
                   <span class="absolute top-2 right-3 font-mono text-[9px] text-ink-dim/50 select-none pointer-events-none">
                     scroll to zoom · drag to pan · dbl-click resets
                   </span>
+                  <form
+                    phx-change="tree_search"
+                    id="tree-search-form"
+                    class="absolute top-2 left-2 z-10"
+                  >
+                    <input
+                      id="tree-search"
+                      type="search"
+                      name="q"
+                      value={@search_query}
+                      placeholder="Search nodes…"
+                      phx-debounce="150"
+                      autocomplete="off"
+                      class="bg-bg/70 border border-surface-2 rounded-sm px-2 py-0.5 font-mono text-[10px] text-ink placeholder:text-ink-dim/50 focus:outline-none focus:border-accent w-28"
+                    />
+                  </form>
                   <script :type={Phoenix.LiveView.ColocatedHook} name=".TreeZoom">
                     // Wheel zooms at the cursor, drag pans, double-click resets.
                     // The user's viewport survives live tree updates; reset uses the
                     // server's current viewBox (data-viewbox), so it tracks growth.
+                    // data-zoom-level ("dots" | "labels" | "badges") is updated on
+                    // every viewBox change; CSS rules hide/show labels and score badges.
                     export default {
                       mounted() {
                         this.dirty = false
@@ -712,10 +737,13 @@ defmodule HarnessWeb.IdeationLive do
                         svg.addEventListener("dblclick", () => {
                           this.dirty = false
                           svg.setAttribute("viewBox", svg.dataset.viewbox)
+                          this.updateZoomLevel()
                         })
+                        this.updateZoomLevel()
                       },
                       updated() {
                         if (this.dirty) this.el.setAttribute("viewBox", this.userViewBox)
+                        this.updateZoomLevel()
                       },
                       viewBox() {
                         const [x, y, w, h] = this.el.getAttribute("viewBox").split(" ").map(Number)
@@ -725,6 +753,19 @@ defmodule HarnessWeb.IdeationLive do
                         this.userViewBox = `${x} ${y} ${w} ${h}`
                         this.dirty = true
                         this.el.setAttribute("viewBox", this.userViewBox)
+                        this.updateZoomLevel()
+                      },
+                      computeZoomLevel() {
+                        const rect = this.el.getBoundingClientRect()
+                        if (rect.width === 0) return "labels"
+                        const vb = this.viewBox()
+                        const ratio = vb.w / rect.width
+                        if (ratio > 1.5) return "dots"
+                        if (ratio < 0.5) return "badges"
+                        return "labels"
+                      },
+                      updateZoomLevel() {
+                        this.el.setAttribute("data-zoom-level", this.computeZoomLevel())
                       }
                     }
                   </script>
@@ -733,6 +774,7 @@ defmodule HarnessWeb.IdeationLive do
                     phx-hook=".TreeZoom"
                     data-viewbox={"0 0 #{@tree_layout.width} #{@tree_layout.height}"}
                     viewBox={"0 0 #{@tree_layout.width} #{@tree_layout.height}"}
+                    data-zoom-level="labels"
                     class="w-full cursor-grab active:cursor-grabbing touch-none select-none"
                     style="min-height: 300px"
                   >
@@ -750,8 +792,9 @@ defmodule HarnessWeb.IdeationLive do
                       phx-click="select_node"
                       phx-value-id={n.id}
                       class="cursor-pointer"
-                      opacity={if n.status == "pruned", do: "0.3", else: "1"}
+                      opacity={node_display_opacity(@search_query, n)}
                       data-developing={if @active_node_id == n.id, do: "true"}
+                      data-match={node_match_attr(@search_query, n)}
                     >
                       <circle
                         cx={n.x}
@@ -770,11 +813,21 @@ defmodule HarnessWeb.IdeationLive do
                         x={n.x}
                         y={n.y + 26}
                         text-anchor="middle"
-                        class="font-mono"
+                        class="font-mono tree-label"
                         font-size="9"
                         fill="var(--color-ink-dim)"
                       >
-                        {String.slice(n.title, 0, 16)}
+                        {n.title}
+                      </text>
+                      <text
+                        x={n.x}
+                        y={n.y + 38}
+                        text-anchor="middle"
+                        class="font-mono tree-score"
+                        font-size="8"
+                        fill={score_fill(n.score)}
+                      >
+                        {score_text(n.score)}
                       </text>
                     </g>
                   </svg>
@@ -995,6 +1048,30 @@ defmodule HarnessWeb.IdeationLive do
     filled = if total > 0, do: round(used / total * blocks) |> min(blocks) |> max(0), else: 0
     String.duplicate("▓", filled) <> String.duplicate("░", blocks - filled)
   end
+
+  defp node_matches?("", _), do: true
+
+  defp node_matches?(query, node) do
+    q = String.downcase(query)
+    String.contains?(String.downcase(node.title), q) ||
+      String.contains?(String.downcase(node.summary || ""), q)
+  end
+
+  defp node_match_attr("", _), do: nil
+  defp node_match_attr(query, node), do: to_string(node_matches?(query, node))
+
+  defp node_display_opacity("", node), do: if(node.status == "pruned", do: "0.3", else: "1")
+
+  defp node_display_opacity(query, node) do
+    if node_matches?(query, node) do
+      if node.status == "pruned", do: "0.3", else: "1"
+    else
+      "0.15"
+    end
+  end
+
+  defp score_text(nil), do: ""
+  defp score_text(score), do: score |> Float.round(1) |> to_string()
 
   # score → color ramp: low = dim, high = accent (no red/green — those are
   # status colors)

@@ -382,6 +382,45 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert html =~ "beta artifact body"
   end
 
+  test "tree svg has data-zoom-level attribute and semantic-zoom label/badge elements", %{
+    conn: conn
+  } do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 60})
+    _child = Ideation.add_child!(session, root, %{title: "Some Idea", summary: "detail", score: 7.0}, "")
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    # SVG carries the data-zoom-level attribute the hook maintains
+    assert html =~ ~s(data-zoom-level=)
+    # Label text elements have the CSS-targetable class
+    assert html =~ ~s(class="font-mono tree-label")
+    # Score badge elements exist for the zoomed-in level
+    assert html =~ ~s(class="font-mono tree-score")
+  end
+
+  test "tree search marks matching nodes with data-match and dims non-matching ones", %{
+    conn: conn
+  } do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    _match =
+      Ideation.add_child!(session, root, %{title: "Bright Idea", summary: "s", score: 8.0}, "")
+
+    _no_match =
+      Ideation.add_child!(session, root, %{title: "Dark Thought", summary: "s", score: 5.0}, "")
+
+    {:ok, view, html} = live(conn, ~p"/ideation/#{session.id}")
+    # no search active — data-match absent
+    refute html =~ ~s(data-match=)
+
+    html = view |> form("#tree-search-form") |> render_change(%{"q" => "bright"})
+    assert html =~ ~s(data-match="true")
+    assert html =~ ~s(data-match="false")
+
+    # clearing the search removes data-match marks
+    html = view |> form("#tree-search-form") |> render_change(%{"q" => ""})
+    refute html =~ ~s(data-match=)
+  end
+
   test "viewBox height adjusts with tree depth, hugging content tighter than the old formula", %{
     conn: conn
   } do
