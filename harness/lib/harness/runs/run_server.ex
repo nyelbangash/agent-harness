@@ -13,6 +13,7 @@ defmodule Harness.Runs.RunServer do
   use GenServer, restart: :temporary
   require Logger
 
+  alias Harness.Repo
   alias Harness.Runs
   alias Harness.Runs.{CLIArgs, EventIngest, Runner}
 
@@ -163,9 +164,31 @@ defmodule Harness.Runs.RunServer do
     %{state | buffer: state.buffer <> chunk}
   end
 
+  @max_busy_retries 3
+
   defp ingest_chunk(state, chunk) do
     {lines, rest} = split_lines(state.buffer <> chunk)
-    Enum.reduce(lines, %{state | buffer: rest}, &ingest_line(&2, &1))
+    do_ingest_with_retry(state, lines, rest, 0)
+  end
+
+  defp do_ingest_with_retry(state, lines, rest, attempt) do
+    try do
+      {:ok, new_state} =
+        Repo.transaction(fn ->
+          Enum.reduce(lines, %{state | buffer: rest}, &ingest_line(&2, &1))
+        end)
+
+      new_state
+    rescue
+      e in Exqlite.Error ->
+        if String.contains?(Exception.message(e), "busy") and attempt < @max_busy_retries do
+          Process.sleep(trunc(50 * :math.pow(2, attempt)))
+          do_ingest_with_retry(state, lines, rest, attempt + 1)
+        else
+          Logger.error("run #{state.run.id} ingest batch failed: #{Exception.message(e)}")
+          %{state | buffer: rest}
+        end
+    end
   end
 
   defp split_lines(buffer) do

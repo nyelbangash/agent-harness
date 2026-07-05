@@ -24,7 +24,8 @@ config :harness, :harness_home, Path.expand("~/.harness")
 # IMMEDIATE from the start. Keep the pool small — SQLite has one writer.
 config :harness, Harness.Repo,
   default_transaction_mode: :immediate,
-  pool_size: 5
+  pool_size: 5,
+  busy_timeout: 5_000
 
 config :harness, Oban,
   engine: Oban.Engines.Lite,
