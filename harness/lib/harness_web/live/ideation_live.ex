@@ -36,6 +36,8 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:journal_snippet, nil)
      |> assign(:synthesis_open, false)
      |> assign(:search_query, "")
+     |> assign(:promote_open, false)
+     |> assign(:promote_node_id, nil)
      |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => "#{budget}"}))}
   end
 
@@ -54,6 +56,8 @@ defmodule HarnessWeb.IdeationLive do
            tokens_out: 0,
            journal_snippet: nil,
            synthesis_open: false,
+           promote_open: false,
+           promote_node_id: nil,
            search_query: ""
          )}
 
@@ -68,6 +72,8 @@ defmodule HarnessWeb.IdeationLive do
          |> assign(:active_node_id, nil)
          |> assign(:critique_running, false)
          |> assign(:synthesis_open, false)
+         |> assign(:promote_open, false)
+         |> assign(:promote_node_id, nil)
          |> assign(:search_query, "")
          |> load_session(String.to_integer(id))}
     end
@@ -233,6 +239,38 @@ defmodule HarnessWeb.IdeationLive do
   end
 
   def handle_event("synthesis_keydown", _params, socket), do: {:noreply, socket}
+
+  def handle_event("open_promote", %{"id" => id}, socket) do
+    {:noreply,
+     socket
+     |> assign(:promote_open, true)
+     |> assign(:promote_node_id, String.to_integer(id))}
+  end
+
+  def handle_event("close_promote", _params, socket) do
+    {:noreply, socket |> assign(:promote_open, false) |> assign(:promote_node_id, nil)}
+  end
+
+  def handle_event("confirm_promote", %{"target_repo" => target_repo}, socket) do
+    policy = socket.assigns.policy
+
+    if target_repo == "" or not Enum.any?(policy.github.repos, &(&1.name == target_repo)) do
+      {:noreply, put_flash(socket, :error, "Select a repo from the policy list.")}
+    else
+      node_id = socket.assigns.promote_node_id
+      session_id = socket.assigns.session.id
+
+      %{session_id: session_id, idea_id: node_id, target_repo: target_repo}
+      |> Harness.Ideation.PromoteWorker.new()
+      |> Oban.insert!()
+
+      {:noreply,
+       socket
+       |> assign(:promote_open, false)
+       |> assign(:promote_node_id, nil)
+       |> put_flash(:info, "Promoting to #{target_repo} — check the runs console for progress.")}
+    end
+  end
 
   @impl true
   def handle_info({event, _}, socket)
@@ -889,7 +927,7 @@ defmodule HarnessWeb.IdeationLive do
                     <p class="font-body text-[13px] text-ink-dim mb-2">
                       {@selected_node.idea.summary}
                     </p>
-                    <div class="flex gap-2 mb-2">
+                    <div class="flex gap-2 mb-2 flex-wrap">
                       <button
                         :if={@selected_node.artifact}
                         phx-click="select_node"
@@ -906,6 +944,20 @@ defmodule HarnessWeb.IdeationLive do
                       >
                         Focus
                       </button>
+                      <button
+                        :if={promotable?(@selected_node.idea) && @policy.github.repos != []}
+                        phx-click="open_promote"
+                        phx-value-id={@selected_node.idea.id}
+                        class="font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-ok text-ok rounded-sm hover:bg-ok/10"
+                      >
+                        Promote
+                      </button>
+                    </div>
+                    <div
+                      :if={@selected_node.idea.promoted_epic_url}
+                      class="mb-2 font-mono text-[10px] text-ok"
+                    >
+                      epic: <a href={@selected_node.idea.promoted_epic_url} target="_blank" class="underline">{@selected_node.idea.promoted_epic_url}</a>
                     </div>
                     <div :if={@selected_node.artifact} class="artifact-prose">
                       {artifact_html(@selected_node.artifact)}
@@ -1031,6 +1083,54 @@ defmodule HarnessWeb.IdeationLive do
           </div>
         </div>
       </div>
+      <div
+        :if={@promote_open && @promote_node_id}
+        id="promote-modal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-6"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div class="absolute inset-0 bg-bg/85" phx-click="close_promote" aria-hidden="true"></div>
+        <div class="relative w-full max-w-md rounded-sm bg-surface border border-surface-2 shadow-2xl p-5">
+          <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim mb-3">
+            Promote branch to GitHub issues
+          </h2>
+          <p class="font-body text-[12px] text-ink-dim mb-4">
+            This will create one epic tracking issue and child implementation issues
+            in the selected repository. All issues will be self-assigned so the
+            harness triage picks them up.
+          </p>
+          <form phx-submit="confirm_promote" class="space-y-3">
+            <div>
+              <label class="font-mono text-[10px] text-ink-dim block mb-1">
+                Target repository
+              </label>
+              <select
+                name="target_repo"
+                class="w-full bg-bg border border-surface-2 rounded-sm px-2 py-1.5 font-mono text-[11px] text-ink focus:outline-2 focus:outline-accent"
+              >
+                <option value="">— select —</option>
+                <option :for={r <- @policy.github.repos} value={r.name}>{r.name}</option>
+              </select>
+            </div>
+            <div class="flex justify-end gap-2">
+              <button
+                type="button"
+                phx-click="close_promote"
+                class="font-display uppercase text-[10px] tracking-widest px-3 py-1.5 border border-surface-2 text-ink-dim rounded-sm hover:border-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="font-display uppercase text-[10px] tracking-widest px-3 py-1.5 bg-ok text-bg rounded-sm hover:opacity-90"
+              >
+                Promote
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </Layouts.app>
     """
   end
@@ -1082,6 +1182,10 @@ defmodule HarnessWeb.IdeationLive do
   defp session_status_class("running"), do: "font-mono text-[10px] uppercase text-accent"
   defp session_status_class("synthesized"), do: "font-mono text-[10px] uppercase text-ok"
   defp session_status_class(_), do: "font-mono text-[10px] uppercase text-ink-dim"
+
+  defp promotable?(%{score: score, status: status}) do
+    score >= 7.0 or status == "synthesized"
+  end
 
   defp sample_seeds do
     [

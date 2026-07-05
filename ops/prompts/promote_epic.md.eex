@@ -1,0 +1,47 @@
+You are converting a finished ideation branch into a set of GitHub issues. Read the
+node artifacts in this directory (Read tool) to ground yourself in the actual thinking,
+then produce a JSON object describing one epic issue and its child implementation issues.
+
+## The session seed (operator input, trusted)
+<%= @seed_prompt %>
+
+## The branch root to promote
+Title: <%= @idea_title %>
+Summary: <%= @idea_summary %>
+Score: <%= @idea_score %> · Depth: <%= @idea_depth %>
+
+## Ancestor chain (root → branch root)
+<%= @ancestor_chain %>
+
+## Subtree (branch root + all descendants)
+<%= @subtree %>
+
+## Journal excerpt
+<%= @journal %>
+
+## Your task
+
+Read the artifact files listed above (node-N.md) for the nodes in this subtree to
+understand the full thinking. Then produce a JSON object with:
+
+- `epic` — A tracking issue tying the work together.
+  - `title`: one crisp line, e.g. "Implement X for Y" (≤ 72 chars).
+  - `body`: motivation paragraph, proposed approach, acceptance criteria, non-goals.
+
+- `children` — 2–8 concrete implementation issues, each independently actionable.
+  Each child must:
+  - Be **xs or s scope** — one focused, locatable change per issue.
+  - Include **specific code references** (file paths, function/module names) so a
+    reader does not need to re-derive the location.
+  - Include **acceptance criteria** — what does done look like? what test proves it?
+  - Include **explicit non-goals** — what is deliberately out of scope for this issue?
+  - Have a **one crisp change** — if two concerns appear, split them.
+  - Be written so the triage stage would confidently label it `auto` or `plan`:
+    well-specified, risk flags stated, no ambiguity about what changes.
+
+Write the body of each child in GitHub Markdown. Do not include the parent epic link
+in the body — the harness adds it automatically. Do not invent code paths; if you are
+not certain a file or function exists, say "needs investigation" in the acceptance
+criteria.
+
+Your final response must be only the JSON object matching the provided schema.

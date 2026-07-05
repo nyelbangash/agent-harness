@@ -421,6 +421,92 @@ defmodule HarnessWeb.IdeationLiveTest do
     refute html =~ ~s(data-match=)
   end
 
+  test "promote button visible on high-scoring nodes when policy has repos", %{conn: conn} do
+    # add a repo to policy so the promote button renders
+    original = Application.fetch_env!(:harness, :policy_path)
+    tmp = Path.join(System.tmp_dir!(), "promote-ui-policy-#{System.unique_integer([:positive])}.yaml")
+
+    File.write!(
+      tmp,
+      File.read!(original) |> String.replace("repos: []", "repos:\n  - owner/repo")
+    )
+
+    Application.put_env(:harness, :policy_path, tmp)
+    Harness.Policy.reload()
+
+    on_exit(fn ->
+      Application.put_env(:harness, :policy_path, original)
+      Harness.Policy.reload()
+      File.rm(tmp)
+    end)
+
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    high =
+      Ideation.add_child!(session, root, %{title: "Top Idea", summary: "s", score: 8.0},
+        "# artifact")
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+    html = view |> element("g[phx-value-id='#{high.id}']") |> render_click()
+
+    assert html =~ "Promote"
+  end
+
+  test "promote button absent when no policy repos configured", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    high =
+      Ideation.add_child!(session, root, %{title: "Top Idea", summary: "s", score: 9.0},
+        "# artifact")
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+    html = view |> element("g[phx-value-id='#{high.id}']") |> render_click()
+
+    refute html =~ "Promote"
+  end
+
+  test "promote modal opens on promote click and enqueues job", %{conn: conn} do
+    original = Application.fetch_env!(:harness, :policy_path)
+    tmp = Path.join(System.tmp_dir!(), "promote-modal-policy-#{System.unique_integer([:positive])}.yaml")
+
+    File.write!(
+      tmp,
+      File.read!(original) |> String.replace("repos: []", "repos:\n  - owner/testrepo")
+    )
+
+    Application.put_env(:harness, :policy_path, tmp)
+    Harness.Policy.reload()
+
+    on_exit(fn ->
+      Application.put_env(:harness, :policy_path, original)
+      Harness.Policy.reload()
+      File.rm(tmp)
+    end)
+
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    idea =
+      Ideation.add_child!(session, root, %{title: "Promotable", summary: "s", score: 8.5},
+        "# artifact")
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+    view |> element("g[phx-value-id='#{idea.id}']") |> render_click()
+
+    # click Promote button
+    html = view |> element("button", "Promote") |> render_click()
+    assert html =~ "promote-modal"
+    assert html =~ "owner/testrepo"
+
+    # submit the form
+    html =
+      view
+      |> form("#promote-modal form", %{"target_repo" => "owner/testrepo"})
+      |> render_submit()
+
+    refute html =~ "promote-modal"
+    assert html =~ "Promoting to owner/testrepo"
+  end
+
   test "viewBox height adjusts with tree depth, hugging content tighter than the old formula", %{
     conn: conn
   } do
