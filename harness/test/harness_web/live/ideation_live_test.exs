@@ -79,6 +79,9 @@ defmodule HarnessWeb.IdeationLiveTest do
     {:ok, view, html} = live(conn, ~p"/ideation/#{session.id}")
     assert html =~ "Bright Idea"
     assert html =~ "<svg"
+    # the tree carries the pan/zoom hook and the server viewBox for reset
+    assert html =~ "TreeZoom"
+    assert html =~ "data-viewbox"
 
     html = view |> element("g[phx-value-id='#{child.id}']") |> render_click()
     assert html =~ "full artifact body"

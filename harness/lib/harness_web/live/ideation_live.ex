@@ -419,10 +419,78 @@ defmodule HarnessWeb.IdeationLive do
               </div>
 
               <div class="grid xl:grid-cols-3 gap-4 md:flex-1 md:min-h-0 md:auto-rows-fr">
-                <div class="xl:col-span-2 rounded-sm bg-surface border border-surface-2 overflow-auto max-h-[60vh] md:max-h-none md:min-h-0">
+                <div class="xl:col-span-2 rounded-sm bg-surface border border-surface-2 overflow-hidden max-h-[60vh] md:max-h-none md:min-h-0 relative">
+                  <span class="absolute top-2 right-3 font-mono text-[9px] text-ink-dim/50 select-none pointer-events-none">
+                    scroll to zoom · drag to pan · dbl-click resets
+                  </span>
+                  <script :type={Phoenix.LiveView.ColocatedHook} name=".TreeZoom">
+                    // Wheel zooms at the cursor, drag pans, double-click resets.
+                    // The user's viewport survives live tree updates; reset uses the
+                    // server's current viewBox (data-viewbox), so it tracks growth.
+                    export default {
+                      mounted() {
+                        this.dirty = false
+                        this.dragging = null
+                        const svg = this.el
+
+                        svg.addEventListener("wheel", e => {
+                          e.preventDefault()
+                          const vb = this.viewBox()
+                          const factor = e.deltaY < 0 ? 1 / 1.15 : 1.15
+                          const rect = svg.getBoundingClientRect()
+                          const px = vb.x + ((e.clientX - rect.x) / rect.width) * vb.w
+                          const py = vb.y + ((e.clientY - rect.y) / rect.height) * vb.h
+                          const w = vb.w * factor, h = vb.h * factor
+                          this.setViewBox(px - ((px - vb.x) * factor), py - ((py - vb.y) * factor), w, h)
+                        }, {passive: false})
+
+                        svg.addEventListener("pointerdown", e => {
+                          this.dragging = {x: e.clientX, y: e.clientY, moved: false}
+                          svg.setPointerCapture(e.pointerId)
+                        })
+                        svg.addEventListener("pointermove", e => {
+                          if (!this.dragging) return
+                          const dx = e.clientX - this.dragging.x, dy = e.clientY - this.dragging.y
+                          if (Math.abs(dx) + Math.abs(dy) > 4) this.dragging.moved = true
+                          if (!this.dragging.moved) return
+                          const vb = this.viewBox()
+                          const rect = svg.getBoundingClientRect()
+                          this.setViewBox(vb.x - dx * (vb.w / rect.width), vb.y - dy * (vb.h / rect.height), vb.w, vb.h)
+                          this.dragging.x = e.clientX
+                          this.dragging.y = e.clientY
+                        })
+                        svg.addEventListener("pointerup", e => {
+                          if (this.dragging?.moved) {
+                            // swallow the click that follows a drag so nodes don't open
+                            svg.addEventListener("click", ev => ev.stopPropagation(), {capture: true, once: true})
+                          }
+                          this.dragging = null
+                        })
+                        svg.addEventListener("dblclick", () => {
+                          this.dirty = false
+                          svg.setAttribute("viewBox", svg.dataset.viewbox)
+                        })
+                      },
+                      updated() {
+                        if (this.dirty) this.el.setAttribute("viewBox", this.userViewBox)
+                      },
+                      viewBox() {
+                        const [x, y, w, h] = this.el.getAttribute("viewBox").split(" ").map(Number)
+                        return {x, y, w, h}
+                      },
+                      setViewBox(x, y, w, h) {
+                        this.userViewBox = `${x} ${y} ${w} ${h}`
+                        this.dirty = true
+                        this.el.setAttribute("viewBox", this.userViewBox)
+                      }
+                    }
+                  </script>
                   <svg
+                    id="idea-tree"
+                    phx-hook=".TreeZoom"
+                    data-viewbox={"0 0 #{@tree_layout.width} #{@tree_layout.height}"}
                     viewBox={"0 0 #{@tree_layout.width} #{@tree_layout.height}"}
-                    class="w-full"
+                    class="w-full cursor-grab active:cursor-grabbing touch-none select-none"
                     style="min-height: 300px"
                   >
                     <line
