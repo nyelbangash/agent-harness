@@ -208,11 +208,13 @@ defmodule HarnessWeb.IdeationLive do
                   min="30"
                   max="360"
                   step="30"
-                  class="flex-1 accent-accent"
+                  class="flex-1 min-w-0 accent-accent"
                 />
                 <span class="font-mono text-[11px] text-ink-dim tabular-nums w-14 text-right">
                   {@budget_minutes} min
                 </span>
+              </div>
+              <div class="flex justify-end">
                 <button class="font-display uppercase text-[10px] tracking-widest px-3 py-1.5 bg-accent text-bg rounded-sm">
                   Start
                 </button>

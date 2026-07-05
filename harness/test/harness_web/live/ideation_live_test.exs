@@ -16,6 +16,15 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert html =~ "false positives"
   end
 
+  test "start button is inside the aside form, not overflowing into the section", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/ideation")
+    # button must live inside the aside's form, not in the right-hand section
+    assert has_element?(view, "aside form button", "Start")
+    # explainer lives in the section, not the aside
+    assert has_element?(view, "section h2", "How ideation works")
+    refute has_element?(view, "section button", "Start")
+  end
+
   test "clicking a sample seed prefills the seed form", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/ideation")
     seed = "A smarter PR triage that learns from past false positives"
