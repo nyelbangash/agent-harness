@@ -178,9 +178,23 @@ defmodule HarnessWeb.RunsLive do
             ${:erlang.float_to_binary(@selected.cost_estimate || 0.0, decimals: 3)} est.
           </div>
 
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".AutoScroll">
+            // Pin-to-bottom: follow the stream only while the reader is already
+            // at the bottom; never fight an upward scroll into history.
+            export default {
+              mounted() { this.scrollToEnd() },
+              beforeUpdate() {
+                const el = this.el
+                this.pinned = el.scrollHeight - el.clientHeight - el.scrollTop < 60
+              },
+              updated() { if (this.pinned) this.scrollToEnd() },
+              scrollToEnd() { this.el.scrollTop = this.el.scrollHeight }
+            }
+          </script>
           <div
             id="transcript"
             phx-update="stream"
+            phx-hook=".AutoScroll"
             class="space-y-1 max-h-[70vh] overflow-y-auto rounded-sm bg-surface border border-surface-2 p-3"
           >
             <div :for={{dom_id, event} <- @streams.events} id={dom_id}>
