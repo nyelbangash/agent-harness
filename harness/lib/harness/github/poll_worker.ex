@@ -160,7 +160,8 @@ defmodule Harness.GitHub.PollWorker do
           j.worker in [
             "Harness.GitHub.TriageWorker",
             "Harness.GitHub.PlanWorker",
-            "Harness.GitHub.ImplementWorker"
+            "Harness.GitHub.ImplementWorker",
+            "Harness.GitHub.ReviewWorker"
           ] and
             j.state in ["available", "scheduled", "executing", "retryable"] and
             fragment("json_extract(?, '$.issue_id') = ?", j.args, ^issue.id)

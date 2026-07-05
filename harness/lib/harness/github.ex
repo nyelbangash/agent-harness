@@ -182,7 +182,7 @@ defmodule Harness.GitHub do
     end
   end
 
-  @doc "True when a triage/plan/implement Oban job is already active for the issue."
+  @doc "True when a triage/plan/implement/review Oban job is already active for the issue."
   def active_pipeline_job?(issue_id) do
     Repo.exists?(
       from j in Oban.Job,
@@ -190,7 +190,8 @@ defmodule Harness.GitHub do
           j.worker in [
             "Harness.GitHub.TriageWorker",
             "Harness.GitHub.PlanWorker",
-            "Harness.GitHub.ImplementWorker"
+            "Harness.GitHub.ImplementWorker",
+            "Harness.GitHub.ReviewWorker"
           ] and
             j.state in ["available", "scheduled", "executing", "retryable"] and
             fragment("json_extract(?, '$.issue_id') = ?", j.args, ^issue_id)

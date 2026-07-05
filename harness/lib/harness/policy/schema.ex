@@ -29,7 +29,8 @@ defmodule Harness.Policy.Schema do
               implement_max_turns: 60,
               ideate_iteration_max_turns: 25,
               triage_max_turns: 12,
-              plan_max_turns: 40
+              plan_max_turns: 40,
+              review_max_turns: 20
   end
 
   defmodule UtilizationGates do
@@ -56,6 +57,13 @@ defmodule Harness.Policy.Schema do
     defstruct critique_every: 5, default_budget_minutes: 180
   end
 
+  defmodule Review do
+    defstruct max_rounds: 1,
+              confidence_floor: 0.7,
+              model: "opus",
+              fix_model: "sonnet"
+  end
+
   defmodule GitHub do
     defstruct repos: [], poll_minutes: 2
   end
@@ -78,6 +86,7 @@ defmodule Harness.Policy.Schema do
             plan: nil,
             implement: nil,
             ideate: nil,
+            review: nil,
             github: nil,
             notify: nil,
             billing_model: :subscription_pool,
@@ -108,6 +117,7 @@ defmodule Harness.Policy.Schema do
          plan: struct_from(Plan, raw["plan"]),
          implement: struct_from(Implement, raw["implement"]),
          ideate: struct_from(Ideate, raw["ideate"]),
+         review: struct_from(Review, raw["review"]),
          github: github,
          notify: struct_from(Notify, raw["notify"]),
          billing_model: billing,

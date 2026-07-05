@@ -39,6 +39,17 @@ defmodule Harness.Prompts do
     )
   end
 
+  def review(issue, comments, base_branch) do
+    render("review.md.eex",
+      repo: issue.repo,
+      issue_number: issue.number,
+      issue_title: truncate(issue.title, 500),
+      issue_body: truncate(issue.body || "(no body)", @max_body_chars),
+      comments: prepare_comments(comments),
+      base_branch: base_branch
+    )
+  end
+
   def implement(issue, comments, plan_text, repo_cfg) do
     render("implement.md.eex",
       repo: issue.repo,
