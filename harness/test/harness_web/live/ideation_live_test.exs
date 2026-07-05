@@ -7,10 +7,40 @@ defmodule HarnessWeb.IdeationLiveTest do
 
   @moduletag :capture_log
 
-  test "empty state invites seeding a session", %{conn: conn} do
+  test "empty state shows the loop diagram and sample seeds", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/ideation")
-    assert html =~ "No sessions yet"
-    assert html =~ "three hours"
+    assert html =~ "How ideation works"
+    assert html =~ "diverge"
+    assert html =~ "synthesize"
+    assert html =~ "Try a sample idea"
+    assert html =~ "false positives"
+  end
+
+  test "clicking a sample seed prefills the seed form", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/ideation")
+    seed = "A smarter PR triage that learns from past false positives"
+    html = view |> element("button[phx-value-seed='#{seed}']") |> render_click()
+    assert html =~ "false positives"
+  end
+
+  test "composer shows 'starts immediately' inside ideation window", %{conn: conn} do
+    # 22:00 is inside the fixture policy's 21:00-02:00 ideation window
+    {:ok, _view, html} =
+      conn
+      |> put_connect_params(%{"test_now" => "22:00"})
+      |> live(~p"/ideation")
+
+    assert html =~ "starts immediately"
+  end
+
+  test "composer shows start time when outside ideation window", %{conn: conn} do
+    # 12:00 is outside 21:00-02:00; next window opens at 21:00 (9 h away)
+    {:ok, _view, html} =
+      conn
+      |> put_connect_params(%{"test_now" => "12:00"})
+      |> live(~p"/ideation")
+
+    assert html =~ "will start at 21:00"
   end
 
   test "starting a session navigates to its tree and enqueues an iteration", %{conn: conn} do
