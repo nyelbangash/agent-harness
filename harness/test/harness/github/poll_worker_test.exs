@@ -163,4 +163,131 @@ defmodule Harness.GitHub.PollWorkerTest do
       last_polled_at: DateTime.add(DateTime.utc_now(), -600, :second)
     })
   end
+
+  defp stub_with_pr(issues, pr_state, commits \\ []) do
+    Req.Test.stub(__MODULE__, fn conn ->
+      case conn.request_path do
+        "/user" ->
+          Req.Test.json(conn, %{"login" => "nyelbangash"})
+
+        "/repos/" <> rest ->
+          cond do
+            String.contains?(rest, "/commits") ->
+              Req.Test.json(conn, commits)
+
+            String.contains?(rest, "/pulls/") ->
+              Req.Test.json(conn, pr_state)
+
+            true ->
+              conn
+              |> Plug.Conn.put_resp_header("etag", ~s(W/"tag-1"))
+              |> Req.Test.json(issues)
+          end
+      end
+    end)
+  end
+
+  test "closed issue with no PR records issue_closed_no_action" do
+    stub_issues([gh_issue_payload(number: 20)])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 20)
+    GitHub.transition!(issue, "plan_ready")
+
+    stub_issues([])
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    issue = GitHub.get_issue_by(@repo, 20)
+    assert issue.pipeline_state == "done"
+
+    [outcome] = Harness.Repo.all(Harness.GitHub.TriageOutcome)
+    assert outcome.outcome == "issue_closed_no_action"
+    assert outcome.issue_id == issue.id
+  end
+
+  test "merged PR with single commit records merged_untouched" do
+    stub_issues([gh_issue_payload(number: 21)])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 21)
+
+    issue
+    |> Harness.GitHub.Issue.changeset(%{pr_number: 55, pr_url: "https://github.com/owner/polled/pull/55"})
+    |> Harness.Repo.update!()
+
+    GitHub.transition!(issue, "pr_open")
+
+    stub_with_pr(
+      [],
+      %{"state" => "closed", "merged" => true, "merge_commit_sha" => "abc"},
+      [%{"sha" => "abc"}]
+    )
+
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    [outcome] = Harness.Repo.all(Harness.GitHub.TriageOutcome)
+    assert outcome.outcome == "merged_untouched"
+    assert outcome.amend_commit_count == 0
+  end
+
+  test "merged PR with multiple commits records merged_amended" do
+    stub_issues([gh_issue_payload(number: 22)])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 22)
+
+    issue
+    |> Harness.GitHub.Issue.changeset(%{pr_number: 56, pr_url: "https://github.com/owner/polled/pull/56"})
+    |> Harness.Repo.update!()
+
+    GitHub.transition!(issue, "pr_open")
+
+    stub_with_pr(
+      [],
+      %{"state" => "closed", "merged" => true, "merge_commit_sha" => "abc"},
+      [%{"sha" => "a"}, %{"sha" => "b"}, %{"sha" => "c"}]
+    )
+
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    [outcome] = Harness.Repo.all(Harness.GitHub.TriageOutcome)
+    assert outcome.outcome == "merged_amended"
+    assert outcome.amend_commit_count == 2
+  end
+
+  test "re-poll does not create a second outcome row" do
+    stub_issues([gh_issue_payload(number: 23)])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 23)
+    GitHub.transition!(issue, "plan_ready")
+
+    stub_issues([])
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    stub_issues([])
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    assert Harness.Repo.aggregate(Harness.GitHub.TriageOutcome, :count) == 1
+  end
+
+  test "auto-demoted issue records demoted outcome" do
+    stub_issues([gh_issue_payload(number: 24)])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 24)
+
+    issue
+    |> Harness.GitHub.Issue.changeset(%{auto_demoted: true})
+    |> Harness.Repo.update!()
+
+    GitHub.transition!(issue, "triaged")
+
+    stub_issues([])
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    [outcome] = Harness.Repo.all(Harness.GitHub.TriageOutcome)
+    assert outcome.outcome == "demoted"
+  end
 end

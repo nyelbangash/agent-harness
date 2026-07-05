@@ -7,7 +7,7 @@ defmodule Harness.GitHub do
 
   import Ecto.Query
 
-  alias Harness.GitHub.{Issue, Plan, RepoState, TriageDecision}
+  alias Harness.GitHub.{Issue, Plan, RepoState, TriageDecision, TriageOutcome}
   alias Harness.Repo
 
   @topic "issues"
@@ -209,6 +209,16 @@ defmodule Harness.GitHub do
   def latest_triage(issue_id) do
     from(t in TriageDecision, where: t.issue_id == ^issue_id, order_by: [desc: t.id], limit: 1)
     |> Repo.one()
+  end
+
+  @doc """
+  Insert exactly one outcome row per issue (idempotent — unique index on issue_id,
+  on_conflict: :nothing).
+  """
+  def record_triage_outcome!(attrs) do
+    %TriageOutcome{}
+    |> TriageOutcome.changeset(attrs)
+    |> Repo.insert!(on_conflict: :nothing, conflict_target: [:issue_id])
   end
 
   # -- plans ------------------------------------------------------------------

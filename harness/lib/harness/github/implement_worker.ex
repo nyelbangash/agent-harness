@@ -243,6 +243,13 @@ defmodule Harness.GitHub.ImplementWorker do
   end
 
   defp demote_to_plan(issue, transcript) do
+    # Flag for outcome capture — PollWorker cannot otherwise distinguish a
+    # demoted-auto issue from one that was always plan-routed.
+    issue =
+      issue
+      |> Harness.GitHub.Issue.changeset(%{auto_demoted: true})
+      |> Harness.Repo.update!()
+
     GitHub.transition!(issue, "triaged")
 
     args =

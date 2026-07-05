@@ -95,6 +95,39 @@ defmodule Harness.GitHub.Client do
     end
   end
 
+  @doc "Fetch a single PR by number. Returns at least state, merged, merge_commit_sha."
+  def get_pull_request(repo, number) do
+    case request(:get, "/repos/#{repo}/pulls/#{number}") do
+      {:ok, %{status: 200, body: %{"state" => state, "merged" => merged,
+                                   "merge_commit_sha" => sha}}} ->
+        {:ok, %{state: state, merged: merged, merge_commit_sha: sha}}
+
+      {:ok, %{status: 404}} ->
+        {:error, :not_found}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "List commits on a PR (up to 100). Used for amended-vs-untouched attribution."
+  def list_pull_request_commits(repo, number) do
+    case request(:get, "/repos/#{repo}/pulls/#{number}/commits",
+                 params: [per_page: 100]) do
+      {:ok, %{status: 200, body: commits}} when is_list(commits) ->
+        {:ok, commits}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @doc "Find the open PR whose head is `head` (e.g. \"owner:branch\"), for 422 reconciliation."
   def find_pull_request(repo, head) do
     case request(:get, "/repos/#{repo}/pulls", params: [head: head, state: "open", per_page: 1]) do

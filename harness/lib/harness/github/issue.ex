@@ -30,9 +30,11 @@ defmodule Harness.GitHub.Issue do
     field :last_synced_at, :utc_datetime_usec
     field :pr_url, :string
     field :pr_number, :integer
+    field :auto_demoted, :boolean, default: false
 
     has_many :triages, Harness.GitHub.TriageDecision
     has_many :plans, Harness.GitHub.Plan
+    has_many :outcomes, Harness.GitHub.TriageOutcome
 
     timestamps(type: :utc_datetime_usec)
   end
@@ -56,7 +58,8 @@ defmodule Harness.GitHub.Issue do
       :pipeline_state,
       :last_synced_at,
       :pr_url,
-      :pr_number
+      :pr_number,
+      :auto_demoted
     ])
     |> validate_required([:repo, :number, :github_id, :title])
     |> validate_inclusion(:pipeline_state, @pipeline_states)
