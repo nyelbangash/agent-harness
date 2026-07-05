@@ -92,49 +92,89 @@ defmodule HarnessWeb.RunsLive do
       usage_mode={@usage_mode}
       usage_health={@usage_health}
     >
-      <h1 class="font-display uppercase tracking-[0.16em] text-sm text-ink-dim mb-4">Runs</h1>
+      <div class="page-fit md:flex md:flex-col md:min-h-0 md:overflow-hidden">
+        <h1 class="font-display uppercase tracking-[0.16em] text-sm text-ink-dim mb-4">Runs</h1>
 
-      <div
-        :if={@queues != []}
-        aria-label="queues"
-        class="flex flex-wrap items-center gap-x-8 gap-y-2 mb-6"
-      >
-        <div :for={q <- @queues} class="flex items-center gap-2 font-mono text-[11px] tabular-nums">
-          <span class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim">
-            {q.label}
-          </span>
-          <span aria-hidden="true"><span
+        <div
+          :if={@queues != []}
+          aria-label="queues"
+          class="flex flex-wrap items-center gap-x-8 gap-y-2 mb-6"
+        >
+          <div :for={q <- @queues} class="flex items-center gap-2 font-mono text-[11px] tabular-nums">
+            <span class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim">
+              {q.label}
+            </span>
+            <span aria-hidden="true"><span
               :for={i <- 1..max(q.limit, 1)//1}
               class={if i <= q.running, do: "text-accent", else: "text-ink-dim/30"}
             >▮</span></span>
-          <span class="text-ink">{q.running}/{q.limit}</span>
-          <span class="text-ink-dim">· {q.waiting} waiting</span>
+            <span class="text-ink">{q.running}/{q.limit}</span>
+            <span class="text-ink-dim">· {q.waiting} waiting</span>
+          </div>
         </div>
-      </div>
 
-      <div class="grid xl:grid-cols-2 gap-8">
-        <section aria-label="sessions">
-          <table class="w-full text-left tabular">
-            <thead>
-              <tr class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim border-b border-surface-2">
-                <th class="py-2 pr-2">#</th>
-                <th class="py-2 pr-2">Kind</th>
-                <th class="py-2 pr-2">Ref</th>
-                <th class="py-2 pr-2">Model</th>
-                <th class="py-2 pr-2 text-right">Turns</th>
-                <th class="py-2 pr-2 text-right">Tokens</th>
-                <th class="py-2 pr-2 text-right">Time</th>
-                <th class="py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody class="font-mono text-xs">
-              <tr
-                :for={run <- @runs}
-                class={[
-                  "border-b border-surface-2/60 cursor-pointer hover:bg-surface",
-                  @selected && @selected.id == run.id && "bg-surface"
-                ]}
-                phx-click={JS.patch(~p"/runs/#{run.id}")}
+        <div class="grid gap-8 xl:grid-cols-2 md:flex-1 md:min-h-0 md:auto-rows-fr">
+          <section aria-label="sessions" class="md:flex md:flex-col md:min-h-0">
+            <div class="md:flex-1 md:min-h-0 md:overflow-y-auto">
+              <table class="w-full text-left tabular">
+                <thead class="sticky top-0 bg-bg">
+                  <tr class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim border-b border-surface-2">
+                    <th class="py-2 pr-2">#</th>
+                    <th class="py-2 pr-2">Kind</th>
+                    <th class="py-2 pr-2">Ref</th>
+                    <th class="py-2 pr-2">Model</th>
+                    <th class="py-2 pr-2 text-right">Turns</th>
+                    <th class="py-2 pr-2 text-right">Tokens</th>
+                    <th class="py-2 pr-2 text-right">Time</th>
+                    <th class="py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="font-mono text-xs">
+                  <tr
+                    :for={run <- @runs}
+                    class={[
+                      "border-b border-surface-2/60 cursor-pointer hover:bg-surface",
+                      @selected && @selected.id == run.id && "bg-surface"
+                    ]}
+                    phx-click={JS.patch(~p"/runs/#{run.id}")}
+                  >
+                    <td class="py-2 pr-2 text-ink-dim">{run.id}</td>
+                    <td class="py-2 pr-2 uppercase text-[10px] font-display tracking-wide text-ink">
+                      {run.kind}
+                    </td>
+                    <td class="py-2 pr-2 text-ink-dim truncate max-w-[16ch]">{run.ref}</td>
+                    <td class="py-2 pr-2 text-ink-dim">{run.model}</td>
+                    <td class="py-2 pr-2 text-right">{run.turns}</td>
+                    <td class="py-2 pr-2 text-right">{run.tokens_out}</td>
+                    <td class="py-2 pr-2 text-right">{duration(run)}</td>
+                    <td class="py-2">
+                      <span class={status_class(run.status)}>{run.status}</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p :if={@runs == []} class="font-body text-sm text-ink-dim py-4">
+                No sessions yet.
+              </p>
+            </div>
+          </section>
+
+          <section
+            :if={@selected}
+            aria-label="transcript"
+            class="min-w-0 md:flex md:flex-col md:min-h-0"
+          >
+            <div class="flex items-center gap-3 mb-3">
+              <h2 class="font-display uppercase tracking-[0.16em] text-[12px] text-ink-dim">
+                Run #{@selected.id} · {@selected.kind} · {@selected.ref}
+              </h2>
+              <span class={status_class(@selected.status)}>{@selected.status}</span>
+              <button
+                :if={@selected.status == "running"}
+                phx-click="kill_run"
+                phx-value-id={@selected.id}
+                data-confirm={"Kill run ##{@selected.id}?"}
+                class="ml-auto font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-alert text-alert rounded-sm hover:bg-alert hover:text-ink"
               >
                 <td class="py-2 pr-2 text-ink-dim">{run.id}</td>
                 <td class="py-2 pr-2 uppercase text-[10px] font-display tracking-wide text-ink">
@@ -182,25 +222,40 @@ defmodule HarnessWeb.RunsLive do
             </button>
           </div>
 
-          <div class="font-mono text-[11px] text-ink-dim mb-3 tabular-nums">
-            model {@selected.model} · {@selected.turns} turns · {@selected.tokens_in}/{@selected.tokens_out} tok ·
-            ${:erlang.float_to_binary(@selected.cost_estimate || 0.0, decimals: 3)} est.
-          </div>
-
-          <div
-            id="transcript"
-            phx-update="stream"
-            class="space-y-1 max-h-[70vh] overflow-y-auto rounded-sm bg-surface border border-surface-2 p-3"
-          >
-            <div :for={{dom_id, event} <- @streams.events} id={dom_id}>
-              <.event event={event} />
+            <div class="font-mono text-[11px] text-ink-dim mb-3 tabular-nums">
+              model {@selected.model} · {@selected.turns} turns · {@selected.tokens_in}/{@selected.tokens_out} tok ·
+              ${:erlang.float_to_binary(@selected.cost_estimate || 0.0, decimals: 3)} est.
             </div>
-          </div>
-        </section>
 
-        <section :if={!@selected} class="hidden xl:block">
-          <p class="font-body text-sm text-ink-dim">Select a session to stream its transcript.</p>
-        </section>
+            <script :type={Phoenix.LiveView.ColocatedHook} name=".AutoScroll">
+              // Pin-to-bottom: follow the stream only while the reader is already
+              // at the bottom; never fight an upward scroll into history.
+              export default {
+                mounted() { this.scrollToEnd() },
+                beforeUpdate() {
+                  const el = this.el
+                  this.pinned = el.scrollHeight - el.clientHeight - el.scrollTop < 60
+                },
+                updated() { if (this.pinned) this.scrollToEnd() },
+                scrollToEnd() { this.el.scrollTop = this.el.scrollHeight }
+              }
+            </script>
+            <div
+              id="transcript"
+              phx-update="stream"
+              phx-hook=".AutoScroll"
+              class="space-y-1 max-h-[70vh] md:max-h-none md:flex-1 md:min-h-0 overflow-y-auto rounded-sm bg-surface border border-surface-2 p-3"
+            >
+              <div :for={{dom_id, event} <- @streams.events} id={dom_id}>
+                <.event event={event} />
+              </div>
+            </div>
+          </section>
+
+          <section :if={!@selected} class="hidden xl:block">
+            <p class="font-body text-sm text-ink-dim">Select a session to stream its transcript.</p>
+          </section>
+        </div>
       </div>
     </Layouts.app>
     """

@@ -46,7 +46,7 @@ defmodule HarnessWeb.Layouts do
     assigns = assign(assigns, nav: @nav, nav_later: @nav_later)
 
     ~H"""
-    <div class="min-h-screen md:flex">
+    <div class="shell-fit md:flex">
       <aside class="rail-fit md:w-44 md:sticky md:top-0 md:self-start md:overflow-y-auto shrink-0 border-b md:border-b-0 md:border-r border-surface-2 bg-bg px-4 py-4 md:py-6 flex md:flex-col items-center md:items-stretch gap-4 md:gap-6">
         <a href="/" class="font-display font-bold tracking-[0.2em] text-ink text-sm uppercase">
           Harness

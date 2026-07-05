@@ -43,6 +43,8 @@ defmodule HarnessWeb.RunsLiveTest do
     assert html =~ "<details"
     assert html =~ "Read"
     assert html =~ "Kill"
+    # transcript carries the pin-to-bottom hook
+    assert html =~ "AutoScroll"
 
     # live streaming: a new event appears without a reload
     Runs.append_event!(run, 3, "text", %{
