@@ -63,6 +63,22 @@ defmodule Harness.Repos do
   end
 
   @doc """
+  Stage all changes in `worktree`, commit, and push to the existing remote
+  `branch` without force. The worktree must already be on (or detached at)
+  the tip of the PR branch so the push is a fast-forward.
+
+  Spec §9.2 pre-push guard: only `harness/*` branches may be pushed.
+  """
+  @spec push_commit!(String.t(), Path.t(), String.t(), String.t()) :: :ok
+  def push_commit!(repo, worktree, branch, message) do
+    unless String.starts_with?(branch, "harness/") and branch != default_branch(repo) do
+      raise "refusing to push #{inspect(branch)} — only harness/* branches may be pushed (§9.2)"
+    end
+
+    GenServer.call(__MODULE__, {:push_commit, repo, worktree, branch, message}, :infinity)
+  end
+
+  @doc """
   Commit PLAN.md/CONTEXT.md in the worktree to `branch` and push it.
 
   Spec §9.2 pre-push guard (non-negotiable): only `harness/*` branches may
@@ -188,6 +204,30 @@ defmodule Harness.Repos do
   def handle_call({:default_branch, repo}, _from, state) do
     {branch, state} = fetch_default_branch(repo, state)
     {:reply, branch, state}
+  end
+
+  def handle_call({:push_commit, repo, worktree, branch, message}, _from, state) do
+    # defense in depth for the §9.2 guard enforced in the public API
+    true = String.starts_with?(branch, "harness/")
+
+    git!(worktree, ["add", "-A"], repo)
+
+    git!(
+      worktree,
+      [
+        "-c",
+        "user.name=harness",
+        "-c",
+        "user.email=harness@users.noreply.github.com",
+        "commit",
+        "-m",
+        message
+      ],
+      repo
+    )
+
+    git!(worktree, ["push", "origin", "HEAD:refs/heads/#{branch}"], repo)
+    {:reply, :ok, state}
   end
 
   def handle_call({:publish_branch, repo, worktree, branch, files, message}, _from, state) do

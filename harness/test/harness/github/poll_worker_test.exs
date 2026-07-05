@@ -388,4 +388,131 @@ defmodule Harness.GitHub.PollWorkerTest do
     [outcome] = Harness.Repo.all(Harness.GitHub.TriageOutcome)
     assert outcome.outcome == "demoted"
   end
+
+  # -- PR comment responder tests -----------------------------------------------
+
+  # Stub that handles both the issues listing (to keep pr_open issues from being
+  # reconciled as closed) and the PR comment endpoints.
+  defp stub_with_pr_comments(issues_in_listing, review_comments, issue_comments) do
+    Req.Test.stub(__MODULE__, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+
+      case conn.request_path do
+        "/user" ->
+          Req.Test.json(conn, %{"login" => "nyelbangash"})
+
+        "/repos/" <> rest ->
+          cond do
+            String.contains?(rest, "/pulls/") and String.ends_with?(rest, "/comments") ->
+              Req.Test.json(conn, review_comments)
+
+            String.contains?(rest, "/issues/") and String.ends_with?(rest, "/comments") ->
+              Req.Test.json(conn, issue_comments)
+
+            true ->
+              conn
+              |> Plug.Conn.put_resp_header("etag", ~s(W/"tag-1"))
+              |> Req.Test.json(issues_in_listing)
+          end
+      end
+    end)
+  end
+
+  test "operator comment on pr_open issue enqueues RespondWorker (idempotent across sweeps)" do
+    operator_comment = %{
+      "id" => 1001,
+      "body" => "please add a type annotation here",
+      "user" => %{"login" => "nyelbangash"},
+      "created_at" => "2026-07-06T10:00:00Z"
+    }
+
+    issue =
+      issue_fixture(%{
+        repo: @repo,
+        number: 30,
+        pipeline_state: "pr_open",
+        pr_number: 42
+      })
+
+    # Include the pr_open issue in the listing so reconcile_closed doesn't close it.
+    stub_with_pr_comments(
+      [gh_issue_payload(number: 30, id: issue.github_id)],
+      [operator_comment],
+      []
+    )
+
+    assert :ok = perform_job(PollWorker, %{})
+
+    assert_enqueued(worker: Harness.GitHub.RespondWorker)
+    assert Harness.Repo.aggregate(Harness.GitHub.PrCommentHandle, :count) == 1
+
+    [job] = all_enqueued(worker: Harness.GitHub.RespondWorker)
+    assert job.args["issue_id"] == issue.id
+    assert job.args["comment_body"] == "please add a type annotation here"
+
+    # Second sweep: idempotent — no duplicate handle or job
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    assert Harness.Repo.aggregate(Harness.GitHub.PrCommentHandle, :count) == 1
+    assert length(all_enqueued(worker: Harness.GitHub.RespondWorker)) == 1
+  end
+
+  test "harness-stamped comment is never enqueued (identity trap)" do
+    harness_body = Harness.GitHub.Provenance.stamp("plan content", "plan", "run-1")
+
+    issue =
+      issue_fixture(%{
+        repo: @repo,
+        number: 31,
+        pipeline_state: "pr_open",
+        pr_number: 43
+      })
+
+    stub_with_pr_comments(
+      [gh_issue_payload(number: 31, id: issue.github_id)],
+      [
+        %{
+          "id" => 2001,
+          "body" => harness_body,
+          "user" => %{"login" => "nyelbangash"},
+          "created_at" => "2026-07-06T10:00:00Z"
+        }
+      ],
+      []
+    )
+
+    assert :ok = perform_job(PollWorker, %{})
+
+    refute_enqueued(worker: Harness.GitHub.RespondWorker)
+    assert Harness.Repo.aggregate(Harness.GitHub.PrCommentHandle, :count) == 0
+  end
+
+  test "third-party comment is ignored (not the operator's login)" do
+    issue =
+      issue_fixture(%{
+        repo: @repo,
+        number: 32,
+        pipeline_state: "pr_open",
+        pr_number: 44
+      })
+
+    stub_with_pr_comments(
+      [gh_issue_payload(number: 32, id: issue.github_id)],
+      [
+        %{
+          "id" => 3001,
+          "body" => "looks wrong to me",
+          "user" => %{"login" => "some_other_contributor"},
+          "created_at" => "2026-07-06T10:00:00Z"
+        }
+      ],
+      []
+    )
+
+    assert :ok = perform_job(PollWorker, %{})
+
+    refute_enqueued(worker: Harness.GitHub.RespondWorker)
+    assert Harness.Repo.aggregate(Harness.GitHub.PrCommentHandle, :count) == 0
+  end
 end
