@@ -13,7 +13,7 @@ defmodule Harness.Policy do
 
   alias Harness.Policy.Schema
 
-  @type action :: :triage | :plan | :implement | :ideate | :review
+  @type action :: :triage | :plan | :implement | :ideate | :review | :compose
   @type gate_result :: :ok | {:snooze, pos_integer(), atom()} | {:skip, atom()}
 
   @paused_snooze_seconds 300
@@ -50,6 +50,17 @@ defmodule Harness.Policy do
 
   @spec gate(action(), keyword()) :: gate_result()
   def gate(action, opts \\ [])
+
+  def gate(:compose, opts) do
+    policy = Keyword.get(opts, :policy, get())
+    usage_mode = Keyword.get_lazy(opts, :usage_mode, &Harness.Usage.current_mode/0)
+
+    cond do
+      policy.mode == :paused -> {:snooze, @paused_snooze_seconds, :paused}
+      usage_mode == :pause -> {:snooze, usage_snooze(policy), :usage_pause}
+      true -> :ok
+    end
+  end
 
   def gate(action, opts) when action in [:triage, :plan, :implement, :ideate, :review] do
     policy = Keyword.get(opts, :policy, get())

@@ -63,6 +63,14 @@ defmodule Harness.Prompts do
     )
   end
 
+  def explore(prompt, repo_map, max_turns) do
+    render("explore.md.eex",
+      prompt: truncate(prompt, @max_body_chars),
+      repo_map: truncate(repo_map, 20_000),
+      max_turns: max_turns
+    )
+  end
+
   # -- ideation ---------------------------------------------------------------
 
   alias Harness.Ideation
