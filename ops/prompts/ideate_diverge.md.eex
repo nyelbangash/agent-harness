@@ -19,7 +19,13 @@ Current node: <%= @node_title %> (depth <%= @node_depth %>, score <%= @node_scor
 
 ## Running journal (what's been tried, what surprised, what's next)
 <%= @journal %>
-
+<%= if @grounding_repos != [] do %>
+## Referenced repositories (read-only)
+The following repositories are checked out for reference. Use the **Read** and **Grep** tools to verify claims against the actual source code. Do **not** write to these paths.
+<%= for {repo, path} <- @grounding_repos do %>
+- **<%= repo %>**: `<%= path %>`
+<% end %>
+<% end %>
 ## Your task
 Produce 2–4 children. For each: a short title, a one-paragraph summary, a
 calibrated score 0–10 for how promising it is relative to the seed, and an

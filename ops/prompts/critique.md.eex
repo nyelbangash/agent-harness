@@ -10,7 +10,13 @@ artifacts under this directory (node-*.md) and the JOURNAL.md as needed.
 
 ## Journal so far
 <%= @journal %>
-
+<%= if @grounding_repos != [] do %>
+## Referenced repositories (read-only)
+The following repositories are checked out for reference. Use the **Read** tool to read source files when assessing whether the tree's claims hold against the real code. Do **not** write to these paths.
+<%= for {repo, path} <- @grounding_repos do %>
+- **<%= repo %>**: `<%= path %>`
+<% end %>
+<% end %>
 ## Your task
 1. Re-score the frontier nodes 0–10 with fresh eyes — reward developed,
    novel, seed-serving ideas; penalize thin or drifted ones.

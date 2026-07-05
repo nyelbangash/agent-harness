@@ -11,6 +11,8 @@ defmodule Harness.Ideation do
 
   import Ecto.Query
 
+  require Logger
+
   alias Harness.Ideation.{Idea, Session}
   alias Harness.Repo
 
@@ -37,6 +39,7 @@ defmodule Harness.Ideation do
 
     File.mkdir_p!(session_dir(session))
     write_journal_header(session)
+    attach_seed_repos!(session)
 
     root =
       %Idea{}
@@ -227,6 +230,80 @@ defmodule Harness.Ideation do
       {:ok, content} -> content
       _ -> nil
     end
+  end
+
+  # -- repo grounding ---------------------------------------------------------
+
+  @doc """
+  Scans `text` for mentions of repos from `policy_repos` (full "owner/name"
+  or bare repo name as a word). Returns `{matched_names, skipped_patterns}`
+  where matched_names are in the policy and skipped_patterns look like repo
+  refs but are not in the policy list.
+  """
+  def detect_referenced_repos(text, policy_repos) when is_list(policy_repos) do
+    policy_names = Enum.map(policy_repos, & &1.name)
+
+    # Extract all owner/name-like tokens from text
+    candidates =
+      ~r/\b([\w.-]+\/[\w.-]+)\b/
+      |> Regex.scan(text, capture: :all_but_first)
+      |> List.flatten()
+      |> Enum.uniq()
+
+    full_matches = MapSet.new(Enum.filter(candidates, &(&1 in policy_names)))
+    skipped = Enum.reject(candidates, &(&1 in policy_names))
+
+    # Bare name matches: policy repos not yet matched by full name
+    bare_matches =
+      policy_repos
+      |> Enum.reject(&MapSet.member?(full_matches, &1.name))
+      |> Enum.filter(fn repo ->
+        bare = repo.name |> String.split("/") |> List.last()
+        String.match?(text, ~r/(?<![\/\w])#{Regex.escape(bare)}(?![\/\w])/)
+      end)
+      |> Enum.map(& &1.name)
+
+    matched = MapSet.to_list(full_matches) ++ bare_matches
+    {matched, skipped}
+  end
+
+  @doc """
+  Returns `[{repo_name, checkout_path}]` for policy repos referenced in the
+  session's seed prompt. Calls `Repos.ensure_base!/1` for each matched repo
+  (idempotent — safe to call at every iteration).
+  """
+  def grounding_repos(%Session{} = session) do
+    policy = Harness.Policy.get()
+    {matched, _skipped} = detect_referenced_repos(session.seed_prompt, policy.github.repos)
+
+    Enum.map(matched, fn repo_name ->
+      path = Harness.Repos.ensure_base!(repo_name)
+      {repo_name, path}
+    end)
+  end
+
+  # Detects, provisions, and journals repos referenced in the seed at session
+  # start. Skipped (non-policy) refs are journal-logged as an access-boundary
+  # audit trail; matched repos get their base clones ensured.
+  defp attach_seed_repos!(session) do
+    policy = Harness.Policy.get()
+    {matched, skipped} = detect_referenced_repos(session.seed_prompt, policy.github.repos)
+
+    repos =
+      Enum.map(matched, fn repo_name ->
+        path = Harness.Repos.ensure_base!(repo_name)
+        {repo_name, path}
+      end)
+
+    journal_lines =
+      Enum.map(skipped, &"referenced repo not in policy — skipped: #{&1}") ++
+        if repos != [],
+          do: ["Grounding repos attached: #{Enum.map_join(repos, ", ", fn {n, _} -> n end)}"],
+          else: []
+
+    if journal_lines != [], do: append_journal!(session, 0, journal_lines)
+
+    repos
   end
 
   # -- job orchestration ------------------------------------------------------

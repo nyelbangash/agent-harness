@@ -65,7 +65,8 @@ defmodule Harness.Ideation.CritiqueWorker do
   end
 
   defp critique(session) do
-    prompt = Harness.Prompts.critique(session)
+    grounding = Ideation.grounding_repos(session)
+    prompt = Harness.Prompts.critique(session, grounding)
 
     spec = %RunSpec{
       kind: :critique,

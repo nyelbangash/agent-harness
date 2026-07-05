@@ -214,4 +214,169 @@ defmodule Harness.Ideation.WorkersTest do
 
     assert {:cancel, :killed} = perform_job(IterationWorker, %{session_id: session.id})
   end
+
+  test "no write tools are exposed to ideation iteration runs" do
+    %{session: session} = start()
+
+    FakeRunner.script([
+      {:ok,
+       Harness.Fixtures.runner_result(
+         structured_output:
+           diverge_output([
+             %{"title" => "a", "summary" => "a", "score" => 7.0, "artifact" => "x"},
+             %{"title" => "b", "summary" => "b", "score" => 6.0, "artifact" => "y"}
+           ])
+       )}
+    ])
+
+    assert :ok = perform_job(IterationWorker, %{session_id: session.id})
+
+    [spec] = FakeRunner.executed_specs()
+    write_tools = ~w(Write Edit)
+    bash_writes = Enum.filter(spec.allowed_tools, &String.starts_with?(&1, "Bash"))
+    assert Enum.empty?(Enum.filter(spec.allowed_tools, &(&1 in write_tools))),
+           "write tools must not be exposed to ideation: #{inspect(spec.allowed_tools)}"
+    assert Enum.empty?(bash_writes),
+           "Bash tools must not be exposed to ideation: #{inspect(spec.allowed_tools)}"
+  end
+
+  describe "repo grounding" do
+    setup do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "ideation-grounding-#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      repo = "testorg/testrepo"
+      create_git_remote!(tmp, repo)
+      Application.put_env(:harness, :github_remote_base, "file://#{tmp}/")
+
+      # Add the repo to the active policy so detect_referenced_repos finds it
+      policy_path = Application.fetch_env!(:harness, :policy_path)
+      original_content = File.read!(policy_path)
+      updated = String.replace(original_content, "repos: []", "repos:\n  - \"#{repo}\"")
+      File.write!(policy_path, updated)
+      Harness.Policy.reload()
+
+      on_exit(fn ->
+        Application.delete_env(:harness, :github_remote_base)
+        # Restore original policy content before the standard enable_ideation!
+        # on_exit runs (which also cleans up the temp file).
+        File.write!(policy_path, original_content)
+        Harness.Policy.reload()
+        File.rm_rf!(tmp)
+      end)
+
+      %{tmp: tmp, repo: repo}
+    end
+
+    test "seed mentioning a policy repo (full owner/name) yields prompt with checkout path",
+         %{repo: repo} do
+      {session, _root} =
+        Ideation.start_session(%{
+          seed_prompt: "rethink the gauge cluster in #{repo}",
+          budget_minutes: 180
+        })
+
+      Harness.Repo.delete_all(Oban.Job)
+
+      FakeRunner.script([
+        {:ok,
+         Harness.Fixtures.runner_result(
+           structured_output:
+             diverge_output([
+               %{"title" => "x", "summary" => "x", "score" => 7.0, "artifact" => "x"},
+               %{"title" => "y", "summary" => "y", "score" => 6.0, "artifact" => "y"}
+             ])
+         )}
+      ])
+
+      assert :ok = perform_job(IterationWorker, %{session_id: session.id})
+
+      [spec] = FakeRunner.executed_specs()
+      home = Application.fetch_env!(:harness, :harness_home)
+      expected_path = Path.join([home, "repos", String.replace(repo, "/", "--")])
+      assert spec.prompt =~ expected_path, "prompt must contain checkout path for #{repo}"
+    end
+
+    test "seed mentioning a policy repo by bare name yields prompt with checkout path",
+         %{repo: repo} do
+      bare = repo |> String.split("/") |> List.last()
+
+      {session, _root} =
+        Ideation.start_session(%{
+          seed_prompt: "improve the #{bare} module architecture",
+          budget_minutes: 180
+        })
+
+      Harness.Repo.delete_all(Oban.Job)
+
+      FakeRunner.script([
+        {:ok,
+         Harness.Fixtures.runner_result(
+           structured_output:
+             diverge_output([
+               %{"title" => "x", "summary" => "x", "score" => 7.0, "artifact" => "x"},
+               %{"title" => "y", "summary" => "y", "score" => 6.0, "artifact" => "y"}
+             ])
+         )}
+      ])
+
+      assert :ok = perform_job(IterationWorker, %{session_id: session.id})
+
+      [spec] = FakeRunner.executed_specs()
+      home = Application.fetch_env!(:harness, :harness_home)
+      expected_path = Path.join([home, "repos", String.replace(repo, "/", "--")])
+      assert spec.prompt =~ expected_path, "prompt must contain checkout path for bare-name match"
+    end
+
+    test "non-policy repo mention attaches nothing and journals the skip" do
+      {session, _root} =
+        Ideation.start_session(%{
+          seed_prompt: "look at notinpolicy/somerepo for ideas",
+          budget_minutes: 180
+        })
+
+      journal = Ideation.read_journal(session)
+      assert journal =~ "not in policy", "journal must record the skip"
+      assert journal =~ "notinpolicy/somerepo", "journal must name the skipped ref"
+
+      # No grounding repos attached
+      assert Ideation.grounding_repos(session) == []
+    end
+
+    test "critique prompt also includes the checkout path when seed references a policy repo",
+         %{repo: repo} do
+      {session, root} =
+        Ideation.start_session(%{
+          seed_prompt: "rethink everything in #{repo}",
+          budget_minutes: 180
+        })
+
+      Ideation.add_child!(session, root, %{title: "idea", score: 7.0}, "artifact")
+      Ideation.update_session!(session, %{iterations: 5})
+      Harness.Repo.delete_all(Oban.Job)
+
+      FakeRunner.script([
+        {:ok,
+         Harness.Fixtures.runner_result(
+           structured_output: %{
+             "rescored" => [],
+             "drift" => false,
+             "material_progress" => true,
+             "note" => "good progress"
+           }
+         )}
+      ])
+
+      assert :ok = perform_job(CritiqueWorker, %{session_id: session.id})
+
+      [spec] = FakeRunner.executed_specs()
+      home = Application.fetch_env!(:harness, :harness_home)
+      expected_path = Path.join([home, "repos", String.replace(repo, "/", "--")])
+      assert spec.prompt =~ expected_path, "critique prompt must contain checkout path"
+    end
+  end
 end

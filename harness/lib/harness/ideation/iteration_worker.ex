@@ -111,6 +111,8 @@ defmodule Harness.Ideation.IterationWorker do
   end
 
   defp iterate(session) do
+    grounding = Ideation.grounding_repos(session)
+
     case Ideation.select_frontier(session.id) do
       nil ->
         finish(session, :frontier_empty)
@@ -118,7 +120,7 @@ defmodule Harness.Ideation.IterationWorker do
       node ->
         # develop on odd depth, diverge on even — alternate breadth and depth
         mode = if rem(node.depth, 2) == 0, do: :diverge, else: :develop
-        prompt = Harness.Prompts.ideate(mode, session, node)
+        prompt = Harness.Prompts.ideate(mode, session, node, grounding)
 
         spec = %RunSpec{
           kind: :ideate,
