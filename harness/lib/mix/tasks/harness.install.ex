@@ -71,6 +71,11 @@ defmodule Mix.Tasks.Harness.Install do
   defp plist_content(home) do
     app_dir = Path.join(Application.fetch_env!(:harness, :project_root), "harness")
 
+    # launchd login shells don't read .zshrc, so user-dir installs of the
+    # claude CLI (~/.local/bin) vanish from PATH and BootCheck fails closed.
+    # Bake the installing shell's PATH in — re-run install if it changes.
+    path = System.get_env("PATH", "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+
     """
     <?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -88,7 +93,10 @@ defmodule Mix.Tasks.Harness.Install do
       <key>StandardOutPath</key><string>#{home}/logs/harness.out.log</string>
       <key>StandardErrorPath</key><string>#{home}/logs/harness.err.log</string>
       <key>EnvironmentVariables</key>
-      <dict><key>MIX_ENV</key><string>prod</string></dict>
+      <dict>
+        <key>MIX_ENV</key><string>prod</string>
+        <key>PATH</key><string>#{path}</string>
+      </dict>
     </dict></plist>
     """
   end
