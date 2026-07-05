@@ -90,6 +90,15 @@ defmodule HarnessWeb.HealthControllerTest do
     assert Map.has_key?(body, "stale_code")
   end
 
+  test "response includes manager_last_sweep field", %{conn: conn} do
+    :persistent_term.put(@pt_poll_key, System.system_time(:second))
+    conn = get(conn, "/healthz")
+    body = json_response(conn, 200)
+    assert Map.has_key?(body, "manager_last_sweep")
+    # value is nil (no sweep yet) or an ISO-8601 string
+    assert is_nil(body["manager_last_sweep"]) or is_binary(body["manager_last_sweep"])
+  end
+
   defp stub_policy do
     %Harness.Policy.Schema{
       github: %Harness.Policy.Schema.GitHub{poll_minutes: 2}

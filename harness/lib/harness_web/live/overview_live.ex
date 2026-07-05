@@ -17,6 +17,7 @@ defmodule HarnessWeb.OverviewLive do
       Runs.subscribe()
       GitHub.subscribe()
       Harness.Briefing.subscribe()
+      Harness.Manager.LampServer.subscribe()
       :timer.send_interval(30_000, self(), :tick)
     end
 
@@ -28,11 +29,14 @@ defmodule HarnessWeb.OverviewLive do
      |> assign(gauge_assigns())
      |> assign(:needs_you, GitHub.needs_attention())
      |> assign(:briefing, Harness.Briefing.latest_undismissed())
+     |> assign(:lamps, Harness.Manager.LampServer.get_all())
      |> assign(:any_runs?, recent != [])
      |> stream(:activity, recent)}
   end
 
   @impl true
+  def handle_info({:run_started, %{kind: "manager"}}, socket), do: {:noreply, socket}
+
   def handle_info({:run_started, run}, socket) do
     {:noreply,
      socket
@@ -40,11 +44,17 @@ defmodule HarnessWeb.OverviewLive do
      |> stream_insert(:activity, run, at: 0, limit: 30)}
   end
 
+  def handle_info({:run_updated, %{kind: "manager"}}, socket), do: {:noreply, socket}
+
   def handle_info({:run_updated, run}, socket) do
     {:noreply,
      socket
      |> stream_insert(:activity, run)
      |> assign(gauge_assigns())}
+  end
+
+  def handle_info({:lamps_updated, lamps}, socket) do
+    {:noreply, assign(socket, :lamps, lamps)}
   end
 
   def handle_info({:run_event, _event}, socket), do: {:noreply, socket}
@@ -203,6 +213,20 @@ defmodule HarnessWeb.OverviewLive do
               stale={gauge.stale}
             />
           </div>
+        </section>
+
+        <section
+          :if={Enum.any?(@lamps, & &1.status == :on)}
+          aria-label="manager lamps"
+          class="mb-6 flex flex-wrap gap-2"
+        >
+          <%= for lamp <- @lamps, lamp.status == :on do %>
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-surface border border-alert/60 font-mono text-[11px] text-alert">
+              <span class="inline-block size-2 rounded-full bg-alert animate-pulse" />
+              <span>{lamp.class |> to_string() |> String.replace("_", " ")}</span>
+              <span :if={lamp.detail} class="text-ink-dim">&nbsp;{lamp.detail}</span>
+            </div>
+          <% end %>
         </section>
 
         <div class="grid lg:grid-cols-5 gap-8 md:flex-1 md:min-h-0 md:auto-rows-fr">

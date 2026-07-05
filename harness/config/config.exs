@@ -42,6 +42,7 @@ config :harness, Oban,
        {"* * * * *", Harness.GitHub.PollWorker},
        {"* * * * *", Harness.Usage.PollWorker},
        {"* * * * *", Harness.Janitor},
+       {"* * * * *", Harness.Manager.Worker},
        {"0 7 * * *", Harness.Briefing.Worker}
      ]}
   ]

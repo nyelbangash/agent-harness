@@ -50,3 +50,15 @@ notify:
   budget_warn_fraction: 0.80 # notify when a weekly cap crosses this
 billing_model: subscription_pool # subscription_pool | sdk_credit
 calendar_notes: [] # dated reminders surfaced in Mission Control, e.g. "2026-08-01: quota change"
+
+manager:
+  enabled: true
+  poll_minutes: 5
+  authority: tier0          # tier0 | tier1 | tier2
+  loop_triage_threshold: 5  # triages per issue per window to flag
+  loop_window_minutes: 30
+  stall_minutes: 10         # minutes with no run_events before stalled_run lamp
+  ghost_job_grace_seconds: 120
+  telemetry_silence_samples: 3
+  review_model: null        # enable Tier-2 model review (e.g. "haiku")
+  review_every_hours: 24

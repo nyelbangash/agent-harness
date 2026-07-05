@@ -9,7 +9,7 @@ defmodule Harness.Runs.Run do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @kinds ~w(triage implement plan ideate critique review promote respond explore)
+  @kinds ~w(triage implement plan ideate critique review promote respond explore manager)
   @statuses ~w(queued running verifying pushing opening_pr succeeded failed killed)
 
   schema "runs" do

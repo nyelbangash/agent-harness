@@ -80,6 +80,19 @@ defmodule Harness.Policy.Schema do
     defstruct [:name, :test_command, :lint_command, :typecheck_command]
   end
 
+  defmodule Manager do
+    defstruct enabled: true,
+              poll_minutes: 5,
+              authority: "tier0",
+              loop_triage_threshold: 5,
+              loop_window_minutes: 30,
+              stall_minutes: 10,
+              ghost_job_grace_seconds: 120,
+              telemetry_silence_samples: 3,
+              review_model: nil,
+              review_every_hours: 24
+  end
+
   defstruct mode: :plan_only,
             models: nil,
             schedule: nil,
@@ -93,7 +106,8 @@ defmodule Harness.Policy.Schema do
             github: nil,
             notify: nil,
             billing_model: :subscription_pool,
-            calendar_notes: []
+            calendar_notes: [],
+            manager: nil
 
   @type t :: %__MODULE__{}
 
@@ -124,7 +138,8 @@ defmodule Harness.Policy.Schema do
          github: github,
          notify: struct_from(Notify, raw["notify"]),
          billing_model: billing,
-         calendar_notes: List.wrap(raw["calendar_notes"]) |> Enum.map(&to_string/1)
+         calendar_notes: List.wrap(raw["calendar_notes"]) |> Enum.map(&to_string/1),
+         manager: struct_from(Manager, raw["manager"])
        }}
     end
   end
