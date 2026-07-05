@@ -439,8 +439,8 @@ defmodule HarnessWeb.IdeationLive do
                           e.preventDefault()
                           const vb = this.viewBox()
                           // proportional to scroll delta: gentle per trackpad tick,
-                          // ~15%/notch on a mouse wheel; clamped to 1/8x–4x of fit
-                          let factor = Math.exp(e.deltaY * 0.0012)
+                          // ~27%/notch on a mouse wheel; clamped to 1/8x–4x of fit
+                          let factor = Math.exp(e.deltaY * 0.002)
                           const server = svg.dataset.viewbox.split(" ").map(Number)
                           const w = Math.min(Math.max(vb.w * factor, server[2] / 8), server[2] * 4)
                           factor = w / vb.w
