@@ -32,6 +32,12 @@ plan:
   post_to_issue: false
 implement:
   max_fix_cycles: 2
+review:
+  max_rounds: 1
+  confidence_floor: 0.7
+  model: opus
+  fix_model: sonnet
+  rebase_max_attempts: 2
 ideate:
   critique_every: 5
   default_budget_minutes: 180

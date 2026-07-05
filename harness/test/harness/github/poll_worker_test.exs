@@ -257,6 +257,18 @@ defmodule Harness.GitHub.PollWorkerTest do
   end
 
   defp stub_with_pr(issues, pr_state, commits \\ []) do
+    # Merge in required new fields so do_get_pull_request can pattern match;
+    # callers may override any of these defaults.
+    full_pr_state =
+      Map.merge(
+        %{
+          "mergeable" => true,
+          "mergeable_state" => "clean",
+          "head" => %{"ref" => "harness/issue-1-fix"}
+        },
+        pr_state
+      )
+
     Req.Test.stub(__MODULE__, fn conn ->
       case conn.request_path do
         "/user" ->
@@ -268,7 +280,7 @@ defmodule Harness.GitHub.PollWorkerTest do
               Req.Test.json(conn, commits)
 
             String.contains?(rest, "/pulls/") ->
-              Req.Test.json(conn, pr_state)
+              Req.Test.json(conn, full_pr_state)
 
             true ->
               conn

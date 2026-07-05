@@ -21,6 +21,7 @@ defmodule Harness.Notify do
           | :ideation_synthesized
           | :promote_complete
           | :briefing
+          | :conflict_escalated
           | :manager_proposal
 
   @spec notify(event(), String.t(), keyword()) :: :ok
@@ -42,6 +43,7 @@ defmodule Harness.Notify do
   defp title_for(:ideation_synthesized), do: "Ideation synthesized"
   defp title_for(:promote_complete), do: "Promote complete"
   defp title_for(:briefing), do: "Morning briefing"
+  defp title_for(:conflict_escalated), do: "Conflict needs human attention"
   defp title_for(:manager_proposal), do: "Manager proposal"
 
   defp backend, do: Application.get_env(:harness, :notify_backend, __MODULE__.System)

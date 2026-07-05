@@ -79,6 +79,42 @@ defmodule Harness.Repos do
   end
 
   @doc """
+  Rebase the worktree onto `origin/<base_branch>`.
+  Returns `:ok` on clean rebase, `{:conflict, [file]}` on conflict.
+  """
+  @spec rebase_onto!(String.t(), Path.t(), String.t()) :: :ok | {:conflict, [String.t()]}
+  def rebase_onto!(repo, worktree, base_branch),
+    do: GenServer.call(__MODULE__, {:rebase_onto, repo, worktree, base_branch}, :infinity)
+
+  @doc "Abort the current rebase in the worktree."
+  @spec rebase_abort!(String.t(), Path.t()) :: :ok
+  def rebase_abort!(repo, worktree),
+    do: GenServer.call(__MODULE__, {:rebase_abort, repo, worktree}, :infinity)
+
+  @doc """
+  Stage all changes and continue the in-progress rebase.
+  Returns `:ok` on success, `{:conflict, [file]}` if more conflicts remain.
+  """
+  @spec rebase_continue!(String.t(), Path.t()) :: :ok | {:conflict, [String.t()]}
+  def rebase_continue!(repo, worktree),
+    do: GenServer.call(__MODULE__, {:rebase_continue, repo, worktree}, :infinity)
+
+  @doc """
+  Force-push the worktree HEAD to `branch` with lease.
+  Returns `:ok` on success, `{:error, :lease_broken}` if the upstream moved.
+
+  Spec §9.2: only `harness/*` branches may be force-pushed.
+  """
+  @spec force_push_head!(String.t(), Path.t(), String.t()) :: :ok | {:error, :lease_broken}
+  def force_push_head!(repo, worktree, branch) do
+    unless String.starts_with?(branch, "harness/") do
+      raise "refusing to force-push #{inspect(branch)} — only harness/* branches allowed (§9.2)"
+    end
+
+    GenServer.call(__MODULE__, {:force_push_head, repo, worktree, branch}, :infinity)
+  end
+
+  @doc """
   Commit PLAN.md/CONTEXT.md in the worktree to `branch` and push it.
 
   Spec §9.2 pre-push guard (non-negotiable): only `harness/*` branches may
@@ -206,6 +242,48 @@ defmodule Harness.Repos do
     {:reply, branch, state}
   end
 
+  def handle_call({:rebase_onto, repo, worktree, base_branch}, _from, state) do
+    git!(base_path(repo), ["fetch", "origin", base_branch], repo)
+
+    case git(worktree, ["rebase", "origin/#{base_branch}"], repo) do
+      {_, 0} ->
+        {:reply, :ok, state}
+
+      {_, _} ->
+        {out, _} = git(worktree, ["diff", "--name-only", "--diff-filter=U"], repo)
+        files = String.split(out, "\n", trim: true)
+        {:reply, {:conflict, files}, state}
+    end
+  end
+
+  def handle_call({:rebase_abort, repo, worktree}, _from, state) do
+    git!(worktree, ["rebase", "--abort"], repo)
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:rebase_continue, repo, worktree}, _from, state) do
+    git!(worktree, ["add", "-A"], repo)
+
+    case git(worktree, ["rebase", "--continue"], repo, [{~c"GIT_EDITOR", ~c"true"}]) do
+      {_, 0} ->
+        {:reply, :ok, state}
+
+      {_, _} ->
+        {out, _} = git(worktree, ["diff", "--name-only", "--diff-filter=U"], repo)
+        files = String.split(out, "\n", trim: true)
+        {:reply, {:conflict, files}, state}
+    end
+  end
+
+  def handle_call({:force_push_head, repo, worktree, branch}, _from, state) do
+    true = String.starts_with?(branch, "harness/")
+
+    case git(worktree, ["push", "--force-with-lease", "origin", "HEAD:refs/heads/#{branch}"], repo) do
+      {_, 0} -> {:reply, :ok, state}
+      {_, _} -> {:reply, {:error, :lease_broken}, state}
+    end
+  end
+
   def handle_call({:push_commit, repo, worktree, branch, message}, _from, state) do
     # defense in depth for the §9.2 guard enforced in the public API
     true = String.starts_with?(branch, "harness/")
@@ -320,12 +398,12 @@ defmodule Harness.Repos do
   # must actually be signaled — killing only the BEAM task would leak a live
   # git holding locks on the clone, silently breaking this GenServer's
   # single-writer guarantee when the Oban retry runs a second git against it.
-  defp git(cd, args, _repo) do
+  defp git(cd, args, _repo, extra_env \\ []) do
     env =
       case Harness.Secrets.github_pat() do
         {:ok, pat} -> [{~c"GH_TOKEN", String.to_charlist(pat)}]
         _ -> []
-      end
+      end ++ extra_env
 
     git_path = System.find_executable("git")
 

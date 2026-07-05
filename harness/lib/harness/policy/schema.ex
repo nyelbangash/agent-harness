@@ -63,7 +63,8 @@ defmodule Harness.Policy.Schema do
     defstruct max_rounds: 1,
               confidence_floor: 0.7,
               model: "opus",
-              fix_model: "sonnet"
+              fix_model: "sonnet",
+              rebase_max_attempts: 2
   end
 
   defmodule GitHub do

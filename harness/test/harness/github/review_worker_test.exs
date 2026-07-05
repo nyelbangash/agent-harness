@@ -306,6 +306,167 @@ defmodule Harness.GitHub.ReviewWorkerTest do
     assert [] = FakeRunner.executed_specs()
   end
 
+  test "MERGEABLE PR: no rebase runs, review executes normally", ctx do
+    put_repo_policy(ctx.repo, "true")
+    branch = "harness/issue-mergeable-fix"
+    push_harness_branch!(ctx.bare, branch)
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      path = conn.request_path
+
+      cond do
+        conn.method == "GET" and path =~ ~r|/pulls/55$| ->
+          Req.Test.json(conn, %{
+            "state" => "open",
+            "merged" => false,
+            "merge_commit_sha" => nil,
+            "mergeable" => true,
+            "mergeable_state" => "clean",
+            "head" => %{"ref" => branch}
+          })
+
+        conn.method == "POST" and path =~ ~r|/pulls/55/reviews| ->
+          conn |> Plug.Conn.put_status(200) |> Req.Test.json(%{"id" => 1})
+
+        conn.method == "GET" and String.contains?(path, "/comments") ->
+          Req.Test.json(conn, [])
+
+        true ->
+          Plug.Conn.send_resp(conn, 500, "")
+      end
+    end)
+
+    issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "pr_open"})
+    FakeRunner.script([no_findings_result()])
+
+    assert :ok =
+             perform_job(ReviewWorker, %{
+               issue_id: issue.id,
+               pr_number: 55,
+               round: 0,
+               branch: branch
+             })
+
+    assert [spec] = FakeRunner.executed_specs()
+    assert spec.kind == :review
+  end
+
+  test "human-branch guard: non-harness/* branch skips rebase, review runs normally", ctx do
+    put_repo_policy(ctx.repo, "true")
+    branch = "feature/human-authored"
+    push_harness_branch!(ctx.bare, branch)
+
+    # Stub returns CONFLICTING, but should be ignored for non-harness branches
+    Req.Test.stub(__MODULE__, fn conn ->
+      path = conn.request_path
+
+      cond do
+        conn.method == "GET" and path =~ ~r|/pulls/55$| ->
+          Req.Test.json(conn, %{
+            "state" => "open",
+            "merged" => false,
+            "merge_commit_sha" => nil,
+            "mergeable" => false,
+            "mergeable_state" => "conflicting",
+            "head" => %{"ref" => branch}
+          })
+
+        conn.method == "POST" and path =~ ~r|/pulls/55/reviews| ->
+          conn |> Plug.Conn.put_status(200) |> Req.Test.json(%{"id" => 1})
+
+        conn.method == "GET" and String.contains?(path, "/comments") ->
+          Req.Test.json(conn, [])
+
+        true ->
+          Plug.Conn.send_resp(conn, 500, "")
+      end
+    end)
+
+    issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "pr_open"})
+    FakeRunner.script([no_findings_result()])
+
+    assert :ok =
+             perform_job(ReviewWorker, %{
+               issue_id: issue.id,
+               pr_number: 55,
+               round: 0,
+               branch: branch
+             })
+
+    # Review ran normally (no rebase attempted)
+    assert [spec] = FakeRunner.executed_specs()
+    assert spec.kind == :review
+  end
+
+  test "escalation: conflict resolution fails → stamped comment posted, no push", ctx do
+    put_repo_policy(ctx.repo, "true")
+    branch = "harness/issue-escalate-fix"
+
+    # Set up a real conflicting branch: main and branch both modify the same file
+    seed = ctx.bare <> "-escseed-#{System.unique_integer([:positive])}"
+    File.mkdir_p!(seed)
+    git!(seed, ["clone", "file://" <> ctx.bare, seed])
+
+    File.write!(Path.join(seed, "conflict_escalate.txt"), "main version\n")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=test", "-c", "user.email=t@t", "commit", "-m", "main adds"])
+    git!(seed, ["push", "origin", "main"])
+
+    git!(seed, ["checkout", "HEAD~1"])
+    git!(seed, ["checkout", "-b", branch])
+    File.write!(Path.join(seed, "conflict_escalate.txt"), "branch version\n")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=test", "-c", "user.email=t@t", "commit", "-m", "branch adds"])
+    git!(seed, ["push", "origin", branch])
+    File.rm_rf!(seed)
+
+    comment_posted = :counters.new(1, [])
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      path = conn.request_path
+
+      cond do
+        conn.method == "GET" and path =~ ~r|/pulls/55$| ->
+          Req.Test.json(conn, %{
+            "state" => "open",
+            "merged" => false,
+            "merge_commit_sha" => nil,
+            "mergeable" => false,
+            "mergeable_state" => "conflicting",
+            "head" => %{"ref" => branch}
+          })
+
+        conn.method == "POST" and String.contains?(path, "/comments") ->
+          :counters.add(comment_posted, 1, 1)
+          conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 99})
+
+        true ->
+          Plug.Conn.send_resp(conn, 500, "")
+      end
+    end)
+
+    issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "pr_open"})
+
+    # Conflict resolution runner fails
+    FakeRunner.script([fn _spec -> {:error, :resolution_failed} end])
+
+    assert :ok =
+             perform_job(ReviewWorker, %{
+               issue_id: issue.id,
+               pr_number: 55,
+               round: 0,
+               branch: branch
+             })
+
+    # Escalation comment was posted
+    assert :counters.get(comment_posted, 1) >= 1
+    # No review spec ran — only the resolution runner was called
+    assert [resolution_spec] = FakeRunner.executed_specs()
+    assert resolution_spec.output_mode == :stream_json
+    # No new ReviewWorker jobs
+    assert [] = all_enqueued(worker: ReviewWorker)
+  end
+
   test "low-confidence findings are not actionable (no fix cycle)", ctx do
     put_repo_policy(ctx.repo, "true")
     branch = "harness/issue-8-fix"

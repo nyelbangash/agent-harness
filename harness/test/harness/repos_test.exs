@@ -6,6 +6,12 @@ defmodule Harness.ReposTest do
 
   alias Harness.Repos
 
+  defp git!(cd, args) do
+    {output, code} = System.cmd("git", args, cd: cd, stderr_to_stdout: true)
+    if code != 0, do: raise("fixture git #{Enum.join(args, " ")} failed: #{output}")
+    output
+  end
+
   setup do
     tmp = Path.join(System.tmp_dir!(), "repos-test-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
@@ -121,6 +127,194 @@ defmodule Harness.ReposTest do
     assert Repos.ensure_base!(repo) == path
     {url, 0} = System.cmd("git", ["-C", path, "remote", "get-url", "origin"])
     assert String.trim(url) == "file://#{tmp2}/#{repo}.git"
+  end
+
+  test "rebase_onto! succeeds when there are no conflicts", %{repo: repo, bare: bare} do
+    Repos.ensure_base!(repo)
+
+    # Create a branch with a new file (no conflict with main)
+    branch = "harness/rebase-clean-#{System.unique_integer([:positive])}"
+    seed = bare <> "-seed-#{System.unique_integer([:positive])}"
+    File.mkdir_p!(seed)
+    git!(seed, ["clone", "file://" <> bare, seed])
+    git!(seed, ["checkout", "-b", branch])
+    File.write!(Path.join(seed, "branch_only.txt"), "branch content")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "branch commit"])
+    git!(seed, ["push", "origin", branch])
+    File.rm_rf!(seed)
+
+    worktree = Repos.create_worktree_at!(repo, "rebase-clean-wt-#{System.unique_integer([:positive])}", "origin/#{branch}")
+    assert :ok = Repos.rebase_onto!(repo, worktree, "main")
+    Repos.remove_worktree!(repo, worktree)
+  end
+
+  test "rebase_onto! returns {:conflict, files} on conflict", %{repo: repo, bare: bare} do
+    Repos.ensure_base!(repo)
+
+    # Create a branch that modifies the same file as we'll modify on main
+    branch = "harness/rebase-conflict-#{System.unique_integer([:positive])}"
+    seed = bare <> "-seed-#{System.unique_integer([:positive])}"
+    File.mkdir_p!(seed)
+    git!(seed, ["clone", "file://" <> bare, seed])
+
+    # First commit a change on main (to make branch diverge)
+    File.write!(Path.join(seed, "conflict_file.txt"), "main content\n")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "main adds file"])
+    git!(seed, ["push", "origin", "main"])
+
+    # Now make the branch starting before that main commit
+    git!(seed, ["checkout", "HEAD~1"])
+    git!(seed, ["checkout", "-b", branch])
+    File.write!(Path.join(seed, "conflict_file.txt"), "branch content\n")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "branch adds same file"])
+    git!(seed, ["push", "origin", branch])
+    File.rm_rf!(seed)
+
+    worktree = Repos.create_worktree_at!(repo, "rebase-conflict-wt-#{System.unique_integer([:positive])}", "origin/#{branch}")
+    assert {:conflict, files} = Repos.rebase_onto!(repo, worktree, "main")
+    assert "conflict_file.txt" in files
+    # Clean up rebase state
+    Repos.rebase_abort!(repo, worktree)
+    Repos.remove_worktree!(repo, worktree)
+  end
+
+  test "rebase_abort! cleans up after a failed rebase", %{repo: repo, bare: bare} do
+    Repos.ensure_base!(repo)
+
+    branch = "harness/abort-test-#{System.unique_integer([:positive])}"
+    seed = bare <> "-seed-#{System.unique_integer([:positive])}"
+    File.mkdir_p!(seed)
+    git!(seed, ["clone", "file://" <> bare, seed])
+
+    File.write!(Path.join(seed, "shared.txt"), "main version\n")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "main"])
+    git!(seed, ["push", "origin", "main"])
+
+    git!(seed, ["checkout", "HEAD~1"])
+    git!(seed, ["checkout", "-b", branch])
+    File.write!(Path.join(seed, "shared.txt"), "branch version\n")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "branch"])
+    git!(seed, ["push", "origin", branch])
+    File.rm_rf!(seed)
+
+    worktree = Repos.create_worktree_at!(repo, "abort-wt-#{System.unique_integer([:positive])}", "origin/#{branch}")
+    assert {:conflict, _} = Repos.rebase_onto!(repo, worktree, "main")
+    assert :ok = Repos.rebase_abort!(repo, worktree)
+
+    # After abort, git status should be clean (no merge/rebase in progress)
+    {status, 0} = System.cmd("git", ["status", "--porcelain"], cd: worktree)
+    assert String.trim(status) == ""
+    Repos.remove_worktree!(repo, worktree)
+  end
+
+  test "rebase_continue! resolves after manual fix", %{repo: repo, bare: bare} do
+    Repos.ensure_base!(repo)
+
+    branch = "harness/continue-test-#{System.unique_integer([:positive])}"
+    seed = bare <> "-seed-#{System.unique_integer([:positive])}"
+    File.mkdir_p!(seed)
+    git!(seed, ["clone", "file://" <> bare, seed])
+
+    File.write!(Path.join(seed, "resolve_me.txt"), "main version\n")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "main"])
+    git!(seed, ["push", "origin", "main"])
+
+    git!(seed, ["checkout", "HEAD~1"])
+    git!(seed, ["checkout", "-b", branch])
+    File.write!(Path.join(seed, "resolve_me.txt"), "branch version\n")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "branch"])
+    git!(seed, ["push", "origin", branch])
+    File.rm_rf!(seed)
+
+    worktree = Repos.create_worktree_at!(repo, "continue-wt-#{System.unique_integer([:positive])}", "origin/#{branch}")
+    assert {:conflict, _} = Repos.rebase_onto!(repo, worktree, "main")
+
+    # Manually resolve the conflict
+    File.write!(Path.join(worktree, "resolve_me.txt"), "resolved content\n")
+
+    assert :ok = Repos.rebase_continue!(repo, worktree)
+    Repos.remove_worktree!(repo, worktree)
+  end
+
+  test "force_push_head! pushes to remote and is visible via ls-remote", %{repo: repo, bare: bare} do
+    Repos.ensure_base!(repo)
+
+    branch = "harness/force-push-#{System.unique_integer([:positive])}"
+    seed = bare <> "-seed-#{System.unique_integer([:positive])}"
+    File.mkdir_p!(seed)
+    git!(seed, ["clone", "file://" <> bare, seed])
+    git!(seed, ["checkout", "-b", branch])
+    File.write!(Path.join(seed, "pushed.txt"), "force pushed")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "force push test"])
+    git!(seed, ["push", "origin", branch])
+    File.rm_rf!(seed)
+
+    worktree = Repos.create_worktree_at!(repo, "force-push-wt-#{System.unique_integer([:positive])}", "origin/#{branch}")
+
+    # Add a new commit in the worktree
+    File.write!(Path.join(worktree, "extra.txt"), "extra")
+    {_, 0} = System.cmd("git", ["add", "-A"], cd: worktree)
+    {_, 0} = System.cmd("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "extra"], cd: worktree)
+
+    assert :ok = Repos.force_push_head!(repo, worktree, branch)
+
+    {refs, 0} = System.cmd("git", ["ls-remote", "file://#{bare}", "refs/heads/#{branch}"])
+    assert refs =~ branch
+
+    Repos.remove_worktree!(repo, worktree)
+  end
+
+  test "force_push_head! raises on non-harness branch", %{repo: repo} do
+    Repos.ensure_base!(repo)
+    wt = Repos.create_worktree!(repo, "guard-fp-wt-#{System.unique_integer([:positive])}")
+
+    assert_raise RuntimeError, ~r/refusing to force-push/, fn ->
+      Repos.force_push_head!(repo, wt, "feature/human-authored")
+    end
+
+    Repos.remove_worktree!(repo, wt)
+  end
+
+  test "force_push_head! returns {:error, :lease_broken} when remote moved", %{repo: repo, bare: bare} do
+    Repos.ensure_base!(repo)
+
+    branch = "harness/lease-test-#{System.unique_integer([:positive])}"
+    seed = bare <> "-seed-#{System.unique_integer([:positive])}"
+    File.mkdir_p!(seed)
+    git!(seed, ["clone", "file://" <> bare, seed])
+    git!(seed, ["checkout", "-b", branch])
+    File.write!(Path.join(seed, "initial.txt"), "initial")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "initial"])
+    git!(seed, ["push", "origin", branch])
+
+    # Create the worktree now (tracking the initial commit A)
+    worktree = Repos.create_worktree_at!(repo, "lease-wt-#{System.unique_integer([:positive])}", "origin/#{branch}")
+
+    # After the worktree is created, the remote advances (breaking the lease)
+    File.write!(Path.join(seed, "remote_advance.txt"), "advanced")
+    git!(seed, ["add", "-A"])
+    git!(seed, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "remote advance"])
+    git!(seed, ["push", "origin", branch])
+    File.rm_rf!(seed)
+
+    # Add a local commit in the worktree that diverges from the now-advanced remote
+    File.write!(Path.join(worktree, "local.txt"), "local change")
+    {_, 0} = System.cmd("git", ["add", "-A"], cd: worktree)
+    {_, 0} = System.cmd("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "local"], cd: worktree)
+
+    # The remote has advanced past our tracking ref so --force-with-lease should fail
+    assert {:error, :lease_broken} = Repos.force_push_head!(repo, worktree, branch)
+
+    Repos.remove_worktree!(repo, worktree)
   end
 
   test "ensure_base! refreshes the working tree to the remote tip", %{repo: repo, bare: bare} do

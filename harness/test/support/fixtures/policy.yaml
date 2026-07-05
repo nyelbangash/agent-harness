@@ -31,6 +31,8 @@ plan:
   post_to_issue: false                   # addition: referenced by spec §4.4
 implement:
   max_fix_cycles: 2
+review:
+  rebase_max_attempts: 2
 ideate:
   critique_every: 5
   default_budget_minutes: 180

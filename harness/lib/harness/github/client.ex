@@ -142,12 +142,43 @@ defmodule Harness.GitHub.Client do
     end
   end
 
-  @doc "Fetch a single PR by number. Returns at least state, merged, merge_commit_sha."
+  @doc """
+  Fetch a single PR by number. Returns state, merged, merge_commit_sha,
+  mergeable, mergeable_state, and head_ref.
+
+  GitHub computes `mergeable` asynchronously — if the first response returns
+  `null`, this polls up to 3 more times (2 s apart) before giving up.
+  """
   def get_pull_request(repo, number) do
+    case do_get_pull_request(repo, number) do
+      {:ok, %{mergeable: nil}} -> wait_for_mergeability(repo, number, 3)
+      result -> result
+    end
+  end
+
+  defp do_get_pull_request(repo, number) do
     case request(:get, "/repos/#{repo}/pulls/#{number}") do
       {:ok,
-       %{status: 200, body: %{"state" => state, "merged" => merged, "merge_commit_sha" => sha}}} ->
-        {:ok, %{state: state, merged: merged, merge_commit_sha: sha}}
+       %{
+         status: 200,
+         body: %{
+           "state" => state,
+           "merged" => merged,
+           "merge_commit_sha" => sha,
+           "mergeable" => mergeable,
+           "mergeable_state" => mergeable_state,
+           "head" => %{"ref" => head_ref}
+         }
+       }} ->
+        {:ok,
+         %{
+           state: state,
+           merged: merged,
+           merge_commit_sha: sha,
+           mergeable: mergeable,
+           mergeable_state: mergeable_state,
+           head_ref: head_ref
+         }}
 
       {:ok, %{status: 404}} ->
         {:error, :not_found}
@@ -157,6 +188,17 @@ defmodule Harness.GitHub.Client do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp wait_for_mergeability(_repo, _number, 0), do: {:error, :mergeability_timeout}
+
+  defp wait_for_mergeability(repo, number, remaining) do
+    Process.sleep(2_000)
+
+    case do_get_pull_request(repo, number) do
+      {:ok, %{mergeable: nil}} -> wait_for_mergeability(repo, number, remaining - 1)
+      result -> result
     end
   end
 

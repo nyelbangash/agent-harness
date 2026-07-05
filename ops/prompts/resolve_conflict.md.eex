@@ -1,0 +1,23 @@
+You are resolving a git rebase conflict in a harness-authored PR branch.
+
+## Context
+The PR implements: <%= @issue_title %>
+
+## Issue body
+<%= @issue_body %>
+
+## Your task
+The following files have conflict markers from rebasing onto <%= @base_branch %>. For
+each file, resolve the conflict so the merged result implements the PR's intent while
+incorporating the upstream changes. Rewrite each file in its entirety with no conflict
+markers.
+
+<%= for {path, content} <- @conflicted_files do %>
+### <%= path %>
+```
+<%= content %>
+```
+<% end %>
+
+After writing all files, do NOT run git commands — the pipeline will handle staging and
+`rebase --continue`. Return a brief summary of how you resolved each conflict.
