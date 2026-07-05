@@ -20,6 +20,7 @@ defmodule Harness.Application do
       Harness.Repos,
       {Registry, keys: :unique, name: Harness.Runs.Registry},
       Harness.Runs.RunSupervisor,
+      Harness.Manager.LampServer,
       {Oban, Application.fetch_env!(:harness, Oban)},
       # Start to serve requests, typically the last entry
       HarnessWeb.Endpoint

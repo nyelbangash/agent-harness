@@ -12,9 +12,18 @@ defmodule Harness.Health do
 
     sha_info = %{"code_sha" => code_sha, "tree_sha" => tree_sha, "stale_code" => stale}
 
+    manager_sweep = Harness.Manager.LampServer.last_sweep_at()
+
+    manager_info = %{
+      "manager_last_sweep" =>
+        if(manager_sweep, do: DateTime.to_iso8601(manager_sweep), else: nil)
+    }
+
     if failing == [],
-      do: {:ok, Map.merge(%{"status" => "ok"}, sha_info)},
-      else: {:error, Map.merge(%{"status" => "degraded", "failing" => failing}, sha_info)}
+      do: {:ok, Map.merge(%{"status" => "ok"}, Map.merge(sha_info, manager_info))},
+      else:
+        {:error,
+         Map.merge(%{"status" => "degraded", "failing" => failing}, Map.merge(sha_info, manager_info))}
   end
 
   defp check_oban do
