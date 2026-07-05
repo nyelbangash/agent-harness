@@ -214,6 +214,7 @@ defmodule Harness.GitHub.ImplementWorkerTest do
     assert body =~ "Changed the widget guard"
     assert body =~ "modified test/CI files"
     assert body =~ "test/widget_test.exs"
+    assert Harness.GitHub.Provenance.harness_authored?(body)
   end
 
   test "red after max_fix_cycles demotes to plan with the failure transcript", ctx do
