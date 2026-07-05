@@ -86,6 +86,41 @@ defmodule Harness.Prompts do
     )
   end
 
+  def promote(session, idea, ancestors, subtree) do
+    render("promote_epic.md.eex",
+      seed_prompt: session.seed_prompt,
+      node_title: idea.title,
+      node_summary: idea.summary || "",
+      node_score: idea.score,
+      ancestor_chain: format_ancestors_for_promote(ancestors),
+      subtree_outline: format_subtree(subtree),
+      artifact: truncate(Ideation.read_artifact(idea) || "(no artifact)", 8_000),
+      subtree_artifacts: format_subtree_artifacts(subtree)
+    )
+  end
+
+  defp format_ancestors_for_promote(nodes) do
+    Enum.map_join(nodes, "\n", fn n ->
+      "#{String.duplicate("  ", n.depth)}- #{n.title}: #{n.summary}"
+    end)
+  end
+
+  defp format_subtree(nodes) do
+    Enum.map_join(nodes, "\n", fn n ->
+      "#{n.id} · d#{n.depth} · #{n.status} · #{n.score} · #{n.title}"
+    end)
+  end
+
+  defp format_subtree_artifacts(nodes) do
+    nodes
+    |> Enum.filter(&(&1.artifact_path != nil))
+    |> Enum.take(5)
+    |> Enum.map_join("\n", fn n ->
+      content = truncate(Ideation.read_artifact(n) || "", 2_000)
+      "### #{n.title}\n\n#{content}\n"
+    end)
+  end
+
   defp format_ancestors(node) do
     node
     |> Ideation.ancestor_chain()

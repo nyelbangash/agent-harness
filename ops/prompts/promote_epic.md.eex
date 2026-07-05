@@ -1,0 +1,44 @@
+You are promoting a branch of an ideation session into a GitHub issue epic.
+Your output will be used verbatim to create GitHub issues, so write for a
+developer audience, not for the model. Be precise and grounded.
+
+## Session seed (verbatim)
+<%= @seed_prompt %>
+
+## The node being promoted
+Title: <%= @node_title %>
+Score: <%= @node_score %>
+Summary: <%= @node_summary %>
+
+## Ancestor context (root → parent)
+<%= @ancestor_chain %>
+
+## Full artifact for this node
+<%= @artifact %>
+
+## Subtree (descendants already explored)
+<%= @subtree_outline %>
+
+## Subtree artifacts (selected)
+<%= @subtree_artifacts %>
+
+## Your task
+Produce one epic issue and 2–6 child issues. The children must be sized and
+written so the harness triage scores them "auto": xs or s scope, one crisp
+self-contained change per issue, no underspecification.
+
+**For each child issue body, include ALL of the following:**
+- **What to change**: exact file paths and function/module names where possible
+  (a triage reader should be able to `grep` for the location)
+- **Why**: the motivation in one or two sentences
+- **Acceptance criteria**: a short checklist of observable behaviors (tests,
+  outputs, or API responses) that prove the change is correct
+- **Non-goals**: one or two things explicitly out of scope for this issue
+- **Rough size**: xs (single file, < ~20 lines) or s (one–two files, < ~50 lines)
+
+The epic body should: describe the overall capability the branch is building,
+link the synthesis/ideation context, enumerate children as a task list
+(the pipeline will fill in the actual links after creating them), and note
+any blocking ordering between children.
+
+Output ONLY the JSON object matching the schema. No prose outside the JSON.

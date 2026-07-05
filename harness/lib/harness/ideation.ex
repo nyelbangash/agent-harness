@@ -11,7 +11,7 @@ defmodule Harness.Ideation do
 
   import Ecto.Query
 
-  alias Harness.Ideation.{Idea, Session}
+  alias Harness.Ideation.{Idea, Promotion, Session}
   alias Harness.Repo
 
   # -- pubsub -----------------------------------------------------------------
@@ -227,6 +227,38 @@ defmodule Harness.Ideation do
       {:ok, content} -> content
       _ -> nil
     end
+  end
+
+  # -- promotions -------------------------------------------------------------
+
+  @doc "All descendants of a node (for promotion context)."
+  def subtree(%Idea{id: id, session_id: sid}) do
+    all = tree(sid)
+    descendants(all, id, [])
+  end
+
+  defp descendants(all, parent_id, acc) do
+    children = Enum.filter(all, &(&1.parent_id == parent_id))
+    Enum.reduce(children, acc ++ children, fn child, a -> descendants(all, child.id, a) end)
+  end
+
+  def create_promotion!(attrs) do
+    %Promotion{}
+    |> Promotion.changeset(attrs)
+    |> Repo.insert!()
+  end
+
+  def update_promotion!(%Promotion{} = p, attrs) do
+    p |> Promotion.changeset(attrs) |> Repo.update!()
+  end
+
+  def latest_promotion(idea_id) do
+    from(p in Promotion,
+      where: p.idea_id == ^idea_id,
+      order_by: [desc: p.id],
+      limit: 1
+    )
+    |> Repo.one()
   end
 
   # -- job orchestration ------------------------------------------------------

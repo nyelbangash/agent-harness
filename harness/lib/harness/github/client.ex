@@ -66,6 +66,34 @@ defmodule Harness.GitHub.Client do
     end
   end
 
+  @doc "Create an issue. Returns `{:ok, %{number: n, url: html_url}}`."
+  def create_issue(repo, title, body, opts \\ []) do
+    payload =
+      %{title: title, body: body}
+      |> maybe_put(:assignees, Keyword.get(opts, :assignees))
+      |> maybe_put(:labels, Keyword.get(opts, :labels))
+
+    case request(:post, "/repos/#{repo}/issues", json: payload) do
+      {:ok, %{status: 201, body: %{"number" => n, "html_url" => url}}} ->
+        {:ok, %{number: n, url: url}}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Update an issue (PATCH). `attrs` may include `:body`, `:title`, etc."
+  def update_issue(repo, number, attrs) do
+    case request(:patch, "/repos/#{repo}/issues/#{number}", json: attrs) do
+      {:ok, %{status: 200}} -> :ok
+      {:ok, %{status: status}} -> {:error, {:http_status, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @doc "Open a PR. Returns `{:ok, %{number: n, url: html_url}}`."
   def create_pull_request(repo, head, base, title, body) do
     case request(:post, "/repos/#{repo}/pulls",
@@ -102,6 +130,9 @@ defmodule Harness.GitHub.Client do
         {:error, reason}
     end
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, val), do: Map.put(map, key, val)
 
   defp request(method, path, opts \\ []) do
     with {:ok, pat} <- Harness.Secrets.github_pat() do

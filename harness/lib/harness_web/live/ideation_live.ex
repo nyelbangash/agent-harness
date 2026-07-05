@@ -24,6 +24,8 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:page_title, "Ideation")
      |> assign(:sessions, Ideation.list_sessions())
      |> assign(:selected_node, nil)
+     |> assign(:promote_modal, nil)
+     |> assign(:policy_repos, policy.github.repos |> Enum.map(& &1.name))
      |> assign(:policy, policy)
      |> assign(:window_note, Policy.window_note(policy: policy, now: now))
      |> assign(:budget_minutes, budget)
@@ -94,9 +96,44 @@ defmodule HarnessWeb.IdeationLive do
 
   def handle_event("select_node", %{"id" => id}, socket) do
     idea = Ideation.get_idea!(String.to_integer(id))
+    promotion = Ideation.latest_promotion(idea.id)
 
     {:noreply,
-     assign(socket, :selected_node, %{idea: idea, artifact: Ideation.read_artifact(idea)})}
+     assign(socket, :selected_node, %{
+       idea: idea,
+       artifact: Ideation.read_artifact(idea),
+       promotion: promotion
+     })}
+  end
+
+  def handle_event("show_promote_modal", %{"id" => id}, socket) do
+    idea = Ideation.get_idea!(String.to_integer(id))
+    {:noreply, assign(socket, :promote_modal, %{idea: idea})}
+  end
+
+  def handle_event("cancel_promote", _params, socket) do
+    {:noreply, assign(socket, :promote_modal, nil)}
+  end
+
+  def handle_event("promote", %{"target_repo" => repo}, socket) do
+    modal = socket.assigns.promote_modal
+
+    if repo in socket.assigns.policy_repos and modal do
+      %{
+        session_id: socket.assigns.session.id,
+        idea_id: modal.idea.id,
+        target_repo: repo
+      }
+      |> Harness.Ideation.PromoteWorker.new()
+      |> Oban.insert()
+
+      {:noreply,
+       socket
+       |> assign(:promote_modal, nil)
+       |> put_flash(:info, "Promote queued — progress at /runs")}
+    else
+      {:noreply, put_flash(socket, :error, "Invalid target repo")}
+    end
   end
 
   def handle_event("stop_session", %{"id" => id}, socket) do
@@ -105,6 +142,22 @@ defmodule HarnessWeb.IdeationLive do
   end
 
   @impl true
+  def handle_info({:promotion_completed, promotion}, socket) do
+    socket =
+      if socket.assigns[:selected_node] &&
+           socket.assigns.selected_node.idea.id == promotion.idea_id do
+        assign(socket, :selected_node, %{
+          socket.assigns.selected_node
+          | idea: Ideation.get_idea!(promotion.idea_id),
+            promotion: promotion
+        })
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
   def handle_info({event, _}, socket)
       when event in [:session_started, :session_updated] do
     socket = assign(socket, :sessions, Ideation.list_sessions())
@@ -124,6 +177,7 @@ defmodule HarnessWeb.IdeationLive do
     {:noreply,
      socket
      |> assign(:policy, policy)
+     |> assign(:policy_repos, policy.github.repos |> Enum.map(& &1.name))
      |> assign(:window_note, Policy.window_note(policy: policy, now: now))}
   end
 
@@ -456,6 +510,26 @@ defmodule HarnessWeb.IdeationLive do
                       :if={@selected_node.artifact}
                       class="font-body text-[12px] text-ink whitespace-pre-wrap leading-relaxed"
                     >{@selected_node.artifact}</pre>
+                    <button
+                      :if={@session && @session.status == "synthesized" &&
+                             @selected_node.idea.score >= 7.5 &&
+                             @policy_repos != [] &&
+                             (is_nil(@selected_node.promotion) ||
+                                @selected_node.promotion.status == "failed")}
+                      phx-click="show_promote_modal"
+                      phx-value-id={@selected_node.idea.id}
+                      class="mt-3 font-display uppercase text-[10px] tracking-widest px-3 py-1.5 bg-accent text-bg rounded-sm"
+                    >
+                      Promote to epic
+                    </button>
+                    <a
+                      :if={@selected_node.promotion && @selected_node.promotion.status == "succeeded"}
+                      href={@selected_node.promotion.epic_url}
+                      target="_blank"
+                      class="mt-2 block font-mono text-[11px] text-accent underline"
+                    >
+                      Epic: {@selected_node.promotion.epic_url}
+                    </a>
                   </div>
                 </div>
               </div>
@@ -468,6 +542,43 @@ defmodule HarnessWeb.IdeationLive do
               </div>
             </div>
           </section>
+        </div>
+      </div>
+      <div
+        :if={@promote_modal}
+        class="fixed inset-0 bg-bg/80 flex items-center justify-center z-50"
+      >
+        <div class="bg-surface border border-surface-2 rounded-sm p-6 w-80 space-y-4">
+          <h2 class="font-display uppercase tracking-[0.14em] text-sm text-ink">
+            Promote to epic
+          </h2>
+          <p class="font-body text-sm text-ink-dim">
+            {@promote_modal.idea.title}
+            (score {@promote_modal.idea.score})
+          </p>
+          <form phx-submit="promote" class="space-y-3">
+            <select
+              name="target_repo"
+              class="w-full bg-surface border border-surface-2 rounded-sm px-2 py-1.5 font-mono text-sm text-ink"
+            >
+              <option :for={repo <- @policy_repos} value={repo}>{repo}</option>
+            </select>
+            <div class="flex gap-2 justify-end">
+              <button
+                type="button"
+                phx-click="cancel_promote"
+                class="font-display uppercase text-[10px] tracking-widest px-3 py-1.5 border border-surface-2 text-ink-dim rounded-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="font-display uppercase text-[10px] tracking-widest px-3 py-1.5 bg-accent text-bg rounded-sm"
+              >
+                Confirm
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </Layouts.app>
