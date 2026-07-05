@@ -104,15 +104,56 @@ defmodule HarnessWeb.IdeationLive do
   def handle_event("select_node", %{"id" => id}, socket) do
     idea = Ideation.get_idea!(String.to_integer(id))
     artifact = Ideation.read_artifact(idea)
+    chain = Ideation.ancestor_chain(idea)
+    ancestors = Enum.drop(chain, -1)
+    children = Ideation.children(idea)
+    siblings = Ideation.siblings(idea)
+    sibling_index = Enum.find_index(siblings, &(&1.id == idea.id)) || 0
 
     {:noreply,
      socket
-     |> assign(:selected_node, %{idea: idea, artifact: artifact})
+     |> assign(:selected_node, %{
+       idea: idea,
+       artifact: artifact,
+       ancestors: ancestors,
+       children: children,
+       siblings: siblings,
+       sibling_index: sibling_index
+     })
      |> assign(:artifact_open, artifact != nil)}
   end
 
   def handle_event("close_artifact", _params, socket) do
     {:noreply, assign(socket, :artifact_open, false)}
+  end
+
+  def handle_event("modal_keydown", %{"key" => key}, socket) do
+    case String.downcase(key) do
+      "escape" ->
+        {:noreply, assign(socket, :artifact_open, false)}
+
+      "arrowleft" ->
+        navigate_sibling(socket, -1)
+
+      "arrowright" ->
+        navigate_sibling(socket, +1)
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  defp navigate_sibling(%{assigns: %{selected_node: nil}} = socket, _dir),
+    do: {:noreply, socket}
+
+  defp navigate_sibling(%{assigns: %{selected_node: %{siblings: []}}} = socket, _dir),
+    do: {:noreply, socket}
+
+  defp navigate_sibling(socket, dir) do
+    %{siblings: siblings, sibling_index: idx} = socket.assigns.selected_node
+    new_idx = Integer.mod(idx + dir, length(siblings))
+    sibling = Enum.at(siblings, new_idx)
+    handle_event("select_node", %{"id" => to_string(sibling.id)}, socket)
   end
 
   def handle_event("stop_session", %{"id" => id}, socket) do
@@ -587,14 +628,31 @@ defmodule HarnessWeb.IdeationLive do
       <div
         :if={@artifact_open && @selected_node && @selected_node.artifact}
         id="artifact-modal"
-        phx-window-keydown="close_artifact"
-        phx-key="escape"
+        phx-window-keydown="modal_keydown"
         class="fixed inset-0 z-50 flex items-center justify-center p-6"
         aria-modal="true"
         role="dialog"
       >
         <div class="absolute inset-0 bg-bg/85" phx-click="close_artifact" aria-hidden="true"></div>
-        <div class="relative w-full max-w-3xl max-h-[72vh] flex flex-col rounded-sm bg-surface border border-surface-2 shadow-2xl">
+        <div class="relative w-full max-w-3xl max-h-[80vh] flex flex-col rounded-sm bg-surface border border-surface-2 shadow-2xl">
+          <%# Breadcrumb — hidden for root nodes (ancestors is empty) %>
+          <div
+            :if={@selected_node.ancestors != []}
+            class="flex items-center gap-1 flex-wrap px-5 py-2 border-b border-surface-2 shrink-0"
+          >
+            <span :for={anc <- @selected_node.ancestors} class="flex items-center gap-1">
+              <button
+                phx-click="select_node"
+                phx-value-id={anc.id}
+                class="font-mono text-[10px] text-ink-dim hover:text-accent"
+              >
+                {anc.title}
+              </button>
+              <span class="font-mono text-[10px] text-ink-dim/40">›</span>
+            </span>
+          </div>
+
+          <%# Modal header: title, meta, close button %>
           <div class="flex items-center gap-3 px-5 py-3 border-b border-surface-2 shrink-0">
             <span class="font-display text-sm text-ink">{@selected_node.idea.title}</span>
             <span class="font-mono text-[10px] text-ink-dim tabular-nums">
@@ -608,8 +666,30 @@ defmodule HarnessWeb.IdeationLive do
               Close
             </button>
           </div>
+
+          <%# Artifact body %>
           <div class="artifact-prose overflow-y-auto px-5 py-4 min-h-0">
             {artifact_html(@selected_node.artifact)}
+          </div>
+
+          <%# Children list — hidden when node is a leaf %>
+          <div
+            :if={@selected_node.children != []}
+            class="border-t border-surface-2 px-5 py-3 shrink-0"
+          >
+            <h4 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-2">
+              Children
+            </h4>
+            <div class="flex flex-wrap gap-2">
+              <button
+                :for={child <- @selected_node.children}
+                phx-click="select_node"
+                phx-value-id={child.id}
+                class="font-mono text-[10px] px-2 py-1 rounded-sm border border-surface-2 text-ink-dim hover:border-accent hover:text-accent"
+              >
+                {child.title} · {child.score}
+              </button>
+            </div>
           </div>
         </div>
       </div>
