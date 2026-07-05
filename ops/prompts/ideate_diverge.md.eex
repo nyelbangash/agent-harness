@@ -26,6 +26,10 @@ The following repositories are checked out for reference. Use the **Read** and *
 - **<%= repo %>**: `<%= path %>`
 <% end %>
 <% end %>
+<%= if @nudge && @nudge != "" do %>
+## Operator nudge (address this in your response — consumed after this iteration)
+<%= @nudge %>
+<% end %>
 ## Your task
 Produce 2–4 children. For each: a short title, a one-paragraph summary, a
 calibrated score 0–10 for how promising it is relative to the seed, and an

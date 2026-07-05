@@ -215,6 +215,110 @@ defmodule Harness.Ideation.WorkersTest do
     assert {:cancel, :killed} = perform_job(IterationWorker, %{session_id: session.id})
   end
 
+  test "stored nudge appears in the next iteration prompt exactly once, then is consumed" do
+    %{session: session} = start()
+    Ideation.set_nudge!(session, "explore cost reduction angles")
+
+    FakeRunner.script([
+      {:ok,
+       Harness.Fixtures.runner_result(
+         structured_output:
+           diverge_output([
+             %{"title" => "x", "summary" => "x", "score" => 7.0, "artifact" => "x"},
+             %{"title" => "y", "summary" => "y", "score" => 6.0, "artifact" => "y"}
+           ])
+       )}
+    ])
+
+    assert :ok = perform_job(IterationWorker, %{session_id: session.id})
+
+    [spec] = FakeRunner.executed_specs()
+    # The nudge section header must appear in the first prompt
+    assert spec.prompt =~ "## Operator nudge", "nudge section must appear in first prompt"
+    assert spec.prompt =~ "explore cost reduction angles", "nudge text must appear in first prompt"
+
+    session = Ideation.get_session!(session.id)
+    assert is_nil(session.nudge), "nudge must be cleared from session after first use"
+
+    # second iteration — the nudge SECTION must not be rendered (the journal may
+    # still contain the logged line, but the instruction block itself is gone)
+    FakeRunner.script([
+      {:ok,
+       Harness.Fixtures.runner_result(
+         structured_output: %{
+           "title" => "x refined",
+           "summary" => "refined",
+           "score" => 7.0,
+           "artifact" => "deeper artifact",
+           "journal" => ["dug deeper into x"]
+         }
+       )}
+    ])
+
+    assert :ok = perform_job(IterationWorker, %{session_id: session.id})
+
+    [spec2] = FakeRunner.executed_specs()
+    refute spec2.prompt =~ "## Operator nudge", "nudge section must not appear in second prompt"
+  end
+
+  test "focused node is chosen regardless of score, then forced_node_id is cleared" do
+    %{session: session, root: root} = start()
+
+    # low_score is at depth 1 (odd → develop mode); script a develop response
+    low_score = Ideation.add_child!(session, root, %{title: "low-score", score: 2.0}, "")
+    _high_score = Ideation.add_child!(session, root, %{title: "high-score", score: 9.0}, "")
+
+    Ideation.set_forced_node!(session, low_score.id)
+
+    FakeRunner.script([
+      {:ok,
+       Harness.Fixtures.runner_result(
+         structured_output: %{
+           "title" => "low-score refined",
+           "summary" => "developed",
+           "score" => 3.0,
+           "artifact" => "refined artifact",
+           "journal" => ["operator focus applied"]
+         }
+       )}
+    ])
+
+    assert :ok = perform_job(IterationWorker, %{session_id: session.id})
+
+    # The low-score node was forced even though high-score had much higher priority
+    assert Ideation.get_idea!(low_score.id).status == "expanded",
+           "forced node must be marked expanded after iteration"
+
+    session = Ideation.get_session!(session.id)
+    assert is_nil(session.forced_node_id), "forced_node_id must be cleared after use"
+  end
+
+  test "synthesize_now stops with operator_synthesis reason and produces synthesis" do
+    %{session: session, root: root} = start()
+    Ideation.add_child!(session, root, %{title: "branch", score: 7.0}, "artifact text")
+
+    Ideation.stop_session!(session, :operator_synthesis)
+
+    session = Ideation.get_session!(session.id)
+    assert session.status == "stopped"
+    assert session.stop_reason == "operator_synthesis"
+
+    assert_enqueued(worker: CritiqueWorker, args: %{session_id: session.id, final: true})
+
+    FakeRunner.script([
+      fn spec ->
+        File.write!(Path.join(spec.cwd, "SYNTHESIS.md"), "# Synthesis\n\noperator-triggered")
+        {:ok, Harness.Fixtures.runner_result()}
+      end
+    ])
+
+    assert :ok = perform_job(CritiqueWorker, %{session_id: session.id, final: true})
+
+    session = Ideation.get_session!(session.id)
+    assert session.status == "synthesized"
+    assert File.read!(session.synthesis_path) =~ "operator-triggered"
+  end
+
   test "no write tools are exposed to ideation iteration runs" do
     %{session: session} = start()
 

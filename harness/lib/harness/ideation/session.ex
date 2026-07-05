@@ -26,6 +26,8 @@ defmodule Harness.Ideation.Session do
     field :synthesis_path, :string
     field :started_at, :utc_datetime_usec
     field :ended_at, :utc_datetime_usec
+    field :nudge, :string
+    field :forced_node_id, :integer
 
     has_many :ideas, Harness.Ideation.Idea
 
@@ -49,7 +51,9 @@ defmodule Harness.Ideation.Session do
       :critique_no_progress_streak,
       :synthesis_path,
       :started_at,
-      :ended_at
+      :ended_at,
+      :nudge,
+      :forced_node_id
     ])
     |> validate_required([:seed_prompt])
     |> validate_inclusion(:status, @statuses)

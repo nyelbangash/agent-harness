@@ -22,6 +22,10 @@ The following repositories are checked out for reference. Use the **Read** and *
 - **<%= repo %>**: `<%= path %>`
 <% end %>
 <% end %>
+<%= if @nudge && @nudge != "" do %>
+## Operator nudge (address this in your response — consumed after this iteration)
+<%= @nudge %>
+<% end %>
 ## Your task
 Produce ONE deepened idea: a refined title, a tighter summary, a calibrated
 score 0–10, and an "artifact" — several paragraphs that genuinely advance the

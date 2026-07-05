@@ -115,6 +115,16 @@ defmodule Harness.Ideation do
 
   def stop_session!(%Session{} = session, _reason), do: session
 
+  @doc "Store an operator nudge that the next iteration must address (consumed once)."
+  def set_nudge!(%Session{} = session, nudge) when is_binary(nudge) do
+    update_session!(session, %{nudge: nudge})
+  end
+
+  @doc "Force the next iteration to develop a specific frontier node (consumed once)."
+  def set_forced_node!(%Session{} = session, node_id) when is_integer(node_id) do
+    update_session!(session, %{forced_node_id: node_id})
+  end
+
   # -- ideas / tree -----------------------------------------------------------
 
   def tree(session_id) do
@@ -279,6 +289,13 @@ defmodule Harness.Ideation do
 
   def read_artifact(%Idea{artifact_path: path}) do
     case File.read(path) do
+      {:ok, content} -> content
+      _ -> nil
+    end
+  end
+
+  def read_synthesis(session) do
+    case File.read(synthesis_path(session)) do
       {:ok, content} -> content
       _ -> nil
     end
