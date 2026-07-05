@@ -213,6 +213,28 @@ defmodule Harness.Ideation do
     )
   end
 
+  @doc "Top N ideas for a session ordered by score descending."
+  def top_nodes(session_id, limit \\ 5) do
+    from(i in Idea,
+      where: i.session_id == ^session_id,
+      order_by: [desc: i.score, asc: i.id],
+      limit: ^limit
+    )
+    |> Repo.all()
+  end
+
+  @doc "Aggregate token usage across all ideas in a session. Returns {tokens_in, tokens_out}."
+  def token_totals(session_id) do
+    case from(i in Idea,
+           where: i.session_id == ^session_id,
+           select: {sum(i.tokens_in), sum(i.tokens_out)}
+         )
+         |> Repo.one() do
+      {tin, tout} -> {tin || 0, tout || 0}
+      _ -> {0, 0}
+    end
+  end
+
   # -- artifacts / journal ----------------------------------------------------
 
   def session_dir(%Session{id: id}) do
