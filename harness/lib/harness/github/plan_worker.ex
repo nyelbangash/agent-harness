@@ -76,7 +76,7 @@ defmodule Harness.GitHub.PlanWorker do
 
       triage = GitHub.latest_triage(issue.id)
       default_branch = Repos.default_branch(issue.repo)
-      prompt = Harness.Prompts.plan(issue, comments, triage, default_branch, failure_transcript)
+      prompt = Harness.Prompts.plan(issue, comments, triage, default_branch, failure_transcript, policy.budgets.plan_max_turns)
       issue = GitHub.transition!(issue, "planning")
 
       spec = %RunSpec{
