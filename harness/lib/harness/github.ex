@@ -223,6 +223,23 @@ defmodule Harness.GitHub do
 
   # -- plans ------------------------------------------------------------------
 
+  @doc """
+  After posting a harness-authored comment, advance `github_updated_at` in the
+  DB to match the comment's `created_at`. This prevents the next poll sweep from
+  seeing the comment-induced bump as operator activity.
+  """
+  def acknowledge_comment_timestamp!(issue, created_at_iso) do
+    case DateTime.from_iso8601(created_at_iso) do
+      {:ok, dt, _} ->
+        issue
+        |> Issue.changeset(%{github_updated_at: dt})
+        |> Repo.update!()
+
+      _ ->
+        issue
+    end
+  end
+
   def record_plan!(attrs) do
     issue_id = Map.fetch!(attrs, :issue_id)
 
