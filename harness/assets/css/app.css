@@ -151,6 +151,14 @@ body {
   }
 }
 
+/* fixed-viewport pages (Runs): content fills the window exactly and panes
+   scroll internally — same zoom arithmetic as .rail-fit, minus main's py-6 */
+@media (min-width: 1280px) {
+  .page-fit {
+    height: calc(100vh / var(--app-zoom) - 3rem);
+  }
+}
+
 /* every place data appears reads like an odometer */
 .tabular, table, [data-numeric] {
   font-variant-numeric: tabular-nums;

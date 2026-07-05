@@ -92,7 +92,7 @@ defmodule HarnessWeb.RunsLive do
       usage_mode={@usage_mode}
       usage_health={@usage_health}
     >
-      <div class="xl:h-[calc(100vh-3rem)] xl:flex xl:flex-col xl:min-h-0 xl:overflow-hidden">
+      <div class="page-fit xl:flex xl:flex-col xl:min-h-0 xl:overflow-hidden">
         <h1 class="font-display uppercase tracking-[0.16em] text-sm text-ink-dim mb-4">Runs</h1>
 
         <div
