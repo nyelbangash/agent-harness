@@ -6,9 +6,15 @@ defmodule Harness.Health do
     results = [check_oban(), check_poll_heartbeat(), check_policy()]
     failing = for {:error, name} <- results, do: name
 
+    code_sha = get_code_sha()
+    tree_sha = get_tree_sha()
+    stale = code_sha != nil and tree_sha != nil and code_sha != tree_sha
+
+    sha_info = %{"code_sha" => code_sha, "tree_sha" => tree_sha, "stale_code" => stale}
+
     if failing == [],
-      do: {:ok, %{"status" => "ok"}},
-      else: {:error, %{"status" => "degraded", "failing" => failing}}
+      do: {:ok, Map.merge(%{"status" => "ok"}, sha_info)},
+      else: {:error, Map.merge(%{"status" => "degraded", "failing" => failing}, sha_info)}
   end
 
   defp check_oban do
@@ -60,6 +66,23 @@ defmodule Harness.Health do
     case :persistent_term.get(@pt_policy_key, nil) do
       nil -> 2
       policy -> policy.github.poll_minutes
+    end
+  end
+
+  defp get_code_sha do
+    Application.get_env(:harness, :build_sha_override, Harness.BuildInfo.code_sha())
+  end
+
+  defp get_tree_sha do
+    case Application.get_env(:harness, :tree_sha_override) do
+      nil ->
+        case System.cmd("git", ["rev-parse", "--short", "HEAD"], stderr_to_stdout: false) do
+          {sha, 0} -> String.trim(sha)
+          _ -> nil
+        end
+
+      override ->
+        override
     end
   end
 end
