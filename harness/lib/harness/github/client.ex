@@ -190,6 +190,44 @@ defmodule Harness.GitHub.Client do
     end
   end
 
+  @doc "Inline diff comments on a PR since an ISO8601 timestamp (nil = all)."
+  def list_pr_review_comments(repo, pr_number, since \\ nil) do
+    params = Keyword.reject([per_page: 100, since: since], fn {_, v} -> is_nil(v) end)
+
+    case request(:get, "/repos/#{repo}/pulls/#{pr_number}/comments", params: params) do
+      {:ok, %{status: 200, body: comments}} when is_list(comments) -> {:ok, comments}
+      {:ok, %{status: status}} -> {:error, {:http_status, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "PR conversation comments (issues endpoint) since an ISO8601 timestamp (nil = all)."
+  def list_pr_issue_comments(repo, pr_number, since \\ nil) do
+    params = Keyword.reject([per_page: 100, since: since], fn {_, v} -> is_nil(v) end)
+
+    case request(:get, "/repos/#{repo}/issues/#{pr_number}/comments", params: params) do
+      {:ok, %{status: 200, body: comments}} when is_list(comments) -> {:ok, comments}
+      {:ok, %{status: status}} -> {:error, {:http_status, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Post a threaded reply to an inline review comment. Returns `{:ok, id, created_at}`."
+  def post_pr_review_comment_reply(repo, pr_number, comment_id, body) do
+    case request(:post, "/repos/#{repo}/pulls/#{pr_number}/comments/#{comment_id}/replies",
+           json: %{body: body}
+         ) do
+      {:ok, %{status: 201, body: %{"id" => id, "created_at" => created_at}}} ->
+        {:ok, id, created_at}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @doc "Find the open PR whose head is `head` (e.g. \"owner:branch\"), for 422 reconciliation."
   def find_pull_request(repo, head) do
     case request(:get, "/repos/#{repo}/pulls", params: [head: head, state: "open", per_page: 1]) do

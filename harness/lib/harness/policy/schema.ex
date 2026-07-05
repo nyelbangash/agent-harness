@@ -14,7 +14,8 @@ defmodule Harness.Policy.Schema do
               plan: "sonnet",
               ideate: "sonnet",
               critique: "opus",
-              escalation: "opus"
+              escalation: "opus",
+              respond: "sonnet"
   end
 
   defmodule Schedule do

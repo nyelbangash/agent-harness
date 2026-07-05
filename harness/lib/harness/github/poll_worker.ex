@@ -59,28 +59,91 @@ defmodule Harness.GitHub.PollWorker do
     state = GitHub.repo_state(repo.name)
 
     if due?(state, poll_minutes) do
-      case Client.list_assigned_issues(repo.name, login, state.etag) do
-        :not_modified ->
-          GitHub.update_repo_state!(state, %{last_polled_at: DateTime.utc_now(), last_status: 304})
+      state =
+        case Client.list_assigned_issues(repo.name, login, state.etag) do
+          :not_modified ->
+            GitHub.update_repo_state!(state, %{last_polled_at: DateTime.utc_now(), last_status: 304})
 
-        {:ok, issues, etag} ->
-          Enum.each(issues, &handle_issue(repo.name, &1))
+          {:ok, issues, etag} ->
+            Enum.each(issues, &handle_issue(repo.name, &1))
 
-          # absence-from-listing only means "closed" when the listing was
-          # complete — at the page cap an open issue may simply be on page 2
-          if length(issues) < 100, do: reconcile_closed(repo.name, issues)
+            # absence-from-listing only means "closed" when the listing was
+            # complete — at the page cap an open issue may simply be on page 2
+            if length(issues) < 100, do: reconcile_closed(repo.name, issues)
 
-          GitHub.update_repo_state!(state, %{
-            etag: etag,
-            last_polled_at: DateTime.utc_now(),
-            last_status: 200
-          })
+            GitHub.update_repo_state!(state, %{
+              etag: etag,
+              last_polled_at: DateTime.utc_now(),
+              last_status: 200
+            })
 
-        {:error, reason} ->
-          Logger.warning("poll #{repo.name} failed: #{inspect(reason)}")
-          GitHub.update_repo_state!(state, %{last_polled_at: DateTime.utc_now(), last_status: 0})
+          {:error, reason} ->
+            Logger.warning("poll #{repo.name} failed: #{inspect(reason)}")
+            GitHub.update_repo_state!(state, %{last_polled_at: DateTime.utc_now(), last_status: 0})
+        end
+
+      poll_pr_comments(repo.name, login, state)
+      GitHub.update_repo_state!(state, %{pr_comments_since: DateTime.utc_now()})
+    end
+  end
+
+  defp poll_pr_comments(repo_name, login, state) do
+    since_dt = state.pr_comments_since || DateTime.add(DateTime.utc_now(), -86_400, :second)
+    since_iso = DateTime.to_iso8601(since_dt)
+
+    pr_open_issues =
+      Harness.Repo.all(
+        from(i in Issue,
+          where: i.repo == ^repo_name and i.pipeline_state == "pr_open" and not is_nil(i.pr_number)
+        )
+      )
+
+    for issue <- pr_open_issues do
+      review_comments =
+        case Client.list_pr_review_comments(repo_name, issue.pr_number, since_iso) do
+          {:ok, comments} -> Enum.map(comments, &{&1, "review"})
+          {:error, _} -> []
+        end
+
+      issue_comments =
+        case Client.list_pr_issue_comments(repo_name, issue.pr_number, since_iso) do
+          {:ok, comments} -> Enum.map(comments, &{&1, "issue"})
+          {:error, _} -> []
+        end
+
+      for {comment, comment_type} <- review_comments ++ issue_comments do
+        author = get_in(comment, ["user", "login"])
+        body = comment["body"] || ""
+
+        if author == login and not Provenance.harness_authored?(body) do
+          attrs = %{
+            repo: repo_name,
+            pr_number: issue.pr_number,
+            comment_id: comment["id"],
+            comment_type: comment_type
+          }
+
+          case GitHub.maybe_insert_pr_comment_handle!(attrs) do
+            {:inserted, handle} ->
+              %{
+                pr_comment_handle_id: handle.id,
+                issue_id: issue.id,
+                comment_body: body,
+                comment_path: comment["path"],
+                comment_line: comment["line"],
+                comment_diff_hunk: comment["diff_hunk"]
+              }
+              |> Harness.GitHub.RespondWorker.new()
+              |> Oban.insert()
+
+            :already_handled ->
+              :ok
+          end
+        end
       end
     end
+
+    :ok
   end
 
   defp due?(%{last_polled_at: nil}, _minutes), do: true

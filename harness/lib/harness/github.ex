@@ -7,7 +7,7 @@ defmodule Harness.GitHub do
 
   import Ecto.Query
 
-  alias Harness.GitHub.{Issue, Plan, RepoState, TriageDecision, TriageOutcome}
+  alias Harness.GitHub.{Issue, Plan, PrCommentHandle, RepoState, TriageDecision, TriageOutcome}
   alias Harness.Repo
 
   @topic "issues"
@@ -264,6 +264,31 @@ defmodule Harness.GitHub do
 
   def update_repo_state!(%RepoState{} = state, attrs) do
     state |> RepoState.changeset(attrs) |> Repo.update!()
+  end
+
+  # -- pr comment handles -------------------------------------------------------
+
+  @doc """
+  Insert a `PrCommentHandle` with `on_conflict: :nothing`. Returns
+  `{:inserted, handle}` when the row is new, or `:already_handled` when
+  the unique constraint fired (the comment was already processed).
+  Mirrors `record_triage_outcome!/1`.
+  """
+  def maybe_insert_pr_comment_handle!(attrs) do
+    handle =
+      %PrCommentHandle{}
+      |> PrCommentHandle.changeset(attrs)
+      |> Repo.insert!(
+        on_conflict: :nothing,
+        conflict_target: [:repo, :comment_id, :comment_type]
+      )
+
+    if is_nil(handle.id), do: :already_handled, else: {:inserted, handle}
+  end
+
+  @doc "Record the outcome action and run_id on a handle after RespondWorker completes."
+  def update_pr_comment_handle!(%PrCommentHandle{} = handle, attrs) do
+    handle |> PrCommentHandle.changeset(attrs) |> Repo.update!()
   end
 
   defp broadcast(issue) do
