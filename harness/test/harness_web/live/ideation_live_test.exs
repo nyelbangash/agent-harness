@@ -138,4 +138,92 @@ defmodule HarnessWeb.IdeationLiveTest do
 
     assert Ideation.get_session!(session.id).status == "stopped"
   end
+
+  test "tree SVG has semantic zoom structure: initial zoom level and CSS classes on nodes", %{
+    conn: conn
+  } do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+    Ideation.add_child!(session, root, %{title: "Test Node", summary: "detail", score: 7.0}, "")
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    assert html =~ ~s(data-zoom-level="labels")
+    assert html =~ ~s(class="node-label)
+    assert html =~ ~s(class="node-badge)
+  end
+
+  test "search dims non-matching nodes and marks matching ones", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    child1 =
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Bright Idea", summary: "luminous thinking", score: 8.0},
+        ""
+      )
+
+    _child2 =
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Dim Thought", summary: "nothing special", score: 4.0},
+        ""
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+
+    view |> form("form[phx-change='search_nodes']", %{"q" => "Bright"}) |> render_change()
+
+    assert has_element?(view, "g[data-search-match='true'][phx-value-id='#{child1.id}']")
+    assert has_element?(view, "g[data-search-match='false']")
+  end
+
+  test "search Enter selects first matching node", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    _child =
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Matchable Node", summary: "s", score: 8.0},
+        "artifact content here"
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+
+    view |> form("form[phx-change='search_nodes']", %{"q" => "Matchable"}) |> render_change()
+    render_keydown(element(view, "input[phx-keydown='search_select']"), %{"key" => "Enter"})
+
+    assert has_element?(view, "#artifact-modal")
+  end
+
+  test "search summary match dims non-matching nodes", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    child =
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Plain Title", summary: "unique_summary_keyword", score: 7.0},
+        ""
+      )
+
+    _other =
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Other Node", summary: "completely different", score: 5.0},
+        ""
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+
+    view
+    |> form("form[phx-change='search_nodes']", %{"q" => "unique_summary_keyword"})
+    |> render_change()
+
+    assert has_element?(view, "g[data-search-match='true'][phx-value-id='#{child.id}']")
+    assert has_element?(view, "g[data-search-match='false']")
+  end
 end

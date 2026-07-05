@@ -28,6 +28,7 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:policy, policy)
      |> assign(:window_note, Policy.window_note(policy: policy, now: now))
      |> assign(:budget_minutes, budget)
+     |> assign(:search_query, "")
      |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => "#{budget}"}))}
   end
 
@@ -36,7 +37,13 @@ defmodule HarnessWeb.IdeationLive do
     case params["id"] do
       nil ->
         {:noreply,
-         assign(socket, session: nil, tree_layout: nil, journal: nil, selected_node: nil)}
+         assign(socket,
+           session: nil,
+           tree_layout: nil,
+           journal: nil,
+           selected_node: nil,
+           search_query: ""
+         )}
 
       id ->
         # navigating to a session starts with no artifact open
@@ -46,6 +53,7 @@ defmodule HarnessWeb.IdeationLive do
          socket
          |> assign(:selected_node, nil)
          |> assign(:artifact_open, false)
+         |> assign(:search_query, "")
          |> load_session(String.to_integer(id))}
     end
   end
@@ -113,6 +121,28 @@ defmodule HarnessWeb.IdeationLive do
 
   def handle_event("close_artifact", _params, socket) do
     {:noreply, assign(socket, :artifact_open, false)}
+  end
+
+  def handle_event("search_nodes", %{"q" => q}, socket) do
+    {:noreply, assign(socket, :search_query, String.trim(q))}
+  end
+
+  def handle_event("search_select", _params, socket) do
+    q = socket.assigns.search_query
+    nodes = if socket.assigns[:tree_layout], do: socket.assigns.tree_layout.nodes, else: []
+    first = q != "" && Enum.find(nodes, &node_search_match?(&1, q))
+
+    if first do
+      idea = Ideation.get_idea!(first.id)
+      artifact = Ideation.read_artifact(idea)
+
+      {:noreply,
+       socket
+       |> assign(:selected_node, %{idea: idea, artifact: artifact})
+       |> assign(:artifact_open, artifact != nil)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("stop_session", %{"id" => id}, socket) do
@@ -422,6 +452,18 @@ defmodule HarnessWeb.IdeationLive do
 
               <div class="grid xl:grid-cols-3 gap-4 md:flex-1 md:min-h-0 md:auto-rows-fr">
                 <div class="xl:col-span-2 rounded-sm bg-surface border border-surface-2 overflow-hidden max-h-[60vh] md:max-h-none md:min-h-0 relative">
+                  <form id="tree-search" phx-change="search_nodes" class="absolute top-2 left-2 z-10">
+                    <input
+                      type="search"
+                      name="q"
+                      value={@search_query}
+                      placeholder="Search nodes…"
+                      phx-keydown="search_select"
+                      phx-key="Enter"
+                      autocomplete="off"
+                      class="font-mono text-[10px] bg-surface/80 border border-surface-2 rounded-sm px-2 py-0.5 text-ink placeholder:text-ink-dim/50 outline-none focus:border-accent w-28"
+                    />
+                  </form>
                   <span class="absolute top-2 right-3 font-mono text-[9px] text-ink-dim/50 select-none pointer-events-none">
                     scroll to zoom · drag to pan · dbl-click resets
                   </span>
@@ -429,11 +471,14 @@ defmodule HarnessWeb.IdeationLive do
                     // Wheel zooms at the cursor, drag pans, double-click resets.
                     // The user's viewport survives live tree updates; reset uses the
                     // server's current viewBox (data-viewbox), so it tracks growth.
+                    // data-zoom-level (dots/labels/badges) reflects viewBox vs server width ratio.
                     export default {
                       mounted() {
                         this.dirty = false
                         this.dragging = null
                         const svg = this.el
+
+                        this.updateZoomLevel(this.viewBox().w)
 
                         svg.addEventListener("wheel", e => {
                           e.preventDefault()
@@ -479,10 +524,18 @@ defmodule HarnessWeb.IdeationLive do
                         svg.addEventListener("dblclick", () => {
                           this.dirty = false
                           svg.setAttribute("viewBox", svg.dataset.viewbox)
+                          this.updateZoomLevel(this.viewBox().w)
                         })
                       },
                       updated() {
                         if (this.dirty) this.el.setAttribute("viewBox", this.userViewBox)
+                        this.updateZoomLevel(this.viewBox().w)
+                      },
+                      updateZoomLevel(w) {
+                        const server = this.el.dataset.viewbox.split(" ").map(Number)
+                        const serverW = server[2]
+                        const level = w > serverW * 1.5 ? "dots" : w < serverW * 0.5 ? "badges" : "labels"
+                        this.el.dataset.zoomLevel = level
                       },
                       viewBox() {
                         const [x, y, w, h] = this.el.getAttribute("viewBox").split(" ").map(Number)
@@ -492,6 +545,7 @@ defmodule HarnessWeb.IdeationLive do
                         this.userViewBox = `${x} ${y} ${w} ${h}`
                         this.dirty = true
                         this.el.setAttribute("viewBox", this.userViewBox)
+                        this.updateZoomLevel(w)
                       }
                     }
                   </script>
@@ -500,6 +554,7 @@ defmodule HarnessWeb.IdeationLive do
                     phx-hook=".TreeZoom"
                     data-viewbox={"0 0 #{@tree_layout.width} #{@tree_layout.height}"}
                     viewBox={"0 0 #{@tree_layout.width} #{@tree_layout.height}"}
+                    data-zoom-level="labels"
                     class="w-full cursor-grab active:cursor-grabbing touch-none select-none"
                     style="min-height: 300px"
                   >
@@ -517,7 +572,10 @@ defmodule HarnessWeb.IdeationLive do
                       phx-click="select_node"
                       phx-value-id={n.id}
                       class="cursor-pointer"
-                      opacity={if n.status == "pruned", do: "0.3", else: "1"}
+                      opacity={node_opacity(n, @search_query)}
+                      data-title={n.title}
+                      data-summary={n.summary}
+                      data-search-match={if node_search_match?(n, @search_query), do: "true", else: "false"}
                     >
                       <circle
                         cx={n.x}
@@ -535,11 +593,23 @@ defmodule HarnessWeb.IdeationLive do
                         x={n.x}
                         y={n.y + 26}
                         text-anchor="middle"
-                        class="font-mono"
+                        class="node-label font-mono"
                         font-size="9"
                         fill="var(--color-ink-dim)"
                       >
-                        {String.slice(n.title, 0, 16)}
+                        {n.title}
+                      </text>
+                      <text
+                        x={n.x}
+                        y={n.y}
+                        dominant-baseline="central"
+                        text-anchor="middle"
+                        class="node-badge"
+                        font-size="7"
+                        fill="var(--color-bg)"
+                        pointer-events="none"
+                      >
+                        {score_badge(n.score)}
                       </text>
                     </g>
                   </svg>
@@ -622,6 +692,25 @@ defmodule HarnessWeb.IdeationLive do
   defp score_fill(score) when score >= 7.5, do: "var(--color-accent)"
   defp score_fill(score) when score >= 5.0, do: "#5f7487"
   defp score_fill(_), do: "var(--color-surface-2)"
+
+  defp node_search_match?(_node, ""), do: true
+
+  defp node_search_match?(node, q) do
+    q = String.downcase(q)
+    String.contains?(String.downcase(node.title || ""), q) or
+      String.contains?(String.downcase(node.summary || ""), q)
+  end
+
+  defp node_opacity(%{status: "pruned"}, _query), do: "0.3"
+
+  defp node_opacity(node, query) when query != "" do
+    if node_search_match?(node, query), do: "1", else: "0.15"
+  end
+
+  defp node_opacity(_node, _query), do: "1"
+
+  defp score_badge(score) when is_float(score), do: Float.to_string(Float.round(score, 1))
+  defp score_badge(score), do: to_string(score)
 
   defp session_status_class("running"), do: "font-mono text-[10px] uppercase text-accent"
   defp session_status_class("synthesized"), do: "font-mono text-[10px] uppercase text-ok"

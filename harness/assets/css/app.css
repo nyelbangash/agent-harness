@@ -235,6 +235,15 @@ body {
   }
 }
 
+/* Semantic zoom for ideation tree: dots=circles only, labels=titles, badges=score overlay */
+#idea-tree .node-label,
+#idea-tree .node-badge { display: none; }
+
+#idea-tree[data-zoom-level="labels"] .node-label { display: inline; }
+
+#idea-tree[data-zoom-level="badges"] .node-label,
+#idea-tree[data-zoom-level="badges"] .node-badge { display: inline; }
+
 /* Add variants based on LiveView classes */
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);

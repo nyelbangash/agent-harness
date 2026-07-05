@@ -29,7 +29,7 @@ defmodule Harness.Ideation.Layout do
         {col, depth} = Map.get(positions, idea.id, {0, idea.depth})
 
         idea
-        |> Map.take([:id, :title, :score, :status, :depth, :parent_id])
+        |> Map.take([:id, :title, :summary, :score, :status, :depth, :parent_id])
         |> Map.merge(%{x: @margin + col * @x_gap, y: @margin + depth * @y_gap})
       end)
 
