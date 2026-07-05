@@ -8,7 +8,7 @@ defmodule Harness.Runs.RunEvent do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @types ~w(text tool_use tool_result error system)
+  @types ~w(text tool_use tool_result error system phase verifier_output)
 
   schema "run_events" do
     belongs_to :run, Harness.Runs.Run

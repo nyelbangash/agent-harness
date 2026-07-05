@@ -21,7 +21,10 @@ defmodule HarnessWeb.IssuesLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket), do: GitHub.subscribe()
+    if connected?(socket) do
+      GitHub.subscribe()
+      Runs.subscribe()
+    end
 
     {:ok,
      socket
@@ -32,6 +35,7 @@ defmodule HarnessWeb.IssuesLive do
 
   @impl true
   def handle_info({:issue_updated, _issue}, socket), do: {:noreply, load_board(socket)}
+  def handle_info({:run_updated, _run}, socket), do: {:noreply, load_board(socket)}
   def handle_info(_message, socket), do: {:noreply, socket}
 
   defp load_board(socket) do
@@ -42,6 +46,7 @@ defmodule HarnessWeb.IssuesLive do
     |> assign(:empty?, board == %{})
     |> attach_triages(board)
     |> attach_run_errors(board)
+    |> attach_run_phases(board)
   end
 
   # confidence/route chips come from the latest triage per issue
@@ -63,6 +68,15 @@ defmodule HarnessWeb.IssuesLive do
       |> Map.new(fn issue -> {issue.id, Runs.latest_terminal_run_error(issue.id)} end)
 
     assign(socket, :run_errors, run_errors)
+  end
+
+  # phase chips come from any active implement run for in-progress issues
+  defp attach_run_phases(socket, board) do
+    phases =
+      Map.get(board, :in_progress, [])
+      |> Map.new(fn issue -> {issue.id, Runs.active_implement_status(issue.id)} end)
+
+    assign(socket, :run_phases, phases)
   end
 
   @impl true
@@ -107,6 +121,7 @@ defmodule HarnessWeb.IssuesLive do
                 issue={issue}
                 triage={@triages[issue.id]}
                 run_error={@run_errors[issue.id]}
+                phase_status={Map.get(@run_phases, issue.id)}
               />
             </div>
           </section>
@@ -119,6 +134,7 @@ defmodule HarnessWeb.IssuesLive do
   attr :issue, :map, required: true
   attr :triage, :map, default: nil
   attr :run_error, :string, default: nil
+  attr :phase_status, :string, default: nil
 
   defp issue_card(assigns) do
     ~H"""
@@ -167,6 +183,12 @@ defmodule HarnessWeb.IssuesLive do
           title="Handled by the off-machine GitHub Action lane"
         >
           ☁ cloud
+        </span>
+        <span
+          :if={phase_label(@phase_status)}
+          class="font-display uppercase text-[9px] tracking-widest px-1 py-0.5 bg-accent/20 text-accent rounded-sm animate-pulse"
+        >
+          {phase_label(@phase_status)}
         </span>
       </div>
 
@@ -234,4 +256,9 @@ defmodule HarnessWeb.IssuesLive do
       true -> nil
     end
   end
+
+  defp phase_label("verifying"), do: "running tests"
+  defp phase_label("pushing"), do: "pushing"
+  defp phase_label("opening_pr"), do: "opening pr"
+  defp phase_label(_), do: nil
 end

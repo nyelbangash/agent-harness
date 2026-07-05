@@ -298,17 +298,18 @@ defmodule HarnessWeb.OverviewLive do
     <span
       class={[
         "inline-block size-2 rounded-full shrink-0",
-        @status == "running" && "bg-accent animate-pulse",
+        @status in ["running", "verifying", "pushing", "opening_pr"] && "bg-accent animate-pulse",
         @status == "succeeded" && "bg-ok",
         @status in ["failed", "killed"] && "bg-alert",
-        @status in ["queued", "verifying"] && "bg-ink-dim"
+        @status == "queued" && "bg-ink-dim"
       ]}
       title={@status}
     />
     """
   end
 
-  defp status_text(%{status: "running", started_at: %DateTime{} = started}) do
+  defp status_text(%{status: status, started_at: %DateTime{} = started})
+       when status in ["running", "verifying", "pushing", "opening_pr"] do
     "#{DateTime.diff(DateTime.utc_now(), started, :second)}s"
   end
 
