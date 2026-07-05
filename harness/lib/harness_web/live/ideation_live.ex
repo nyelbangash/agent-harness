@@ -436,12 +436,16 @@ defmodule HarnessWeb.IdeationLive do
                         svg.addEventListener("wheel", e => {
                           e.preventDefault()
                           const vb = this.viewBox()
-                          const factor = e.deltaY < 0 ? 1 / 1.15 : 1.15
+                          // proportional to scroll delta: gentle per trackpad tick,
+                          // ~9%/notch on a mouse wheel; clamped to 1/8x–4x of fit
+                          let factor = Math.exp(e.deltaY * 0.00075)
+                          const server = svg.dataset.viewbox.split(" ").map(Number)
+                          const w = Math.min(Math.max(vb.w * factor, server[2] / 8), server[2] * 4)
+                          factor = w / vb.w
                           const rect = svg.getBoundingClientRect()
                           const px = vb.x + ((e.clientX - rect.x) / rect.width) * vb.w
                           const py = vb.y + ((e.clientY - rect.y) / rect.height) * vb.h
-                          const w = vb.w * factor, h = vb.h * factor
-                          this.setViewBox(px - ((px - vb.x) * factor), py - ((py - vb.y) * factor), w, h)
+                          this.setViewBox(px - ((px - vb.x) * factor), py - ((py - vb.y) * factor), w, vb.h * factor)
                         }, {passive: false})
 
                         svg.addEventListener("pointerdown", e => {
