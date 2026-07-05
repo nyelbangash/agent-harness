@@ -121,7 +121,7 @@ defmodule Harness.GitHub.ReviewWorkerTest do
     }
   end
 
-  test "zero findings → APPROVE review posted, no ReviewWorker re-enqueued", ctx do
+  test "zero findings → clean-verdict COMMENT review posted, no ReviewWorker re-enqueued", ctx do
     put_repo_policy(ctx.repo, "true")
     branch = "harness/issue-1-fix"
     push_harness_branch!(ctx.bare, branch)
@@ -145,7 +145,7 @@ defmodule Harness.GitHub.ReviewWorkerTest do
     assert spec.output_mode == :json
   end
 
-  test "high-confidence findings → REQUEST_CHANGES + fix run + re-review enqueued", ctx do
+  test "high-confidence findings → findings COMMENT + fix run + re-review enqueued", ctx do
     put_repo_policy(ctx.repo, "test -f fix_applied.txt")
     branch = "harness/issue-2-fix"
     push_harness_branch!(ctx.bare, branch)
