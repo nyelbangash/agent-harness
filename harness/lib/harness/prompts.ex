@@ -63,6 +63,15 @@ defmodule Harness.Prompts do
     )
   end
 
+  def resolve_conflict(issue, base_branch, conflicted_files) do
+    render("resolve_conflict.md.eex",
+      issue_title: truncate(issue.title, 500),
+      issue_body: truncate(issue.body || "(no body)", @max_body_chars),
+      base_branch: base_branch,
+      conflicted_files: conflicted_files
+    )
+  end
+
   def explore(prompt, repo_map, max_turns) do
     render("explore.md.eex",
       prompt: truncate(prompt, @max_body_chars),

@@ -93,17 +93,64 @@ defmodule Harness.GitHub.ClientTest do
     assert {:ok, nil} = Client.newest_issue_comment("owner/repo", 5)
   end
 
-  test "get_pull_request returns state/merged/merge_commit_sha" do
+  test "get_pull_request returns state/merged/merge_commit_sha/mergeable/mergeable_state/head_ref" do
     Req.Test.stub(__MODULE__, fn conn ->
       Req.Test.json(conn, %{
         "state" => "closed",
         "merged" => true,
-        "merge_commit_sha" => "abc123"
+        "merge_commit_sha" => "abc123",
+        "mergeable" => true,
+        "mergeable_state" => "clean",
+        "head" => %{"ref" => "harness/issue-1-fix"}
       })
     end)
 
-    assert {:ok, %{state: "closed", merged: true, merge_commit_sha: "abc123"}} =
-             Client.get_pull_request("owner/repo", 42)
+    assert {:ok,
+            %{
+              state: "closed",
+              merged: true,
+              merge_commit_sha: "abc123",
+              mergeable: true,
+              mergeable_state: "clean",
+              head_ref: "harness/issue-1-fix"
+            }} = Client.get_pull_request("owner/repo", 42)
+  end
+
+  test "get_pull_request retries once when mergeable is nil on first call" do
+    call_count = :counters.new(1, [])
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      n = :counters.get(call_count, 1) + 1
+      :counters.put(call_count, 1, n)
+
+      body =
+        if n == 1 do
+          %{
+            "state" => "open",
+            "merged" => false,
+            "merge_commit_sha" => nil,
+            "mergeable" => nil,
+            "mergeable_state" => "unknown",
+            "head" => %{"ref" => "harness/issue-1-fix"}
+          }
+        else
+          %{
+            "state" => "open",
+            "merged" => false,
+            "merge_commit_sha" => nil,
+            "mergeable" => true,
+            "mergeable_state" => "clean",
+            "head" => %{"ref" => "harness/issue-1-fix"}
+          }
+        end
+
+      Req.Test.json(conn, body)
+    end)
+
+    assert {:ok, %{mergeable: true, mergeable_state: "clean"}} =
+             Client.get_pull_request("owner/repo", 1)
+
+    assert :counters.get(call_count, 1) == 2
   end
 
   test "get_pull_request returns :not_found on 404" do

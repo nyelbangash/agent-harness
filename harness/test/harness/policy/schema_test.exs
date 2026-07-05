@@ -30,6 +30,7 @@ defmodule Harness.Policy.SchemaTest do
     assert policy.triage.low_confidence_floor == 0.4
     assert policy.plan.post_to_issue == false
     assert policy.implement.max_fix_cycles == 2
+    assert policy.review.rebase_max_attempts == 2
     assert policy.github.repos == []
     assert policy.github.poll_minutes == 2
     assert [note] = policy.calendar_notes

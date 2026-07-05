@@ -141,9 +141,30 @@ defmodule Harness.GitHub.PollWorker do
           end
         end
       end
+
+      check_pr_mergeability(repo_name, issue)
     end
 
     :ok
+  end
+
+  defp check_pr_mergeability(repo_name, issue) do
+    case Client.get_pull_request(repo_name, issue.pr_number) do
+      {:ok, %{mergeable_state: ms, head_ref: head_ref}}
+      when ms in ["conflicting", "dirty"] ->
+        if String.starts_with?(head_ref, "harness/") do
+          Logger.info("PR #{repo_name}##{issue.pr_number} is #{ms}; re-enqueueing review")
+
+          %{issue_id: issue.id, pr_number: issue.pr_number, round: 0, branch: head_ref}
+          |> Harness.GitHub.ReviewWorker.new()
+          |> Oban.insert()
+        else
+          :ok
+        end
+
+      _ ->
+        :ok
+    end
   end
 
   defp due?(%{last_polled_at: nil}, _minutes), do: true
