@@ -8,7 +8,10 @@ defmodule Harness.Ideation.PromoteWorkerTest do
   @moduletag :capture_log
 
   @canned_contract %{
-    "epic" => %{"title" => "Epic: Better Widget", "body" => "## Motivation\n\nImprove the widget."},
+    "epic" => %{
+      "title" => "Epic: Better Widget",
+      "body" => "## Motivation\n\nImprove the widget."
+    },
     "children" => [
       %{
         "title" => "Add widget validation",
@@ -96,8 +99,7 @@ defmodule Harness.Ideation.PromoteWorkerTest do
           |> Plug.Conn.put_status(201)
           |> Req.Test.json(%{
             "number" => issue_number,
-            "html_url" =>
-              "https://github.com/owner/repo/issues/#{issue_number}"
+            "html_url" => "https://github.com/owner/repo/issues/#{issue_number}"
           })
 
         {"PATCH", "/repos/" <> _} ->
@@ -136,11 +138,12 @@ defmodule Harness.Ideation.PromoteWorkerTest do
        }}
     ])
 
-    assert :ok = perform_job(PromoteWorker, %{
-                   session_id: session.id,
-                   idea_id: idea.id,
-                   target_repo: "owner/repo"
-                 })
+    assert :ok =
+             perform_job(PromoteWorker, %{
+               session_id: session.id,
+               idea_id: idea.id,
+               target_repo: "owner/repo"
+             })
 
     calls = Agent.get(captured, & &1)
 

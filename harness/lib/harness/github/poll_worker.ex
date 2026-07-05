@@ -62,7 +62,10 @@ defmodule Harness.GitHub.PollWorker do
       state =
         case Client.list_assigned_issues(repo.name, login, state.etag) do
           :not_modified ->
-            GitHub.update_repo_state!(state, %{last_polled_at: DateTime.utc_now(), last_status: 304})
+            GitHub.update_repo_state!(state, %{
+              last_polled_at: DateTime.utc_now(),
+              last_status: 304
+            })
 
           {:ok, issues, etag} ->
             Enum.each(issues, &handle_issue(repo.name, &1))
@@ -79,6 +82,7 @@ defmodule Harness.GitHub.PollWorker do
 
           {:error, reason} ->
             Logger.warning("poll #{repo.name} failed: #{inspect(reason)}")
+
             GitHub.update_repo_state!(state, %{last_polled_at: DateTime.utc_now(), last_status: 0})
         end
 
@@ -94,7 +98,8 @@ defmodule Harness.GitHub.PollWorker do
     pr_open_issues =
       Harness.Repo.all(
         from(i in Issue,
-          where: i.repo == ^repo_name and i.pipeline_state == "pr_open" and not is_nil(i.pr_number)
+          where:
+            i.repo == ^repo_name and i.pipeline_state == "pr_open" and not is_nil(i.pr_number)
         )
       )
 

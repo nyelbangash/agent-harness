@@ -17,7 +17,14 @@ defmodule Harness.GitHub.RepoState do
 
   def changeset(repo_state, attrs) do
     repo_state
-    |> cast(attrs, [:repo, :etag, :last_polled_at, :last_status, :default_branch, :pr_comments_since])
+    |> cast(attrs, [
+      :repo,
+      :etag,
+      :last_polled_at,
+      :last_status,
+      :default_branch,
+      :pr_comments_since
+    ])
     |> validate_required([:repo])
     |> unique_constraint([:repo])
   end

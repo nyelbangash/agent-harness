@@ -21,44 +21,21 @@ defmodule Harness.GitHub.ReviewWorker do
   alias Harness.Runs.RunSpec
   alias Harness.{Policy, Repos, Runs, Verifier}
 
-  @conflict_resolution_tools ~w(Read Write Edit)
+  @conflict_resolution_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
-  @review_tools ~w(Read Glob Grep) ++
-                  [
-                    "Bash(git log *)",
-                    "Bash(git diff *)",
-                    "Bash(git show *)",
-                    "Bash(git ls-files *)",
-                    "Bash(grep *)",
-                    "Bash(rg *)",
-                    "Bash(ls *)"
-                  ]
+  @review_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
-  @implement_tools ~w(Read Glob Grep Write Edit) ++
-                     [
-                       "Bash(git status *)",
-                       "Bash(git diff *)",
-                       "Bash(git log *)",
-                       "Bash(git show *)",
-                       "Bash(git ls-files *)",
-                       "Bash(ls *)",
-                       "Bash(grep *)",
-                       "Bash(rg *)",
-                       "Bash(cat *)",
-                       "Bash(mix *)",
-                       "Bash(npm *)",
-                       "Bash(npx *)",
-                       "Bash(node *)",
-                       "Bash(python *)",
-                       "Bash(pytest *)",
-                       "Bash(cargo *)",
-                       "Bash(go *)"
-                     ]
+  @implement_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
   @impl Oban.Worker
   def perform(%Oban.Job{
         args:
-          %{"issue_id" => issue_id, "pr_number" => pr_number, "round" => round, "branch" => branch} =
+          %{
+            "issue_id" => issue_id,
+            "pr_number" => pr_number,
+            "round" => round,
+            "branch" => branch
+          } =
             _args
       }) do
     issue = GitHub.get_issue!(issue_id)
@@ -99,8 +76,11 @@ defmodule Harness.GitHub.ReviewWorker do
     try do
       comments =
         case Client.list_issue_comments(issue.repo, issue.number) do
-          {:ok, comments} -> Enum.reject(comments, &Provenance.harness_authored?(&1["body"] || ""))
-          {:error, _} -> []
+          {:ok, comments} ->
+            Enum.reject(comments, &Provenance.harness_authored?(&1["body"] || ""))
+
+          {:error, _} ->
+            []
         end
 
       base_branch = Repos.default_branch(issue.repo)
@@ -124,9 +104,21 @@ defmodule Harness.GitHub.ReviewWorker do
       case Runs.execute(spec) do
         {:ok, result} ->
           all_findings = parse_findings(result.structured_output)
-          actionable = Enum.filter(all_findings, &(&1["confidence"] >= policy.review.confidence_floor))
 
-          publish_review(issue, pr_number, round, branch, worktree, all_findings, actionable, result.run_id, policy)
+          actionable =
+            Enum.filter(all_findings, &(&1["confidence"] >= policy.review.confidence_floor))
+
+          publish_review(
+            issue,
+            pr_number,
+            round,
+            branch,
+            worktree,
+            all_findings,
+            actionable,
+            result.run_id,
+            policy
+          )
 
         {:error, :killed} ->
           {:cancel, :killed}
@@ -142,7 +134,17 @@ defmodule Harness.GitHub.ReviewWorker do
   defp parse_findings(%{"findings" => findings}) when is_list(findings), do: findings
   defp parse_findings(_), do: []
 
-  defp publish_review(issue, pr_number, round, branch, worktree, all_findings, actionable, run_id, policy) do
+  defp publish_review(
+         issue,
+         pr_number,
+         round,
+         branch,
+         worktree,
+         all_findings,
+         actionable,
+         run_id,
+         policy
+       ) do
     {event, body} =
       if all_findings == [] do
         approval =
@@ -241,7 +243,10 @@ defmodule Harness.GitHub.ReviewWorker do
         {:cancel, :killed}
 
       {:error, reason} ->
-        Logger.warning("Review fix session failed for #{issue.repo}##{pr_number}: #{inspect(reason)}")
+        Logger.warning(
+          "Review fix session failed for #{issue.repo}##{pr_number}: #{inspect(reason)}"
+        )
+
         :ok
     end
   end
@@ -284,7 +289,13 @@ defmodule Harness.GitHub.ReviewWorker do
 
     result =
       try do
-        rebase_loop(issue, pr_number, branch, worktree, base_branch, policy,
+        rebase_loop(
+          issue,
+          pr_number,
+          branch,
+          worktree,
+          base_branch,
+          policy,
           policy.review.rebase_max_attempts
         )
       after

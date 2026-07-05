@@ -22,7 +22,14 @@ defmodule Harness.Prompts do
     )
   end
 
-  def plan(issue, comments, triage, default_branch, failure_transcript \\ nil, plan_max_turns \\ nil) do
+  def plan(
+        issue,
+        comments,
+        triage,
+        default_branch,
+        failure_transcript \\ nil,
+        plan_max_turns \\ nil
+      ) do
     render("plan.md.eex",
       repo: issue.repo,
       issue_number: issue.number,
@@ -149,7 +156,10 @@ defmodule Harness.Prompts do
   defp format_subtree(nodes) do
     Enum.map_join(nodes, "\n", fn n ->
       indent = String.duplicate("  ", max(n.depth - 1, 0))
-      artifact_note = if n.artifact_path, do: " [artifact: #{Path.basename(n.artifact_path)}]", else: ""
+
+      artifact_note =
+        if n.artifact_path, do: " [artifact: #{Path.basename(n.artifact_path)}]", else: ""
+
       "#{indent}- #{n.title} (score #{n.score}, #{n.status})#{artifact_note}: #{n.summary}"
     end)
   end

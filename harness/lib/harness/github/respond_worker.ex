@@ -26,34 +26,9 @@ defmodule Harness.GitHub.RespondWorker do
   alias Harness.Runs.RunSpec
   alias Harness.{Policy, Repos, Runs, Verifier}
 
-  @read_only_tools ~w(Read Glob Grep) ++
-                     [
-                       "Bash(git log *)",
-                       "Bash(git show *)",
-                       "Bash(git ls-files *)",
-                       "Bash(ls *)"
-                     ]
+  @read_only_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
-  @implement_tools ~w(Read Glob Grep Write Edit) ++
-                     [
-                       "Bash(git status *)",
-                       "Bash(git diff *)",
-                       "Bash(git log *)",
-                       "Bash(git show *)",
-                       "Bash(git ls-files *)",
-                       "Bash(ls *)",
-                       "Bash(grep *)",
-                       "Bash(rg *)",
-                       "Bash(cat *)",
-                       "Bash(mix *)",
-                       "Bash(npm *)",
-                       "Bash(npx *)",
-                       "Bash(node *)",
-                       "Bash(python *)",
-                       "Bash(pytest *)",
-                       "Bash(cargo *)",
-                       "Bash(go *)"
-                     ]
+  @implement_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
   @impl Oban.Worker
   def perform(%Oban.Job{
@@ -165,14 +140,30 @@ defmodule Harness.GitHub.RespondWorker do
               )
 
             post_reply(handle, issue, body)
-            GitHub.update_pr_comment_handle!(handle, %{action: "decline_with_reason", run_id: pre_flight.run_id})
+
+            GitHub.update_pr_comment_handle!(handle, %{
+              action: "decline_with_reason",
+              run_id: pre_flight.run_id
+            })
+
             :ok
 
           "fix" ->
-            run_fix_phase(handle, issue, policy, repo_cfg, branch, worktree, comment_body, pre_flight)
+            run_fix_phase(
+              handle,
+              issue,
+              policy,
+              repo_cfg,
+              branch,
+              worktree,
+              comment_body,
+              pre_flight
+            )
 
           _ ->
-            Logger.warning("RespondWorker unexpected action #{inspect(action)} for handle #{handle.id}")
+            Logger.warning(
+              "RespondWorker unexpected action #{inspect(action)} for handle #{handle.id}"
+            )
 
             body =
               Provenance.stamp(
@@ -182,7 +173,12 @@ defmodule Harness.GitHub.RespondWorker do
               )
 
             post_reply(handle, issue, body)
-            GitHub.update_pr_comment_handle!(handle, %{action: "decline_with_reason", run_id: pre_flight.run_id})
+
+            GitHub.update_pr_comment_handle!(handle, %{
+              action: "decline_with_reason",
+              run_id: pre_flight.run_id
+            })
+
             :ok
         end
 
@@ -245,7 +241,12 @@ defmodule Harness.GitHub.RespondWorker do
               )
 
             post_reply(handle, issue, body)
-            GitHub.update_pr_comment_handle!(handle, %{action: "decline_with_reason", run_id: fix_result.run_id})
+
+            GitHub.update_pr_comment_handle!(handle, %{
+              action: "decline_with_reason",
+              run_id: fix_result.run_id
+            })
+
             :ok
         end
 
@@ -254,7 +255,11 @@ defmodule Harness.GitHub.RespondWorker do
 
       {:error, reason} ->
         # Pre-flight already ran; keep its run_id in the handle as partial record
-        GitHub.update_pr_comment_handle!(handle, %{action: "decline_with_reason", run_id: pre_flight.run_id})
+        GitHub.update_pr_comment_handle!(handle, %{
+          action: "decline_with_reason",
+          run_id: pre_flight.run_id
+        })
+
         {:error, reason}
     end
   end
@@ -280,7 +285,16 @@ defmodule Harness.GitHub.RespondWorker do
     end
   end
 
-  defp pre_flight_prompt(issue, branch, comment_body, comment_path, comment_line, comment_diff_hunk, comments, plan_text) do
+  defp pre_flight_prompt(
+         issue,
+         branch,
+         comment_body,
+         comment_path,
+         comment_line,
+         comment_diff_hunk,
+         comments,
+         plan_text
+       ) do
     location =
       if comment_path do
         line_note = if comment_line, do: ", line #{comment_line}", else: ""

@@ -190,7 +190,8 @@ defmodule HarnessWeb.OverviewLiveTest do
   end
 
   test "lamp strip is hidden when no lamps are on", %{conn: conn} do
-    for lamp <- ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
+    for lamp <-
+          ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
       Harness.Manager.LampServer.clear(lamp)
     end
 
@@ -200,7 +201,8 @@ defmodule HarnessWeb.OverviewLiveTest do
   end
 
   test "lamp strip appears when a lamp is set via PubSub", %{conn: conn} do
-    for lamp <- ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
+    for lamp <-
+          ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
       Harness.Manager.LampServer.clear(lamp)
     end
 

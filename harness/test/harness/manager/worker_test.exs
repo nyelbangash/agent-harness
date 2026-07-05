@@ -11,7 +11,8 @@ defmodule Harness.Manager.WorkerTest do
 
   setup do
     # Clear all lamps.
-    for lamp <- ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
+    for lamp <-
+          ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
       LampServer.clear(lamp)
     end
 
@@ -70,7 +71,12 @@ defmodule Harness.Manager.WorkerTest do
     issue = issue_fixture(%{pipeline_state: "triaged"})
 
     for _ <- 1..6 do
-      Runs.create_run!(%{kind: "triage", status: "succeeded", issue_id: issue.id, model: "sonnet"})
+      Runs.create_run!(%{
+        kind: "triage",
+        status: "succeeded",
+        issue_id: issue.id,
+        model: "sonnet"
+      })
     end
 
     assert :ok = perform_job(Worker, %{})
@@ -95,7 +101,14 @@ defmodule Harness.Manager.WorkerTest do
   test "does not touch implementing issue that has a live RunServer" do
     set_policy("tier0")
     issue = issue_fixture(%{pipeline_state: "implementing"})
-    run = Runs.create_run!(%{kind: "implement", status: "running", issue_id: issue.id, model: "sonnet"})
+
+    run =
+      Runs.create_run!(%{
+        kind: "implement",
+        status: "running",
+        issue_id: issue.id,
+        model: "sonnet"
+      })
 
     test_pid = self()
 
@@ -103,7 +116,10 @@ defmodule Harness.Manager.WorkerTest do
       spawn_link(fn ->
         Registry.register(Harness.Runs.Registry, run.id, nil)
         send(test_pid, :registered)
-        receive do :done -> :ok end
+
+        receive do
+          :done -> :ok
+        end
       end)
 
     assert_receive :registered
@@ -121,7 +137,14 @@ defmodule Harness.Manager.WorkerTest do
   test "detects stalled run (live Registry, no recent events) and sets lamp but does not kill" do
     set_policy("tier1")
     issue = issue_fixture()
-    run = Runs.create_run!(%{kind: "implement", status: "running", issue_id: issue.id, model: "sonnet"})
+
+    run =
+      Runs.create_run!(%{
+        kind: "implement",
+        status: "running",
+        issue_id: issue.id,
+        model: "sonnet"
+      })
 
     old_start = DateTime.add(DateTime.utc_now(), -3600, :second)
     Runs.update_run!(run, %{started_at: old_start})
@@ -133,7 +156,10 @@ defmodule Harness.Manager.WorkerTest do
       spawn_link(fn ->
         Registry.register(Harness.Runs.Registry, run.id, nil)
         send(test_pid, :registered)
-        receive do :done -> :ok end
+
+        receive do
+          :done -> :ok
+        end
       end)
 
     assert_receive :registered
@@ -151,7 +177,9 @@ defmodule Harness.Manager.WorkerTest do
   test "detects incoming issue with a ready plan and advances to plan_ready" do
     set_policy("tier0")
     issue = issue_fixture(%{pipeline_state: "incoming"})
-    run = Runs.create_run!(%{kind: "plan", status: "succeeded", issue_id: issue.id, model: "sonnet"})
+
+    run =
+      Runs.create_run!(%{kind: "plan", status: "succeeded", issue_id: issue.id, model: "sonnet"})
 
     GitHub.record_plan!(%{
       issue_id: issue.id,
@@ -171,7 +199,14 @@ defmodule Harness.Manager.WorkerTest do
   test "ghost job check: job for issue with live RunServer is not cancelled" do
     set_policy("tier0")
     issue = issue_fixture(%{pipeline_state: "implementing"})
-    run = Runs.create_run!(%{kind: "implement", status: "running", issue_id: issue.id, model: "sonnet"})
+
+    run =
+      Runs.create_run!(%{
+        kind: "implement",
+        status: "running",
+        issue_id: issue.id,
+        model: "sonnet"
+      })
 
     job = %{issue_id: issue.id} |> Harness.GitHub.ImplementWorker.new() |> Oban.insert!()
     old_time = DateTime.add(DateTime.utc_now(), -600, :second)
@@ -187,7 +222,10 @@ defmodule Harness.Manager.WorkerTest do
       spawn_link(fn ->
         Registry.register(Harness.Runs.Registry, run.id, nil)
         send(test_pid, :registered)
-        receive do :done -> :ok end
+
+        receive do
+          :done -> :ok
+        end
       end)
 
     assert_receive :registered
@@ -207,7 +245,12 @@ defmodule Harness.Manager.WorkerTest do
     issue = issue_fixture(%{pipeline_state: "triaged"})
 
     for _ <- 1..6 do
-      Runs.create_run!(%{kind: "triage", status: "succeeded", issue_id: issue.id, model: "sonnet"})
+      Runs.create_run!(%{
+        kind: "triage",
+        status: "succeeded",
+        issue_id: issue.id,
+        model: "sonnet"
+      })
     end
 
     assert :ok = perform_job(Worker, %{})
@@ -222,7 +265,12 @@ defmodule Harness.Manager.WorkerTest do
     issue = issue_fixture(%{pipeline_state: "triaged"})
 
     for _ <- 1..6 do
-      Runs.create_run!(%{kind: "triage", status: "succeeded", issue_id: issue.id, model: "sonnet"})
+      Runs.create_run!(%{
+        kind: "triage",
+        status: "succeeded",
+        issue_id: issue.id,
+        model: "sonnet"
+      })
     end
 
     assert :ok = perform_job(Worker, %{})

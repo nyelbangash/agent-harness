@@ -6,7 +6,8 @@ defmodule Harness.Manager.LampServerTest do
 
   setup do
     # Clear all lamps and drain any queued broadcasts before subscribing.
-    for lamp <- ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
+    for lamp <-
+          ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
       LampServer.clear(lamp)
     end
 
@@ -30,7 +31,8 @@ defmodule Harness.Manager.LampServerTest do
     lamps = LampServer.get_all()
     classes = Enum.map(lamps, & &1.class)
 
-    for lamp <- ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
+    for lamp <-
+          ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
       assert lamp in classes
     end
 

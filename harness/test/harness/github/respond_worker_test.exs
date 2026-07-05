@@ -28,7 +28,10 @@ defmodule Harness.GitHub.RespondWorkerTest do
 
   defp put_repo_policy(repo, test_command) do
     original = Application.fetch_env!(:harness, :policy_path)
-    tmp_policy = Path.join(System.tmp_dir!(), "respond-policy-#{System.unique_integer([:positive])}.yaml")
+
+    tmp_policy =
+      Path.join(System.tmp_dir!(), "respond-policy-#{System.unique_integer([:positive])}.yaml")
+
     entry = ~s(repos: [{name: "#{repo}", test_command: "#{test_command}"}])
     File.write!(tmp_policy, File.read!(original) |> String.replace("repos: []", entry))
     Application.put_env(:harness, :policy_path, tmp_policy)
@@ -49,7 +52,17 @@ defmodule Harness.GitHub.RespondWorkerTest do
     git_cmd!(seed, ["checkout", "-b", branch])
     File.write!(Path.join(seed, "pr_feature.txt"), "initial pr content\n")
     git_cmd!(seed, ["add", "-A"])
-    git_cmd!(seed, ["-c", "user.name=fixture", "-c", "user.email=fixture@test", "commit", "-m", "pr commit"])
+
+    git_cmd!(seed, [
+      "-c",
+      "user.name=fixture",
+      "-c",
+      "user.email=fixture@test",
+      "commit",
+      "-m",
+      "pr commit"
+    ])
+
     git_cmd!(seed, ["push", "origin", branch])
     File.rm_rf!(seed)
   end
@@ -87,13 +100,22 @@ defmodule Harness.GitHub.RespondWorkerTest do
 
   defp pre_flight_fix do
     fn _spec ->
-      {:ok, Harness.Fixtures.runner_result(structured_output: %{"action" => "fix", "reason" => "in scope"})}
+      {:ok,
+       Harness.Fixtures.runner_result(
+         structured_output: %{"action" => "fix", "reason" => "in scope"}
+       )}
     end
   end
 
   defp pre_flight_decline do
     fn _spec ->
-      {:ok, Harness.Fixtures.runner_result(structured_output: %{"action" => "decline_with_reason", "reason" => "out of scope for this branch"})}
+      {:ok,
+       Harness.Fixtures.runner_result(
+         structured_output: %{
+           "action" => "decline_with_reason",
+           "reason" => "out of scope for this branch"
+         }
+       )}
     end
   end
 

@@ -290,16 +290,28 @@ defmodule HarnessWeb.IdeationLiveTest do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
 
     _low =
-      Ideation.add_child!(session, root, %{title: "Low Scorer", summary: "l", score: 2.0},
-        "# low body")
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Low Scorer", summary: "l", score: 2.0},
+        "# low body"
+      )
 
     _high =
-      Ideation.add_child!(session, root, %{title: "High Scorer", summary: "h", score: 9.0},
-        "# high body")
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "High Scorer", summary: "h", score: 9.0},
+        "# high body"
+      )
 
     _mid =
-      Ideation.add_child!(session, root, %{title: "Mid Scorer", summary: "m", score: 6.0},
-        "# mid body")
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Mid Scorer", summary: "m", score: 6.0},
+        "# mid body"
+      )
 
     {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
 
@@ -319,8 +331,12 @@ defmodule HarnessWeb.IdeationLiveTest do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
 
     high =
-      Ideation.add_child!(session, root, %{title: "Best Idea", summary: "h", score: 9.0},
-        "# best artifact body")
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Best Idea", summary: "h", score: 9.0},
+        "# best artifact body"
+      )
 
     {:ok, view, html} = live(conn, ~p"/ideation/#{session.id}")
 
@@ -337,8 +353,12 @@ defmodule HarnessWeb.IdeationLiveTest do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
 
     _child =
-      Ideation.add_child!(session, root, %{title: "Alpha Node", summary: "s", score: 7.0},
-        "# alpha")
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Alpha Node", summary: "s", score: 7.0},
+        "# alpha"
+      )
 
     Ideation.append_journal!(session, 1, ["explored **Alpha Node** idea"])
     Ideation.append_journal!(session, 2, ["pruned Alpha Node after review"])
@@ -363,8 +383,12 @@ defmodule HarnessWeb.IdeationLiveTest do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
 
     child =
-      Ideation.add_child!(session, root, %{title: "Beta Node", summary: "s", score: 7.0},
-        "# beta artifact body")
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Beta Node", summary: "s", score: 7.0},
+        "# beta artifact body"
+      )
 
     Ideation.append_journal!(session, 1, ["explored Beta Node in depth"])
 
@@ -387,7 +411,10 @@ defmodule HarnessWeb.IdeationLiveTest do
     conn: conn
   } do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 60})
-    _child = Ideation.add_child!(session, root, %{title: "Some Idea", summary: "detail", score: 7.0}, "")
+
+    _child =
+      Ideation.add_child!(session, root, %{title: "Some Idea", summary: "detail", score: 7.0}, "")
+
     {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
 
     # SVG carries the data-zoom-level attribute the hook maintains
@@ -425,7 +452,9 @@ defmodule HarnessWeb.IdeationLiveTest do
   test "promote button visible on high-scoring nodes when policy has repos", %{conn: conn} do
     # add a repo to policy so the promote button renders
     original = Application.fetch_env!(:harness, :policy_path)
-    tmp = Path.join(System.tmp_dir!(), "promote-ui-policy-#{System.unique_integer([:positive])}.yaml")
+
+    tmp =
+      Path.join(System.tmp_dir!(), "promote-ui-policy-#{System.unique_integer([:positive])}.yaml")
 
     File.write!(
       tmp,
@@ -444,8 +473,12 @@ defmodule HarnessWeb.IdeationLiveTest do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
 
     high =
-      Ideation.add_child!(session, root, %{title: "Top Idea", summary: "s", score: 8.0},
-        "# artifact")
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Top Idea", summary: "s", score: 8.0},
+        "# artifact"
+      )
 
     {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
     html = view |> element("g[phx-value-id='#{high.id}']") |> render_click()
@@ -457,8 +490,12 @@ defmodule HarnessWeb.IdeationLiveTest do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
 
     high =
-      Ideation.add_child!(session, root, %{title: "Top Idea", summary: "s", score: 9.0},
-        "# artifact")
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Top Idea", summary: "s", score: 9.0},
+        "# artifact"
+      )
 
     {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
     html = view |> element("g[phx-value-id='#{high.id}']") |> render_click()
@@ -468,7 +505,12 @@ defmodule HarnessWeb.IdeationLiveTest do
 
   test "promote modal opens on promote click and enqueues job", %{conn: conn} do
     original = Application.fetch_env!(:harness, :policy_path)
-    tmp = Path.join(System.tmp_dir!(), "promote-modal-policy-#{System.unique_integer([:positive])}.yaml")
+
+    tmp =
+      Path.join(
+        System.tmp_dir!(),
+        "promote-modal-policy-#{System.unique_integer([:positive])}.yaml"
+      )
 
     File.write!(
       tmp,
@@ -487,8 +529,12 @@ defmodule HarnessWeb.IdeationLiveTest do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
 
     idea =
-      Ideation.add_child!(session, root, %{title: "Promotable", summary: "s", score: 8.5},
-        "# artifact")
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Promotable", summary: "s", score: 8.5},
+        "# artifact"
+      )
 
     {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
     view |> element("g[phx-value-id='#{idea.id}']") |> render_click()
@@ -510,7 +556,9 @@ defmodule HarnessWeb.IdeationLiveTest do
 
   test "synthesized session shows Open synthesis button in header and doc badge in list",
        %{conn: conn} do
-    {session, _root} = Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+    {session, _root} =
+      Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+
     path = Ideation.synthesis_path(session)
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, "# Synthesis\n\n- finding one")
@@ -522,7 +570,9 @@ defmodule HarnessWeb.IdeationLiveTest do
   end
 
   test "clicking Open synthesis opens modal with rendered markdown", %{conn: conn} do
-    {session, _root} = Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+    {session, _root} =
+      Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+
     path = Ideation.synthesis_path(session)
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, "# Synthesis\n\n## Key finding\n\n- **bold** point")
@@ -538,7 +588,9 @@ defmodule HarnessWeb.IdeationLiveTest do
   end
 
   test "Escape key closes synthesis modal", %{conn: conn} do
-    {session, _root} = Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+    {session, _root} =
+      Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+
     path = Ideation.synthesis_path(session)
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, "# Synthesis\n\ncontent")
@@ -552,7 +604,9 @@ defmodule HarnessWeb.IdeationLiveTest do
   end
 
   test "missing synthesis file renders notice in modal and logs a warning", %{conn: conn} do
-    {session, _root} = Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+    {session, _root} =
+      Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+
     path = Ideation.synthesis_path(session)
     # Ensure no leftover file from a prior test run with the same session dir
     File.rm(path)
@@ -561,14 +615,16 @@ defmodule HarnessWeb.IdeationLiveTest do
     {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
 
     assert capture_log(fn ->
-      html = view |> element("button", "Open synthesis") |> render_click()
-      assert html =~ "synthesis file not found"
-      assert html =~ ~s(id="synthesis-modal")
-    end) =~ "SYNTHESIS.md missing"
+             html = view |> element("button", "Open synthesis") |> render_click()
+             assert html =~ "synthesis file not found"
+             assert html =~ ~s(id="synthesis-modal")
+           end) =~ "SYNTHESIS.md missing"
   end
 
   test "cockpit idle panel shows Open Synthesis button for synthesized session", %{conn: conn} do
-    {session, _root} = Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+    {session, _root} =
+      Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+
     path = Ideation.synthesis_path(session)
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, "# Synthesis\n\ncontent")

@@ -22,8 +22,7 @@ defmodule Harness.GitHub.TriageWorker do
   alias Harness.Runs.RunSpec
   alias Harness.{Policy, Repos, Runs}
 
-  @triage_tools ~w(Read Glob Grep) ++
-                  ["Bash(git log *)", "Bash(git show *)", "Bash(git ls-files *)", "Bash(ls *)"]
+  @triage_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"issue_id" => issue_id}}) do

@@ -31,26 +31,7 @@ defmodule Harness.GitHub.ImplementWorker do
   alias Harness.Runs.RunSpec
   alias Harness.{Policy, Repos, Runs, Verifier}
 
-  @implement_tools ~w(Read Glob Grep Write Edit) ++
-                     [
-                       "Bash(git status *)",
-                       "Bash(git diff *)",
-                       "Bash(git log *)",
-                       "Bash(git show *)",
-                       "Bash(git ls-files *)",
-                       "Bash(ls *)",
-                       "Bash(grep *)",
-                       "Bash(rg *)",
-                       "Bash(cat *)",
-                       "Bash(mix *)",
-                       "Bash(npm *)",
-                       "Bash(npx *)",
-                       "Bash(node *)",
-                       "Bash(python *)",
-                       "Bash(pytest *)",
-                       "Bash(cargo *)",
-                       "Bash(go *)"
-                     ]
+  @implement_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"issue_id" => issue_id} = args}) do

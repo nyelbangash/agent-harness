@@ -216,7 +216,7 @@ defmodule HarnessWeb.OverviewLive do
         </section>
 
         <section
-          :if={Enum.any?(@lamps, & &1.status == :on)}
+          :if={Enum.any?(@lamps, &(&1.status == :on))}
           aria-label="manager lamps"
           class="mb-6 flex flex-wrap gap-2"
         >

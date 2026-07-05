@@ -28,7 +28,7 @@ defmodule Harness.Ideation.IterationWorker do
   alias Harness.Runs.RunSpec
   alias Harness.{Policy, Runs}
 
-  @ideate_tools ~w(WebSearch WebFetch Read)
+  @ideate_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
   @diverge_schema Jason.encode!(%{
                     type: "object",

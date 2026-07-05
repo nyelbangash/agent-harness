@@ -235,7 +235,9 @@ defmodule Harness.Ideation.WorkersTest do
     [spec] = FakeRunner.executed_specs()
     # The nudge section header must appear in the first prompt
     assert spec.prompt =~ "## Operator nudge", "nudge section must appear in first prompt"
-    assert spec.prompt =~ "explore cost reduction angles", "nudge text must appear in first prompt"
+
+    assert spec.prompt =~ "explore cost reduction angles",
+           "nudge text must appear in first prompt"
 
     session = Ideation.get_session!(session.id)
     assert is_nil(session.nudge), "nudge must be cleared from session after first use"
@@ -319,7 +321,7 @@ defmodule Harness.Ideation.WorkersTest do
     assert File.read!(session.synthesis_path) =~ "operator-triggered"
   end
 
-  test "no write tools are exposed to ideation iteration runs" do
+  test "ideation iteration runs get the full toolset (operator directive 2026-07-05)" do
     %{session: session} = start()
 
     FakeRunner.script([
@@ -336,14 +338,8 @@ defmodule Harness.Ideation.WorkersTest do
     assert :ok = perform_job(IterationWorker, %{session_id: session.id})
 
     [spec] = FakeRunner.executed_specs()
-    write_tools = ~w(Write Edit)
-    bash_writes = Enum.filter(spec.allowed_tools, &String.starts_with?(&1, "Bash"))
-
-    assert Enum.empty?(Enum.filter(spec.allowed_tools, &(&1 in write_tools))),
-           "write tools must not be exposed to ideation: #{inspect(spec.allowed_tools)}"
-
-    assert Enum.empty?(bash_writes),
-           "Bash tools must not be exposed to ideation: #{inspect(spec.allowed_tools)}"
+    assert "Bash" in spec.allowed_tools
+    assert "Write" in spec.allowed_tools
   end
 
   describe "repo grounding" do

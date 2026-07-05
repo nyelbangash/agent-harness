@@ -246,7 +246,10 @@ defmodule HarnessWeb.ComposeLive do
               <div class="flex items-center gap-2">
                 <span class="font-mono text-[10px] text-ink-dim tabular-nums">#{d.id}</span>
                 <span class={draft_status_class(d.status)}>{d.status}</span>
-                <span :if={d.repo} class="font-mono text-[9px] text-ink-dim/60 ml-auto truncate max-w-[8rem]">
+                <span
+                  :if={d.repo}
+                  class="font-mono text-[9px] text-ink-dim/60 ml-auto truncate max-w-[8rem]"
+                >
                   {d.repo}
                 </span>
               </div>
@@ -268,12 +271,18 @@ defmodule HarnessWeb.ComposeLive do
                 Draft #{@draft.id}
               </h1>
               <span class={draft_status_class(@draft.status)}>{@draft.status}</span>
-              <span :if={@draft.scope_hint} class="font-mono text-[10px] border border-surface-2 rounded px-1.5 py-0.5 text-ink-dim">
+              <span
+                :if={@draft.scope_hint}
+                class="font-mono text-[10px] border border-surface-2 rounded px-1.5 py-0.5 text-ink-dim"
+              >
                 scope: {@draft.scope_hint}
               </span>
             </div>
 
-            <div :if={@exploring} class="rounded-sm border border-surface-2 bg-surface px-4 py-3 flex items-center gap-3">
+            <div
+              :if={@exploring}
+              class="rounded-sm border border-surface-2 bg-surface px-4 py-3 flex items-center gap-3"
+            >
               <span class="font-mono text-[10px] text-accent animate-pulse">exploring…</span>
               <span class="font-body text-sm text-ink-dim">Investigating {@draft.repo} — this takes a few minutes.</span>
             </div>
@@ -342,7 +351,10 @@ defmodule HarnessWeb.ComposeLive do
                 </button>
               </div>
 
-              <div :if={@draft.status == "approved"} class="rounded-sm border border-ok/30 bg-ok/10 px-4 py-3">
+              <div
+                :if={@draft.status == "approved"}
+                class="rounded-sm border border-ok/30 bg-ok/10 px-4 py-3"
+              >
                 <span class="font-mono text-[10px] text-ok uppercase">filed</span>
                 <p class="font-body text-sm text-ink-dim mt-1">
                   This issue has been filed on GitHub and entered the pipeline.
@@ -350,7 +362,10 @@ defmodule HarnessWeb.ComposeLive do
               </div>
             </div>
 
-            <div :if={!@exploring && !@run_error && !@draft.body && @draft.status == "draft"} class="rounded-sm border border-surface-2 bg-surface px-4 py-8 text-center">
+            <div
+              :if={!@exploring && !@run_error && !@draft.body && @draft.status == "draft"}
+              class="rounded-sm border border-surface-2 bg-surface px-4 py-8 text-center"
+            >
               <p class="font-body text-sm text-ink-dim">Waiting for explore run to start…</p>
             </div>
           </div>

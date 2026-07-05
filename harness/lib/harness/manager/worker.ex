@@ -81,7 +81,19 @@ defmodule Harness.Manager.Worker do
       end
 
     update_lamps(loops, ghosts, stalled, stranded, drifted, telemetry_silent, stale_code)
-    append_snapshot(loops, ghosts, stalled, stranded, drifted, telemetry_silent, stale_code, repairs, proposals)
+
+    append_snapshot(
+      loops,
+      ghosts,
+      stalled,
+      stranded,
+      drifted,
+      telemetry_silent,
+      stale_code,
+      repairs,
+      proposals
+    )
+
     LampServer.record_sweep()
 
     :ok
@@ -236,7 +248,9 @@ defmodule Harness.Manager.Worker do
 
     stall_proposals =
       Enum.map(stalled, fn run ->
-        msg = "Stalled run ##{run.id} (#{run.kind}) — no events for >#{div(DateTime.diff(DateTime.utc_now(), run.started_at || DateTime.utc_now(), :second), 60)} min"
+        msg =
+          "Stalled run ##{run.id} (#{run.kind}) — no events for >#{div(DateTime.diff(DateTime.utc_now(), run.started_at || DateTime.utc_now(), :second), 60)} min"
+
         Logger.warning("manager: tier-1 proposal — #{msg}")
         Harness.Notify.notify(:manager_proposal, msg)
         %{type: "stalled_run", run_id: run.id}
@@ -282,7 +296,17 @@ defmodule Harness.Manager.Worker do
 
   # -- snapshot ---------------------------------------------------------------
 
-  defp append_snapshot(loops, ghosts, stalled, stranded, drifted, telemetry_silent, stale_code, repairs, proposals) do
+  defp append_snapshot(
+         loops,
+         ghosts,
+         stalled,
+         stranded,
+         drifted,
+         telemetry_silent,
+         stale_code,
+         repairs,
+         proposals
+       ) do
     run = ensure_manager_run()
     seq = Harness.Runs.next_event_seq(run.id)
 
@@ -316,7 +340,14 @@ defmodule Harness.Manager.Worker do
   end
 
   defp create_manager_run do
-    run = Harness.Runs.create_run!(%{kind: "manager", status: "running", model: "none", ref: "manager"})
+    run =
+      Harness.Runs.create_run!(%{
+        kind: "manager",
+        status: "running",
+        model: "none",
+        ref: "manager"
+      })
+
     :persistent_term.put(:harness_manager_run_id, run.id)
     run
   end

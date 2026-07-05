@@ -26,17 +26,7 @@ defmodule Harness.GitHub.PlanWorker do
   alias Harness.Runs.RunSpec
   alias Harness.{Policy, Repos, Runs}
 
-  @plan_tools ~w(Read Glob Grep Write Edit) ++
-                [
-                  "Bash(git log *)",
-                  "Bash(git show *)",
-                  "Bash(git diff *)",
-                  "Bash(git blame *)",
-                  "Bash(git ls-files *)",
-                  "Bash(grep *)",
-                  "Bash(rg *)",
-                  "Bash(ls *)"
-                ]
+  @plan_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
   @min_artifact_bytes 400
 
@@ -76,7 +66,17 @@ defmodule Harness.GitHub.PlanWorker do
 
       triage = GitHub.latest_triage(issue.id)
       default_branch = Repos.default_branch(issue.repo)
-      prompt = Harness.Prompts.plan(issue, comments, triage, default_branch, failure_transcript, policy.budgets.plan_max_turns)
+
+      prompt =
+        Harness.Prompts.plan(
+          issue,
+          comments,
+          triage,
+          default_branch,
+          failure_transcript,
+          policy.budgets.plan_max_turns
+        )
+
       issue = GitHub.transition!(issue, "planning")
 
       spec = %RunSpec{

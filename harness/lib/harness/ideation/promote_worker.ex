@@ -86,17 +86,21 @@ defmodule Harness.Ideation.PromoteWorker do
       cwd: Ideation.session_dir(session),
       output_mode: :json,
       json_schema: @promote_schema,
-      allowed_tools: ["Read"],
+      allowed_tools: ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch),
       max_turns: 10,
       ref: "promote-#{session.id}-#{idea.id}"
     }
 
     case Runs.execute(spec) do
-      {:ok, %{structured_output: %{"epic" => epic_map, "children" => children_maps}, run_id: run_id}} ->
+      {:ok,
+       %{structured_output: %{"epic" => epic_map, "children" => children_maps}, run_id: run_id}} ->
         create_github_issues(idea, target_repo, epic_map, children_maps, run_id)
 
       {:ok, _} ->
-        Logger.warning("promote session=#{session.id} idea=#{idea.id}: run produced no structured output")
+        Logger.warning(
+          "promote session=#{session.id} idea=#{idea.id}: run produced no structured output"
+        )
+
         {:error, :malformed_contract}
 
       {:error, :killed} ->
@@ -114,7 +118,8 @@ defmodule Harness.Ideation.PromoteWorker do
 
         case Client.create_issue(target_repo, epic_map["title"], epic_body, assignees: [login]) do
           {:ok, epic} ->
-            {children, failures} = create_children(target_repo, children_maps, epic, run_id, login)
+            {children, failures} =
+              create_children(target_repo, children_maps, epic, run_id, login)
 
             backfill_epic(target_repo, epic, epic_map["body"], children, run_id)
 

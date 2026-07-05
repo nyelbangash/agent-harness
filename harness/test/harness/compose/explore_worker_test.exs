@@ -37,7 +37,8 @@ defmodule Harness.Compose.ExploreWorkerTest do
     end
   end
 
-  test "happy path: DRAFT.json written → draft updated with title/body, status stays draft", ctx do
+  test "happy path: DRAFT.json written → draft updated with title/body, status stays draft",
+       ctx do
     draft = draft_fixture(%{repo: ctx.repo})
     FakeRunner.script([writes_draft_json()])
 

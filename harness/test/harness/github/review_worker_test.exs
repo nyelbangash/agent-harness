@@ -212,7 +212,12 @@ defmodule Harness.GitHub.ReviewWorkerTest do
 
     original = Application.fetch_env!(:harness, :policy_path)
     tmp_policy = Path.join(System.tmp_dir!(), "paused-policy-#{System.unique_integer()}.yaml")
-    File.write!(tmp_policy, File.read!(original) |> String.replace("mode: plan_only", "mode: paused"))
+
+    File.write!(
+      tmp_policy,
+      File.read!(original) |> String.replace("mode: plan_only", "mode: paused")
+    )
+
     Application.put_env(:harness, :policy_path, tmp_policy)
     Harness.Policy.reload()
 
@@ -271,6 +276,7 @@ defmodule Harness.GitHub.ReviewWorkerTest do
     FakeRunner.script([no_findings_result()])
 
     Runs.subscribe()
+
     assert :ok =
              perform_job(ReviewWorker, %{
                issue_id: issue.id,

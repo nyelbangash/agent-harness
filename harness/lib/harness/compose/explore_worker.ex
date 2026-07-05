@@ -16,17 +16,7 @@ defmodule Harness.Compose.ExploreWorker do
   alias Harness.Runs.RunSpec
   alias Harness.{Policy, Repos, Runs}
 
-  @explore_tools ~w(Read Glob Grep Write) ++
-                   [
-                     "Bash(git log *)",
-                     "Bash(git show *)",
-                     "Bash(git diff *)",
-                     "Bash(git blame *)",
-                     "Bash(git ls-files *)",
-                     "Bash(grep *)",
-                     "Bash(rg *)",
-                     "Bash(ls *)"
-                   ]
+  @explore_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
   @min_draft_bytes 50
 

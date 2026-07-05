@@ -23,7 +23,9 @@ defmodule HarnessWeb.ComposeLiveTest do
   # Swap in a policy that has one repo so the compose form is usable.
   defp with_policy_repo(ctx) do
     original = Application.fetch_env!(:harness, :policy_path)
-    tmp = Path.join(System.tmp_dir!(), "compose-policy-#{System.unique_integer([:positive])}.yaml")
+
+    tmp =
+      Path.join(System.tmp_dir!(), "compose-policy-#{System.unique_integer([:positive])}.yaml")
 
     File.write!(
       tmp,
@@ -84,7 +86,10 @@ defmodule HarnessWeb.ComposeLiveTest do
         "/repos/" <> _ ->
           conn
           |> Plug.Conn.put_status(201)
-          |> Req.Test.json(%{"number" => 99, "html_url" => "https://github.com/owner/fixture/issues/99"})
+          |> Req.Test.json(%{
+            "number" => 99,
+            "html_url" => "https://github.com/owner/fixture/issues/99"
+          })
 
         _ ->
           Plug.Conn.send_resp(conn, 500, "")
@@ -95,7 +100,8 @@ defmodule HarnessWeb.ComposeLiveTest do
       draft_fixture(%{
         repo: ctx.repo,
         title: "Speed up widget",
-        body: "## Problem\n\nSlow.\n\n## Change\n\nFix it.\n\n## Acceptance\n\n- Fast.\n\n## Non-goals\n\nNone."
+        body:
+          "## Problem\n\nSlow.\n\n## Change\n\nFix it.\n\n## Acceptance\n\n- Fast.\n\n## Non-goals\n\nNone."
       })
 
     {:ok, view, _html} = live(conn, ~p"/compose/#{draft.id}")
@@ -116,7 +122,8 @@ defmodule HarnessWeb.ComposeLiveTest do
       draft_fixture(%{
         repo: ctx.repo,
         title: "An idea",
-        body: "## Problem\n\nX.\n\n## Change\n\nY.\n\n## Acceptance\n\n- Z.\n\n## Non-goals\n\nNone."
+        body:
+          "## Problem\n\nX.\n\n## Change\n\nY.\n\n## Acceptance\n\n- Z.\n\n## Non-goals\n\nNone."
       })
 
     # If GitHub were called, the stub returns 500 → test would surface an error
@@ -186,7 +193,8 @@ defmodule HarnessWeb.ComposeLiveTest do
       draft_fixture(%{
         repo: ctx.repo,
         title: "An idea",
-        body: "## Problem\n\nX.\n\n## Change\n\nY.\n\n## Acceptance\n\n- Z.\n\n## Non-goals\n\nNone."
+        body:
+          "## Problem\n\nX.\n\n## Change\n\nY.\n\n## Acceptance\n\n- Z.\n\n## Non-goals\n\nNone."
       })
 
     {:ok, view, _html} = live(conn, ~p"/compose/#{draft.id}")

@@ -306,7 +306,8 @@ defmodule HarnessWeb.IdeationLive do
 
     # Auto-open synthesis modal when an operator_synthesis run completes.
     socket =
-      with %{status: "synthesized", stop_reason: "operator_synthesis"} <- socket.assigns[:session],
+      with %{status: "synthesized", stop_reason: "operator_synthesis"} <-
+             socket.assigns[:session],
            false <- socket.assigns[:synthesis_open] do
         assign(socket, :synthesis_open, true)
       else
@@ -967,7 +968,10 @@ defmodule HarnessWeb.IdeationLive do
                         Expand
                       </button>
                       <button
-                        :if={@session && @session.status == "running" && @selected_node.idea.status == "frontier"}
+                        :if={
+                          @session && @session.status == "running" &&
+                            @selected_node.idea.status == "frontier"
+                        }
                         phx-click="focus_node"
                         phx-value-id={@selected_node.idea.id}
                         class="font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
@@ -987,7 +991,12 @@ defmodule HarnessWeb.IdeationLive do
                       :if={@selected_node.idea.promoted_epic_url}
                       class="mb-2 font-mono text-[10px] text-ok"
                     >
-                      epic: <a href={@selected_node.idea.promoted_epic_url} target="_blank" class="underline">{@selected_node.idea.promoted_epic_url}</a>
+                      epic:
+                      <a
+                        href={@selected_node.idea.promoted_epic_url}
+                        target="_blank"
+                        class="underline"
+                      >{@selected_node.idea.promoted_epic_url}</a>
                     </div>
                     <div :if={@selected_node.artifact} class="artifact-prose">
                       {artifact_html(@selected_node.artifact)}
@@ -1027,7 +1036,6 @@ defmodule HarnessWeb.IdeationLive do
       >
         <div class="absolute inset-0 bg-bg/85" phx-click="close_artifact" aria-hidden="true"></div>
         <div class="relative w-full max-w-3xl max-h-[80vh] flex flex-col rounded-sm bg-surface border border-surface-2 shadow-2xl">
-          
           <div
             :if={@selected_node.ancestors != []}
             class="flex items-center gap-1 flex-wrap px-5 py-2 border-b border-surface-2 shrink-0"
@@ -1187,6 +1195,7 @@ defmodule HarnessWeb.IdeationLive do
 
   defp node_matches?(query, node) do
     q = String.downcase(query)
+
     String.contains?(String.downcase(node.title), q) ||
       String.contains?(String.downcase(node.summary || ""), q)
   end

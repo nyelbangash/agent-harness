@@ -278,7 +278,11 @@ defmodule Harness.Repos do
   def handle_call({:force_push_head, repo, worktree, branch}, _from, state) do
     true = String.starts_with?(branch, "harness/")
 
-    case git(worktree, ["push", "--force-with-lease", "origin", "HEAD:refs/heads/#{branch}"], repo) do
+    case git(
+           worktree,
+           ["push", "--force-with-lease", "origin", "HEAD:refs/heads/#{branch}"],
+           repo
+         ) do
       {_, 0} -> {:reply, :ok, state}
       {_, _} -> {:reply, {:error, :lease_broken}, state}
     end

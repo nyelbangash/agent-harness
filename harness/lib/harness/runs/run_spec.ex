@@ -23,7 +23,8 @@ defmodule Harness.Runs.RunSpec do
   ]
 
   @type t :: %__MODULE__{
-          kind: :triage | :implement | :plan | :ideate | :critique | :review | :promote | :explore,
+          kind:
+            :triage | :implement | :plan | :ideate | :critique | :review | :promote | :explore,
           model: String.t(),
           prompt: String.t(),
           cwd: Path.t(),
