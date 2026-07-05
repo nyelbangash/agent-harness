@@ -65,6 +65,7 @@ defmodule Harness.Ideation.CritiqueWorker do
   end
 
   defp critique(session) do
+    Ideation.broadcast_critique_running(session.id)
     prompt = Harness.Prompts.critique(session)
 
     spec = %RunSpec{

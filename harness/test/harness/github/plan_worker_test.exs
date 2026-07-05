@@ -86,7 +86,7 @@ defmodule Harness.GitHub.PlanWorkerTest do
         {"POST", true} ->
           {:ok, raw, conn} = Plug.Conn.read_body(conn)
           Agent.update(captured, fn _ -> Jason.decode!(raw)["body"] end)
-          conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 4242})
+          conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 4242, "created_at" => "2026-07-05T10:00:00Z"})
 
         {"GET", false} ->
           # the self-acknowledge fetch after posting (issue #28)

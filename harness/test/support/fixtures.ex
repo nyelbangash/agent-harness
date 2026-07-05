@@ -1,8 +1,19 @@
 defmodule Harness.Fixtures do
   @moduledoc "Shared test fixtures: issues, GitHub payloads, local git remotes."
 
+  alias Harness.{Briefing, Repo}
   alias Harness.GitHub.Issue
-  alias Harness.Repo
+
+  def briefing_fixture(attrs \\ %{}) do
+    defaults = %{
+      date: Date.utc_today(),
+      markdown: "## PRs\n\nFixture briefing."
+    }
+
+    %Briefing{}
+    |> Briefing.changeset(Map.merge(defaults, attrs))
+    |> Repo.insert!()
+  end
 
   def issue_fixture(attrs \\ %{}) do
     number = attrs[:number] || System.unique_integer([:positive])

@@ -25,6 +25,8 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:sessions, Ideation.list_sessions())
      |> assign(:selected_node, nil)
      |> assign(:artifact_open, false)
+     |> assign(:active_node_id, nil)
+     |> assign(:critique_running, false)
      |> assign(:policy, policy)
      |> assign(:window_note, Policy.window_note(policy: policy, now: now))
      |> assign(:budget_minutes, budget)
@@ -46,6 +48,8 @@ defmodule HarnessWeb.IdeationLive do
          socket
          |> assign(:selected_node, nil)
          |> assign(:artifact_open, false)
+         |> assign(:active_node_id, nil)
+         |> assign(:critique_running, false)
          |> load_session(String.to_integer(id))}
     end
   end
@@ -104,15 +108,56 @@ defmodule HarnessWeb.IdeationLive do
   def handle_event("select_node", %{"id" => id}, socket) do
     idea = Ideation.get_idea!(String.to_integer(id))
     artifact = Ideation.read_artifact(idea)
+    chain = Ideation.ancestor_chain(idea)
+    ancestors = Enum.drop(chain, -1)
+    children = Ideation.children(idea)
+    siblings = Ideation.siblings(idea)
+    sibling_index = Enum.find_index(siblings, &(&1.id == idea.id)) || 0
 
     {:noreply,
      socket
-     |> assign(:selected_node, %{idea: idea, artifact: artifact})
+     |> assign(:selected_node, %{
+       idea: idea,
+       artifact: artifact,
+       ancestors: ancestors,
+       children: children,
+       siblings: siblings,
+       sibling_index: sibling_index
+     })
      |> assign(:artifact_open, artifact != nil)}
   end
 
   def handle_event("close_artifact", _params, socket) do
     {:noreply, assign(socket, :artifact_open, false)}
+  end
+
+  def handle_event("modal_keydown", %{"key" => key}, socket) do
+    case String.downcase(key) do
+      "escape" ->
+        {:noreply, assign(socket, :artifact_open, false)}
+
+      "arrowleft" ->
+        navigate_sibling(socket, -1)
+
+      "arrowright" ->
+        navigate_sibling(socket, +1)
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  defp navigate_sibling(%{assigns: %{selected_node: nil}} = socket, _dir),
+    do: {:noreply, socket}
+
+  defp navigate_sibling(%{assigns: %{selected_node: %{siblings: []}}} = socket, _dir),
+    do: {:noreply, socket}
+
+  defp navigate_sibling(socket, dir) do
+    %{siblings: siblings, sibling_index: idx} = socket.assigns.selected_node
+    new_idx = Integer.mod(idx + dir, length(siblings))
+    sibling = Enum.at(siblings, new_idx)
+    handle_event("select_node", %{"id" => to_string(sibling.id)}, socket)
   end
 
   def handle_event("stop_session", %{"id" => id}, socket) do
@@ -123,7 +168,11 @@ defmodule HarnessWeb.IdeationLive do
   @impl true
   def handle_info({event, _}, socket)
       when event in [:session_started, :session_updated] do
-    socket = assign(socket, :sessions, Ideation.list_sessions())
+    socket =
+      socket
+      |> assign(:sessions, Ideation.list_sessions())
+      |> assign(:active_node_id, nil)
+      |> assign(:critique_running, false)
 
     socket =
       if socket.assigns[:session],
@@ -131,6 +180,14 @@ defmodule HarnessWeb.IdeationLive do
         else: socket
 
     {:noreply, socket}
+  end
+
+  def handle_info({:developing_node, node_id}, socket) do
+    {:noreply, socket |> assign(:active_node_id, node_id) |> assign(:critique_running, false)}
+  end
+
+  def handle_info({:critique_running, _session_id}, socket) do
+    {:noreply, socket |> assign(:active_node_id, nil) |> assign(:critique_running, true)}
   end
 
   def handle_info({:policy_reloaded, _}, socket) do
@@ -401,7 +458,7 @@ defmodule HarnessWeb.IdeationLive do
             </div>
 
             <div :if={@session} class="md:flex-1 md:min-h-0 md:flex md:flex-col">
-              <div class="flex items-center gap-3 mb-4">
+              <div class="flex items-center gap-3 mb-1">
                 <h1 class="font-display uppercase tracking-[0.16em] text-sm text-ink-dim">
                   Session #{@session.id}
                 </h1>
@@ -418,6 +475,17 @@ defmodule HarnessWeb.IdeationLive do
                 >
                   Stop
                 </button>
+              </div>
+              <div class="flex items-center gap-3 mb-3">
+                <span class="font-mono text-[10px] text-ink-dim tabular-nums">
+                  {status_line(@session, @policy)}
+                </span>
+                <span
+                  :if={@critique_running}
+                  class="font-mono text-[10px] text-ink-dim/70 italic"
+                >
+                  critique in progress
+                </span>
               </div>
 
               <div class="grid xl:grid-cols-3 gap-4 md:flex-1 md:min-h-0 md:auto-rows-fr">
@@ -518,6 +586,7 @@ defmodule HarnessWeb.IdeationLive do
                       phx-value-id={n.id}
                       class="cursor-pointer"
                       opacity={if n.status == "pruned", do: "0.3", else: "1"}
+                      data-developing={if @active_node_id == n.id, do: "true"}
                     >
                       <circle
                         cx={n.x}
@@ -530,6 +599,7 @@ defmodule HarnessWeb.IdeationLive do
                             else: "var(--color-bg)"
                         }
                         stroke-width="2"
+                        class={if @active_node_id == n.id, do: "node-developing"}
                       />
                       <text
                         x={n.x}
@@ -587,14 +657,31 @@ defmodule HarnessWeb.IdeationLive do
       <div
         :if={@artifact_open && @selected_node && @selected_node.artifact}
         id="artifact-modal"
-        phx-window-keydown="close_artifact"
-        phx-key="escape"
+        phx-window-keydown="modal_keydown"
         class="fixed inset-0 z-50 flex items-center justify-center p-6"
         aria-modal="true"
         role="dialog"
       >
         <div class="absolute inset-0 bg-bg/85" phx-click="close_artifact" aria-hidden="true"></div>
-        <div class="relative w-full max-w-3xl max-h-[72vh] flex flex-col rounded-sm bg-surface border border-surface-2 shadow-2xl">
+        <div class="relative w-full max-w-3xl max-h-[80vh] flex flex-col rounded-sm bg-surface border border-surface-2 shadow-2xl">
+          <%# Breadcrumb — hidden for root nodes (ancestors is empty) %>
+          <div
+            :if={@selected_node.ancestors != []}
+            class="flex items-center gap-1 flex-wrap px-5 py-2 border-b border-surface-2 shrink-0"
+          >
+            <span :for={anc <- @selected_node.ancestors} class="flex items-center gap-1">
+              <button
+                phx-click="select_node"
+                phx-value-id={anc.id}
+                class="font-mono text-[10px] text-ink-dim hover:text-accent"
+              >
+                {anc.title}
+              </button>
+              <span class="font-mono text-[10px] text-ink-dim/40">›</span>
+            </span>
+          </div>
+
+          <%# Modal header: title, meta, close button %>
           <div class="flex items-center gap-3 px-5 py-3 border-b border-surface-2 shrink-0">
             <span class="font-display text-sm text-ink">{@selected_node.idea.title}</span>
             <span class="font-mono text-[10px] text-ink-dim tabular-nums">
@@ -608,13 +695,49 @@ defmodule HarnessWeb.IdeationLive do
               Close
             </button>
           </div>
+
+          <%# Artifact body %>
           <div class="artifact-prose overflow-y-auto px-5 py-4 min-h-0">
             {artifact_html(@selected_node.artifact)}
+          </div>
+
+          <%# Children list — hidden when node is a leaf %>
+          <div
+            :if={@selected_node.children != []}
+            class="border-t border-surface-2 px-5 py-3 shrink-0"
+          >
+            <h4 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-2">
+              Children
+            </h4>
+            <div class="flex flex-wrap gap-2">
+              <button
+                :for={child <- @selected_node.children}
+                phx-click="select_node"
+                phx-value-id={child.id}
+                class="font-mono text-[10px] px-2 py-1 rounded-sm border border-surface-2 text-ink-dim hover:border-accent hover:text-accent"
+              >
+                {child.title} · {child.score}
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </Layouts.app>
     """
+  end
+
+  defp status_line(session, policy) do
+    used = DateTime.diff(DateTime.utc_now(), session.started_at, :second) |> div(60)
+    used = used |> max(0) |> min(session.budget_minutes)
+    total = session.budget_minutes
+    bar = budget_bar(used, total)
+
+    "iteration #{session.iterations} · critique #{session.critiques}/#{policy.ideate.critique_every} · budget #{bar} #{used}/#{total} min"
+  end
+
+  defp budget_bar(used, total, blocks \\ 6) do
+    filled = if total > 0, do: round(used / total * blocks) |> min(blocks) |> max(0), else: 0
+    String.duplicate("▓", filled) <> String.duplicate("░", blocks - filled)
   end
 
   # score → color ramp: low = dim, high = accent (no red/green — those are

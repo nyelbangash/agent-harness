@@ -26,6 +26,14 @@ defmodule Harness.Ideation do
     Phoenix.PubSub.broadcast(Harness.PubSub, "ideation:#{session_id}", message)
   end
 
+  @doc "Inform the tree view which node the current iteration is developing."
+  def broadcast_developing(session_id, node_id),
+    do: Phoenix.PubSub.broadcast(Harness.PubSub, "ideation:#{session_id}", {:developing_node, node_id})
+
+  @doc "Inform the tree view that a critique pass is now running."
+  def broadcast_critique_running(session_id),
+    do: Phoenix.PubSub.broadcast(Harness.PubSub, "ideation:#{session_id}", {:critique_running, session_id})
+
   # -- sessions ---------------------------------------------------------------
 
   @doc "Create a session, seed its root idea, and enqueue the first iteration."
@@ -171,6 +179,18 @@ defmodule Harness.Ideation do
     from(i in Idea, where: i.parent_id == ^pid and i.id != ^id, select: {i.title, i.score})
     |> Repo.all()
     |> Enum.map(fn {title, score} -> "#{title} (score #{score})" end)
+  end
+
+  @doc "Direct children of a node, ordered by insertion."
+  def children(%Idea{id: id}) do
+    from(i in Idea, where: i.parent_id == ^id, order_by: [asc: i.id]) |> Repo.all()
+  end
+
+  @doc "All siblings (including self), ordered by insertion — for arrow-key navigation."
+  def siblings(%Idea{parent_id: nil}), do: []
+
+  def siblings(%Idea{parent_id: pid}) do
+    from(i in Idea, where: i.parent_id == ^pid, order_by: [asc: i.id]) |> Repo.all()
   end
 
   def frontier_count(session_id) do

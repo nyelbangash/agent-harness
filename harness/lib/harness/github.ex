@@ -7,7 +7,7 @@ defmodule Harness.GitHub do
 
   import Ecto.Query
 
-  alias Harness.GitHub.{Issue, Plan, RepoState, TriageDecision}
+  alias Harness.GitHub.{Issue, Plan, RepoState, TriageDecision, TriageOutcome}
   alias Harness.Repo
 
   @topic "issues"
@@ -211,7 +211,34 @@ defmodule Harness.GitHub do
     |> Repo.one()
   end
 
+  @doc """
+  Insert exactly one outcome row per issue (idempotent — unique index on issue_id,
+  on_conflict: :nothing).
+  """
+  def record_triage_outcome!(attrs) do
+    %TriageOutcome{}
+    |> TriageOutcome.changeset(attrs)
+    |> Repo.insert!(on_conflict: :nothing, conflict_target: [:issue_id])
+  end
+
   # -- plans ------------------------------------------------------------------
+
+  @doc """
+  After posting a harness-authored comment, advance `github_updated_at` in the
+  DB to match the comment's `created_at`. This prevents the next poll sweep from
+  seeing the comment-induced bump as operator activity.
+  """
+  def acknowledge_comment_timestamp!(issue, created_at_iso) do
+    case DateTime.from_iso8601(created_at_iso) do
+      {:ok, dt, _} ->
+        issue
+        |> Issue.changeset(%{github_updated_at: dt})
+        |> Repo.update!()
+
+      _ ->
+        issue
+    end
+  end
 
   def record_plan!(attrs) do
     issue_id = Map.fetch!(attrs, :issue_id)

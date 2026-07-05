@@ -82,6 +82,9 @@ defmodule Harness.Runs do
 
   def next_event_seq(run_id) do
     (Repo.one(from e in RunEvent, where: e.run_id == ^run_id, select: max(e.seq)) || 0) + 1
+  @doc "Broadcast live counter state for a running row (turn count mid-run)."
+  def broadcast_counters(run_id, turns) do
+    broadcast({:run_counters, run_id, turns})
   end
 
   @doc "Append one decoded NDJSON event and broadcast it on the run's topic."
