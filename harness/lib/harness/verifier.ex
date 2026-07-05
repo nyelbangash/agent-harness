@@ -13,8 +13,10 @@ defmodule Harness.Verifier do
   @type outcome :: :ok | {:failed, String.t()}
 
   @doc "Run every configured command in order; stop at the first failure."
-  @spec verify(Path.t(), Harness.Policy.Schema.Repo.t()) :: outcome()
-  def verify(worktree, repo_cfg) do
+  @spec verify(Path.t(), Harness.Policy.Schema.Repo.t(), keyword()) :: outcome()
+  def verify(worktree, repo_cfg, opts \\ []) do
+    on_output = Keyword.get(opts, :on_output)
+
     commands =
       [
         {"test", repo_cfg.test_command},
@@ -24,7 +26,7 @@ defmodule Harness.Verifier do
       |> Enum.reject(fn {_label, cmd} -> is_nil(cmd) or cmd == "" end)
 
     Enum.reduce_while(commands, :ok, fn {label, command}, :ok ->
-      case run(worktree, command) do
+      case run(worktree, command, on_output) do
         {_output, 0} ->
           {:cont, :ok}
 
@@ -40,7 +42,7 @@ defmodule Harness.Verifier do
     end)
   end
 
-  defp run(worktree, command) do
+  defp run(worktree, command, on_output) do
     port =
       Port.open({:spawn_executable, "/bin/sh"}, [
         :binary,
@@ -59,15 +61,19 @@ defmodule Harness.Verifier do
         _ -> nil
       end
 
-    collect(port, os_pid, "", System.monotonic_time(:millisecond) + @command_timeout)
+    collect(port, os_pid, on_output, "", System.monotonic_time(:millisecond) + @command_timeout)
   end
 
-  defp collect(port, os_pid, acc, deadline) do
+  defp collect(port, os_pid, on_output, acc, deadline) do
     remaining = max(deadline - System.monotonic_time(:millisecond), 0)
 
     receive do
-      {^port, {:data, chunk}} -> collect(port, os_pid, acc <> chunk, deadline)
-      {^port, {:exit_status, code}} -> {acc, code}
+      {^port, {:data, chunk}} ->
+        if on_output, do: on_output.(chunk)
+        collect(port, os_pid, on_output, acc <> chunk, deadline)
+
+      {^port, {:exit_status, code}} ->
+        {acc, code}
     after
       remaining ->
         if is_integer(os_pid) do

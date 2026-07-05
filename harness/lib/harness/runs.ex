@@ -80,6 +80,10 @@ defmodule Harness.Runs do
     run
   end
 
+  def next_event_seq(run_id) do
+    (Repo.one(from e in RunEvent, where: e.run_id == ^run_id, select: max(e.seq)) || 0) + 1
+  end
+
   @doc "Append one decoded NDJSON event and broadcast it on the run's topic."
   def append_event!(%Run{} = run, seq, type, payload) do
     event =
@@ -129,7 +133,8 @@ defmodule Harness.Runs do
   end
 
   def running_runs do
-    from(r in Run, where: r.status == "running") |> Repo.all()
+    from(r in Run, where: r.status in ["running", "verifying", "pushing", "opening_pr"])
+    |> Repo.all()
   end
 
   @doc "Error string from the most recent terminal (failed/killed) run for an issue, or nil."
@@ -150,6 +155,18 @@ defmodule Harness.Runs do
       order_by: [desc: r.id],
       limit: 1,
       select: r.kind
+    )
+    |> Repo.one()
+  end
+
+  def active_implement_status(issue_id) do
+    from(r in Run,
+      where:
+        r.issue_id == ^issue_id and r.kind == "implement" and
+          r.status not in ["succeeded", "failed", "killed"],
+      order_by: [desc: r.id],
+      limit: 1,
+      select: r.status
     )
     |> Repo.one()
   end

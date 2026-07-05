@@ -47,4 +47,14 @@ defmodule Harness.VerifierTest do
     cfg = %RepoCfg{name: "o/r", test_command: "test -f marker.txt"}
     assert :ok = Verifier.verify(tmp, cfg)
   end
+
+  test "on_output callback receives chunks as they arrive", %{tmp: tmp} do
+    collector = start_supervised!({Agent, fn -> [] end})
+    on_output = fn chunk -> Agent.update(collector, &[chunk | &1]) end
+    cfg = %RepoCfg{name: "o/r", test_command: "printf 'hello\\nworld'"}
+    assert :ok = Verifier.verify(tmp, cfg, on_output: on_output)
+    received = Agent.get(collector, & &1) |> Enum.reverse() |> Enum.join()
+    assert received =~ "hello"
+    assert received =~ "world"
+  end
 end
