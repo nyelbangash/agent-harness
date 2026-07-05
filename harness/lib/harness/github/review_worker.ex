@@ -145,12 +145,15 @@ defmodule Harness.GitHub.ReviewWorker do
          run_id,
          policy
        ) do
+    # GitHub forbids APPROVE/REQUEST_CHANGES on your own PR (the PAT authors
+    # all harness PRs) — every such post 422s. COMMENT is the only legal
+    # event; the verdict lives in the body instead.
     {event, body} =
       if all_findings == [] do
         approval =
-          "Adversarial review found no defects. Verification gate passed. PR looks correct."
+          "\u2705 **Adversarial review: no defects found.** Verification gate passed. PR looks correct."
 
-        {"APPROVE", Provenance.stamp(approval, "review", run_id)}
+        {"COMMENT", Provenance.stamp(approval, "review", run_id)}
       else
         bullet_list =
           Enum.map_join(all_findings, "\n", fn f ->
@@ -159,12 +162,12 @@ defmodule Harness.GitHub.ReviewWorker do
 
         body =
           """
-          Adversarial review found #{length(all_findings)} finding(s):
+          \u26a0\ufe0f **Adversarial review: #{length(all_findings)} finding(s)** \u2014 addressed below or in the fix cycle:
 
           #{bullet_list}
           """
 
-        {"REQUEST_CHANGES", Provenance.stamp(body, "review", run_id)}
+        {"COMMENT", Provenance.stamp(body, "review", run_id)}
       end
 
     case Client.create_pull_request_review(issue.repo, pr_number, event, body) do
@@ -172,7 +175,12 @@ defmodule Harness.GitHub.ReviewWorker do
         Logger.info("Posted #{event} review for #{issue.repo}##{pr_number} (round #{round})")
 
       {:error, reason} ->
-        Logger.warning("Failed to post review for #{issue.repo}##{pr_number}: #{inspect(reason)}")
+        Logger.error("Failed to post review for #{issue.repo}##{pr_number}: #{inspect(reason)}")
+
+        Harness.Notify.notify(
+          :review_publish_failed,
+          "Review for #{issue.repo}##{pr_number} could not be posted: #{inspect(reason)}"
+        )
     end
 
     if actionable != [] and round < policy.review.max_rounds do
@@ -233,7 +241,7 @@ defmodule Harness.GitHub.ReviewWorker do
 
           {:failed, transcript} ->
             Logger.warning(
-              "Review fix cycle for #{issue.repo}##{pr_number} stayed red — leaving REQUEST_CHANGES in place.\n#{String.slice(transcript, 0, 500)}"
+              "Review fix cycle for #{issue.repo}##{pr_number} stayed red — leaving the findings comment in place.\n#{String.slice(transcript, 0, 500)}"
             )
 
             :ok
