@@ -11,6 +11,8 @@ defmodule HarnessWeb.IdeationLive do
   alias Harness.Ideation.Layout
   alias Harness.Policy
 
+  require Logger
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: Ideation.subscribe()
@@ -35,6 +37,7 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:tokens_out, 0)
      |> assign(:journal_snippet, nil)
      |> assign(:synthesis_open, false)
+     |> assign(:synthesis_content, nil)
      |> assign(:search_query, "")
      |> assign(:promote_open, false)
      |> assign(:promote_node_id, nil)
@@ -56,6 +59,7 @@ defmodule HarnessWeb.IdeationLive do
            tokens_out: 0,
            journal_snippet: nil,
            synthesis_open: false,
+           synthesis_content: nil,
            promote_open: false,
            promote_node_id: nil,
            search_query: ""
@@ -72,6 +76,7 @@ defmodule HarnessWeb.IdeationLive do
          |> assign(:active_node_id, nil)
          |> assign(:critique_running, false)
          |> assign(:synthesis_open, false)
+         |> assign(:synthesis_content, nil)
          |> assign(:promote_open, false)
          |> assign(:promote_node_id, nil)
          |> assign(:search_query, "")
@@ -165,7 +170,7 @@ defmodule HarnessWeb.IdeationLive do
   def handle_event("modal_keydown", %{"key" => key}, socket) do
     case String.downcase(key) do
       "escape" ->
-        {:noreply, assign(socket, :artifact_open, false)}
+        {:noreply, assign(socket, artifact_open: false, synthesis_open: false)}
 
       "arrowleft" ->
         navigate_sibling(socket, -1)
@@ -227,11 +232,24 @@ defmodule HarnessWeb.IdeationLive do
   end
 
   def handle_event("open_synthesis", _params, socket) do
-    {:noreply, assign(socket, :synthesis_open, true)}
+    content =
+      case File.read(Ideation.synthesis_path(socket.assigns.session)) do
+        {:ok, text} ->
+          text
+
+        {:error, reason} ->
+          Logger.warning(
+            "SYNTHESIS.md missing for session #{socket.assigns.session.id}: #{inspect(reason)}"
+          )
+
+          :missing
+      end
+
+    {:noreply, socket |> assign(:synthesis_open, true) |> assign(:synthesis_content, content)}
   end
 
   def handle_event("close_synthesis", _params, socket) do
-    {:noreply, assign(socket, :synthesis_open, false)}
+    {:noreply, assign(socket, synthesis_open: false, synthesis_content: nil)}
   end
 
   def handle_event("synthesis_keydown", %{"key" => "Escape"}, socket) do
@@ -481,6 +499,10 @@ defmodule HarnessWeb.IdeationLive do
                 <div class="flex items-center gap-2">
                   <span class="font-mono text-[10px] text-ink-dim tabular-nums">#{s.id}</span>
                   <span class={session_status_class(s.status)}>{s.status}</span>
+                  <span
+                    :if={s.status == "synthesized"}
+                    class="font-mono text-[9px] text-ok border border-ok/40 rounded px-1 shrink-0"
+                  >doc</span>
                   <span class="font-mono text-[10px] text-ink-dim ml-auto tabular-nums">
                     {s.iterations}it
                   </span>
@@ -873,6 +895,14 @@ defmodule HarnessWeb.IdeationLive do
 
                 <div class="rounded-sm bg-surface border border-surface-2 p-3 max-h-[60vh] md:max-h-none md:min-h-0 overflow-auto">
                   <div :if={!@selected_node} id="inspector-cockpit" class="space-y-4">
+                    <div :if={@session.status == "synthesized" && @session.synthesis_path}>
+                      <button
+                        phx-click="open_synthesis"
+                        class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-ok text-ok rounded-sm hover:bg-ok/10"
+                      >
+                        Open Synthesis
+                      </button>
+                    </div>
                     <div>
                       <h4 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-1">
                         Vitals
@@ -1079,7 +1109,11 @@ defmodule HarnessWeb.IdeationLive do
             </button>
           </div>
           <div class="artifact-prose overflow-y-auto px-5 py-4 min-h-0">
-            {artifact_html(Ideation.read_synthesis(@session) || "(synthesis not yet written)")}
+            <%= if @synthesis_content == :missing do %>
+              <p class="font-body text-sm text-ink-dim">(synthesis file not found)</p>
+            <% else %>
+              {artifact_html(@synthesis_content || "")}
+            <% end %>
           </div>
         </div>
       </div>

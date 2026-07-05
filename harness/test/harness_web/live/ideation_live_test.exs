@@ -2,6 +2,7 @@ defmodule HarnessWeb.IdeationLiveTest do
   use HarnessWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import ExUnit.CaptureLog
 
   alias Harness.Ideation
   alias Harness.Ideation.Layout
@@ -505,6 +506,77 @@ defmodule HarnessWeb.IdeationLiveTest do
 
     refute html =~ "promote-modal"
     assert html =~ "Promoting to owner/testrepo"
+  end
+
+  test "synthesized session shows Open synthesis button in header and doc badge in list",
+       %{conn: conn} do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+    path = Ideation.synthesis_path(session)
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "# Synthesis\n\n- finding one")
+    Ideation.update_session!(session, %{status: "synthesized", synthesis_path: path})
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+    assert html =~ "Open synthesis"
+    assert html =~ ">doc<"
+  end
+
+  test "clicking Open synthesis opens modal with rendered markdown", %{conn: conn} do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+    path = Ideation.synthesis_path(session)
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "# Synthesis\n\n## Key finding\n\n- **bold** point")
+    Ideation.update_session!(session, %{status: "synthesized", synthesis_path: path})
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+    html = view |> element("button", "Open synthesis") |> render_click()
+
+    assert html =~ ~s(id="synthesis-modal")
+    assert html =~ "<h2>"
+    assert html =~ "<strong>bold</strong>"
+    refute html =~ "## Key finding"
+  end
+
+  test "Escape key closes synthesis modal", %{conn: conn} do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+    path = Ideation.synthesis_path(session)
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "# Synthesis\n\ncontent")
+    Ideation.update_session!(session, %{status: "synthesized", synthesis_path: path})
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+    view |> element("button", "Open synthesis") |> render_click()
+
+    html = render_keydown(element(view, "#synthesis-modal"), %{"key" => "Escape"})
+    refute html =~ ~s(id="synthesis-modal")
+  end
+
+  test "missing synthesis file renders notice in modal and logs a warning", %{conn: conn} do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+    path = Ideation.synthesis_path(session)
+    # Ensure no leftover file from a prior test run with the same session dir
+    File.rm(path)
+    Ideation.update_session!(session, %{status: "synthesized", synthesis_path: path})
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+
+    assert capture_log(fn ->
+      html = view |> element("button", "Open synthesis") |> render_click()
+      assert html =~ "synthesis file not found"
+      assert html =~ ~s(id="synthesis-modal")
+    end) =~ "SYNTHESIS.md missing"
+  end
+
+  test "cockpit idle panel shows Open Synthesis button for synthesized session", %{conn: conn} do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "synthesis seed", budget_minutes: 60})
+    path = Ideation.synthesis_path(session)
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "# Synthesis\n\ncontent")
+    Ideation.update_session!(session, %{status: "synthesized", synthesis_path: path})
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+    assert html =~ ~s(id="inspector-cockpit")
+    assert html =~ "Open Synthesis"
   end
 
   test "viewBox height adjusts with tree depth, hugging content tighter than the old formula", %{
