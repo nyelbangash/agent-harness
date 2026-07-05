@@ -30,6 +30,8 @@ defmodule Harness.GitHub.PollWorker do
       for repo <- policy.github.repos do
         poll_repo(repo, login, policy.github.poll_minutes)
       end
+
+      :persistent_term.put({__MODULE__, :last_sweep_at}, System.system_time(:second))
     end
 
     :ok
