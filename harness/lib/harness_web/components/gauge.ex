@@ -46,12 +46,12 @@ defmodule HarnessWeb.Components.Gauge do
       data-value={@value}
       data-testid="gauge"
     >
-      <span class="font-display font-semibold uppercase tracking-[0.18em] text-[11px] text-ink-dim">
+      <span class="font-display font-semibold uppercase tracking-[0.18em] text-[13px] text-ink-dim">
         {@label}
       </span>
       <svg
         viewBox="0 0 200 200"
-        class="w-full max-w-[180px]"
+        class="w-full max-w-[240px]"
         role="img"
         aria-label={"#{@label}: #{@display}"}
       >
@@ -95,10 +95,10 @@ defmodule HarnessWeb.Components.Gauge do
           stroke-width="1.5"
         />
       </svg>
-      <div class="-mt-5 px-3 py-0.5 rounded-sm bg-bg border border-surface-2">
-        <span class="font-mono text-sm tabular-nums text-ink" data-testid="gauge-odometer">{@display}</span>
+      <div class="-mt-8 px-4 py-1 rounded-sm bg-bg border border-surface-2">
+        <span class="font-mono text-lg tabular-nums text-ink" data-testid="gauge-odometer">{@display}</span>
       </div>
-      <span :if={@sublabel} class="mt-1 font-mono text-[10px] text-ink-dim tabular-nums">{@sublabel}</span>
+      <span :if={@sublabel} class="mt-1.5 font-mono text-[11px] text-ink-dim tabular-nums">{@sublabel}</span>
     </div>
     """
   end

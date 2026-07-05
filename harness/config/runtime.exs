@@ -20,8 +20,11 @@ if System.get_env("PHX_SERVER") do
   config :harness, HarnessWeb.Endpoint, server: true
 end
 
-config :harness, HarnessWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+# Only override the port when PORT is explicitly set, so the per-env config
+# (dev.exs :5000, prod :4040) isn't clobbered by a global default.
+if port = System.get_env("PORT") do
+  config :harness, HarnessWeb.Endpoint, http: [port: String.to_integer(port)]
+end
 
 if config_env() == :prod do
   harness_home = Path.expand("~/.harness")

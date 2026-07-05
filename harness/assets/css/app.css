@@ -130,6 +130,27 @@ body {
   font-family: var(--font-sans);
 }
 
+/* global scale — makes every view read larger on a desktop monitor without
+   hand-sizing each component (behaves like a persistent browser zoom).
+   Scoped to md+ so narrow/phone widths (via Tailscale) don't get a
+   horizontal scrollbar. */
+:root {
+  --app-zoom: 1.2;
+}
+
+@media (min-width: 768px) {
+  body {
+    zoom: var(--app-zoom);
+  }
+
+  /* vh units aren't scaled by zoom but the rendered box is, so a plain
+     h-screen rail draws 1.2× the window and pushes its bottom controls
+     below the fold — divide the zoom back out to fit the page exactly */
+  .rail-fit {
+    height: calc(100vh / var(--app-zoom));
+  }
+}
+
 /* every place data appears reads like an odometer */
 .tabular, table, [data-numeric] {
   font-variant-numeric: tabular-nums;
