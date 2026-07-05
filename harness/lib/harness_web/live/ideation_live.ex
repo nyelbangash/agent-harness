@@ -215,7 +215,11 @@ defmodule HarnessWeb.IdeationLive do
               </p>
               <.link
                 :for={s <- @sessions}
-                patch={~p"/ideation/#{s.id}"}
+                patch={
+                  if @session && @session.id == s.id,
+                    do: ~p"/ideation",
+                    else: ~p"/ideation/#{s.id}"
+                }
                 class={[
                   "block rounded-sm border px-3 py-2 mb-1.5",
                   @session && @session.id == s.id && "border-accent bg-surface",

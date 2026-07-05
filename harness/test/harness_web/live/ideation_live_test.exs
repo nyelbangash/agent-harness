@@ -55,6 +55,11 @@ defmodule HarnessWeb.IdeationLiveTest do
     # composer clears for the next seed
     refute render(view) =~ "a calmer inbox</textarea>"
 
+    # clicking the selected session again deselects it
+    view |> element("a", "a calmer inbox") |> render_click()
+    assert_patched(view, ~p"/ideation")
+    refute render(view) =~ "Session #1</h1>"
+
     session = Ideation.get_session!(1)
     assert session.seed_prompt == "a calmer inbox"
     assert session.budget_minutes == 90
