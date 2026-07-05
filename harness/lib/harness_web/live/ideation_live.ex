@@ -36,7 +36,13 @@ defmodule HarnessWeb.IdeationLive do
     case params["id"] do
       nil ->
         {:noreply,
-         assign(socket, session: nil, tree_layout: nil, journal: nil, selected_node: nil)}
+         assign(socket,
+           session: nil,
+           tree_layout: nil,
+           journal: nil,
+           journal_entries: [],
+           selected_node: nil
+         )}
 
       id ->
         # navigating to a session starts with no artifact open
@@ -55,11 +61,13 @@ defmodule HarnessWeb.IdeationLive do
   defp load_session(socket, id) do
     session = Ideation.get_session!(id)
     ideas = Ideation.tree(id)
+    journal = Ideation.read_journal(session)
 
     socket
     |> assign(:session, session)
     |> assign(:tree_layout, Layout.compute(ideas))
-    |> assign(:journal, Ideation.read_journal(session))
+    |> assign(:journal, journal)
+    |> assign(:journal_entries, parse_journal(journal))
   end
 
   def handle_event("fill_seed", %{"seed" => seed}, socket) do
@@ -165,6 +173,45 @@ defmodule HarnessWeb.IdeationLive do
       {n, _} when n > 0 -> n
       _ -> default
     end
+  end
+
+  # Split journal text on "## Iteration N" headings; return [{num, body}] newest-first.
+  defp parse_journal(nil), do: []
+  defp parse_journal(""), do: []
+
+  defp parse_journal(journal) do
+    ~r/^## Iteration (\d+)\n(.*?)(?=\n## Iteration |\z)/ms
+    |> Regex.scan(journal)
+    |> Enum.map(fn [_full, num, body] -> {String.to_integer(num), String.trim(body)} end)
+    |> Enum.reverse()
+  end
+
+  # Render a journal entry body as safe HTML, linking any node titles to their nodes.
+  defp journal_entry_html(body, nodes) do
+    html =
+      case Earmark.as_html(body) do
+        {:ok, h, _} -> h
+        {:error, h, _} -> h
+      end
+
+    html =
+      nodes
+      |> Enum.sort_by(&String.length(&1.title), :desc)
+      |> Enum.reduce(html, fn node, acc ->
+        safe_title = node.title |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
+
+        if String.contains?(acc, safe_title) do
+          link =
+            ~s(<a phx-click="select_node" phx-value-id="#{node.id}") <>
+              ~s( class="text-accent underline cursor-pointer">#{safe_title}</a>)
+
+          String.replace(acc, safe_title, link)
+        else
+          acc
+        end
+      end)
+
+    Phoenix.HTML.raw(html)
   end
 
   # best-effort markdown → HTML; Earmark still returns usable HTML alongside
@@ -573,11 +620,22 @@ defmodule HarnessWeb.IdeationLive do
                 </div>
               </div>
 
-              <div class="mt-4 rounded-sm bg-surface border border-surface-2 p-3">
-                <h3 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-1">
+              <div class="mt-4 rounded-sm bg-surface border border-surface-2 p-3 max-h-48 overflow-auto">
+                <h3 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-2">
                   Journal
                 </h3>
-                <pre class="font-mono text-[11px] text-ink-dim whitespace-pre-wrap max-h-40 overflow-auto">{@journal}</pre>
+                <p :if={@journal_entries == []} class="font-mono text-[11px] text-ink-dim">
+                  No entries yet.
+                </p>
+                <div
+                  :for={{num, body} <- @journal_entries}
+                  class="mb-3 pb-3 border-b border-surface-2 last:mb-0 last:pb-0 last:border-0"
+                >
+                  <div class="font-mono text-[10px] text-ink-dim mb-1">Iteration {num}</div>
+                  <div class="artifact-prose text-[11px]">
+                    {journal_entry_html(body, @tree_layout.nodes)}
+                  </div>
+                </div>
               </div>
             </div>
           </section>

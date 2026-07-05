@@ -138,4 +138,63 @@ defmodule HarnessWeb.IdeationLiveTest do
 
     assert Ideation.get_session!(session.id).status == "stopped"
   end
+
+  test "journal renders per-iteration cards newest-first with rendered markdown", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    _child =
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Bright Idea", summary: "s", score: 8.0},
+        "# artifact"
+      )
+
+    Ideation.append_journal!(session, 1, ["explored **themes** here"])
+    Ideation.append_journal!(session, 2, ["refined results with care"])
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    # both cards rendered
+    assert html =~ "Iteration 1"
+    assert html =~ "Iteration 2"
+
+    # markdown is rendered (strong tag, not raw asterisks)
+    assert html =~ "<strong>themes</strong>"
+    refute html =~ "**themes**"
+
+    # newest-first: "Iteration 2" appears before "Iteration 1" in the document
+    {pos1, _} = :binary.match(html, "Iteration 1")
+    {pos2, _} = :binary.match(html, "Iteration 2")
+    assert pos2 < pos1
+  end
+
+  test "journal node-title link selects the matching tree node", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    child =
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Bright Idea", summary: "summary", score: 8.0},
+        "# artifact body"
+      )
+
+    Ideation.append_journal!(session, 1, ["refined Bright Idea further"])
+
+    {:ok, view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    # node title appears as a link in the journal
+    assert html =~ ~s(phx-click="select_node")
+    assert html =~ ~s(phx-value-id="#{child.id}")
+
+    # clicking the journal link selects the node (artifact panel header shows the title)
+    html =
+      view
+      |> element("a[phx-click='select_node'][phx-value-id='#{child.id}']", "Bright Idea")
+      |> render_click()
+
+    assert html =~ "Bright Idea"
+    assert html =~ "score"
+  end
 end
