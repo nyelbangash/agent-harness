@@ -209,6 +209,25 @@ defmodule Harness.Ideation do
     from(i in Idea, where: i.parent_id == ^id, order_by: [asc: i.id]) |> Repo.all()
   end
 
+  @doc "All descendants of a node (BFS order, including the node itself)."
+  def subtree(%Idea{} = root) do
+    collect_subtree([root], [])
+  end
+
+  defp collect_subtree([], acc), do: Enum.reverse(acc)
+
+  defp collect_subtree([node | rest], acc) do
+    kids = children(node)
+    collect_subtree(rest ++ kids, [node | acc])
+  end
+
+  @doc "Record the GitHub epic created by PromoteWorker on the originating idea."
+  def set_promoted!(%Idea{} = idea, epic_number, epic_url) do
+    idea
+    |> Idea.changeset(%{promoted_epic_number: epic_number, promoted_epic_url: epic_url})
+    |> Repo.update!()
+  end
+
   @doc "All siblings (including self), ordered by insertion — for arrow-key navigation."
   def siblings(%Idea{parent_id: nil}), do: []
 

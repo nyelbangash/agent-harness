@@ -122,4 +122,56 @@ defmodule Harness.GitHub.ClientTest do
     assert {:ok, [%{"sha" => "a1"}, %{"sha" => "b2"}]} =
              Client.list_pull_request_commits("owner/repo", 42)
   end
+
+  test "create_issue posts to /repos/{repo}/issues and returns number and url" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      assert conn.method == "POST"
+      assert conn.request_path == "/repos/owner/repo/issues"
+
+      {:ok, raw, conn} = Plug.Conn.read_body(conn)
+      body = Jason.decode!(raw)
+      assert body["title"] == "My epic"
+      assert body["body"] == "Epic description"
+      assert body["assignees"] == ["nyelbangash"]
+
+      conn
+      |> Plug.Conn.put_status(201)
+      |> Req.Test.json(%{"number" => 42, "html_url" => "https://github.com/owner/repo/issues/42"})
+    end)
+
+    assert {:ok, %{number: 42, url: "https://github.com/owner/repo/issues/42"}} =
+             Client.create_issue("owner/repo", "My epic", "Epic description",
+               assignees: ["nyelbangash"]
+             )
+  end
+
+  test "create_issue without opts omits assignees and labels" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      {:ok, raw, conn} = Plug.Conn.read_body(conn)
+      body = Jason.decode!(raw)
+      refute Map.has_key?(body, "assignees")
+      refute Map.has_key?(body, "labels")
+
+      conn
+      |> Plug.Conn.put_status(201)
+      |> Req.Test.json(%{"number" => 1, "html_url" => "https://github.com/owner/repo/issues/1"})
+    end)
+
+    assert {:ok, %{number: 1}} = Client.create_issue("owner/repo", "title", "body")
+  end
+
+  test "edit_issue PATCHes the issue and returns :ok on 200" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      assert conn.method == "PATCH"
+      assert conn.request_path == "/repos/owner/repo/issues/42"
+
+      {:ok, raw, conn} = Plug.Conn.read_body(conn)
+      body = Jason.decode!(raw)
+      assert body["body"] =~ "task list"
+
+      Req.Test.json(conn, %{"number" => 42, "html_url" => "..."})
+    end)
+
+    assert :ok = Client.edit_issue("owner/repo", 42, %{body: "updated body with task list"})
+  end
 end

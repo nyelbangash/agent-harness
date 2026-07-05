@@ -24,6 +24,8 @@ defmodule Harness.Ideation.Idea do
     field :model_used, :string
     field :tokens_in, :integer, default: 0
     field :tokens_out, :integer, default: 0
+    field :promoted_epic_url, :string
+    field :promoted_epic_number, :integer
 
     has_many :children, __MODULE__, foreign_key: :parent_id
 
@@ -45,7 +47,9 @@ defmodule Harness.Ideation.Idea do
       :artifact_path,
       :model_used,
       :tokens_in,
-      :tokens_out
+      :tokens_out,
+      :promoted_epic_url,
+      :promoted_epic_number
     ])
     |> validate_required([:session_id, :title])
     |> validate_inclusion(:status, @statuses)

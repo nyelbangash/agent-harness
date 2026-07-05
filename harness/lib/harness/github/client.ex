@@ -94,6 +94,34 @@ defmodule Harness.GitHub.Client do
     end
   end
 
+  @doc "Create an issue. Returns `{:ok, %{number: n, url: html_url}}`. opts: assignees, labels."
+  def create_issue(repo, title, body, opts \\ []) do
+    payload =
+      %{title: title, body: body}
+      |> maybe_put(:assignees, Keyword.get(opts, :assignees, []))
+      |> maybe_put(:labels, Keyword.get(opts, :labels, []))
+
+    case request(:post, "/repos/#{repo}/issues", json: payload) do
+      {:ok, %{status: 201, body: %{"number" => number, "html_url" => url}}} ->
+        {:ok, %{number: number, url: url}}
+
+      {:ok, %{status: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Edit an existing issue (PATCH). Used to backfill the epic task list after children are created."
+  def edit_issue(repo, number, attrs) do
+    case request(:patch, "/repos/#{repo}/issues/#{number}", json: attrs) do
+      {:ok, %{status: 200}} -> :ok
+      {:ok, %{status: status}} -> {:error, {:http_status, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @doc "Open a PR. Returns `{:ok, %{number: n, url: html_url}}`."
   def create_pull_request(repo, head, base, title, body) do
     case request(:post, "/repos/#{repo}/pulls",
@@ -178,6 +206,9 @@ defmodule Harness.GitHub.Client do
         {:error, reason}
     end
   end
+
+  defp maybe_put(map, _key, []), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp request(method, path, opts \\ []) do
     with {:ok, pat} <- Harness.Secrets.github_pat() do

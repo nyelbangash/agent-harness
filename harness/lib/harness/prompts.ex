@@ -101,6 +101,19 @@ defmodule Harness.Prompts do
     )
   end
 
+  def promote_epic(session, idea) do
+    render("promote_epic.md.eex",
+      seed_prompt: session.seed_prompt,
+      idea_title: truncate(idea.title, 500),
+      idea_summary: truncate(idea.summary || "", 2_000),
+      idea_score: idea.score,
+      idea_depth: idea.depth,
+      ancestor_chain: format_ancestors(idea),
+      subtree: format_subtree(Ideation.subtree(idea)),
+      journal: truncate(Ideation.read_journal(session), 5_000)
+    )
+  end
+
   defp format_ancestors(node) do
     node
     |> Ideation.ancestor_chain()
@@ -114,6 +127,14 @@ defmodule Harness.Prompts do
       [] -> "(none)"
       sums -> Enum.join(sums, "\n")
     end
+  end
+
+  defp format_subtree(nodes) do
+    Enum.map_join(nodes, "\n", fn n ->
+      indent = String.duplicate("  ", max(n.depth - 1, 0))
+      artifact_note = if n.artifact_path, do: " [artifact: #{Path.basename(n.artifact_path)}]", else: ""
+      "#{indent}- #{n.title} (score #{n.score}, #{n.status})#{artifact_note}: #{n.summary}"
+    end)
   end
 
   defp format_frontier(session) do
