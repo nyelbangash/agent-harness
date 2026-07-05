@@ -41,7 +41,8 @@ config :harness, Oban,
      crontab: [
        {"* * * * *", Harness.GitHub.PollWorker},
        {"* * * * *", Harness.Usage.PollWorker},
-       {"* * * * *", Harness.Janitor}
+       {"* * * * *", Harness.Janitor},
+       {"0 7 * * *", Harness.Briefing.Worker}
      ]}
   ]
 
