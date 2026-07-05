@@ -63,8 +63,6 @@ defmodule Harness.Runs do
     end
   end
 
-  # plans share the :implement queue (PlanWorker + ImplementWorker)
-  defp queue_label("implement"), do: "plan+implement"
   defp queue_label(name), do: name
 
   defp normalize_limit(limit) when is_integer(limit), do: limit

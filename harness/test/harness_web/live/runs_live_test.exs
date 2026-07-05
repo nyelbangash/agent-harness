@@ -57,7 +57,6 @@ defmodule HarnessWeb.RunsLiveTest do
     Oban.insert!(Harness.GitHub.PlanWorker.new(%{issue_id: 1}))
 
     {:ok, _view, html} = live(conn, ~p"/runs")
-    assert html =~ "plan+implement"
     assert html =~ "1 waiting"
     assert html =~ "0/1"
   end

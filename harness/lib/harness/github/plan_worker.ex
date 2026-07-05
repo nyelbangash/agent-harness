@@ -6,13 +6,14 @@ defmodule Harness.GitHub.PlanWorker do
   the HOST (the agent never commits or pushes), or an issue comment when
   `policy.plan.post_to_issue`.
 
-  Queue note: rides `:implement` (concurrency 1) — no `:plan` queue exists in
-  the spec's fixed set, and serializing heavy sessions + GitHub content
-  writes is what we want anyway (flagged in the approved plan).
+  Queue note: `:plan` (concurrency 1), split from `:implement` on 2026-07-05 —
+  sharing one slot let a 15-minute implement starve eleven queued plans. One
+  plan + one implement may now run concurrently; the SQLite ingest hardening
+  (issue #6) made that safe.
   """
 
   use Oban.Worker,
-    queue: :implement,
+    queue: :plan,
     max_attempts: 2,
     # period :infinity — the 60s default would allow duplicate plan sessions
     unique: [keys: [:issue_id], states: :incomplete, period: :infinity]
