@@ -84,6 +84,30 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert html =~ "full artifact body"
   end
 
+  test "clicking a node opens a rendered-markdown modal, escape closes it", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    child =
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Formatted", summary: "s", score: 8.0},
+        "## Section head\n\n- bullet one\n- **bold** point"
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
+
+    html = view |> element("g[phx-value-id='#{child.id}']") |> render_click()
+    assert html =~ ~s(id="artifact-modal")
+    assert html =~ "<h2>"
+    assert html =~ "<li>"
+    assert html =~ "<strong>bold</strong>"
+    refute html =~ "## Section head"
+
+    html = render_keydown(element(view, "#artifact-modal"), %{"key" => "escape"})
+    refute html =~ ~s(id="artifact-modal")
+  end
+
   test "pruned nodes are dimmed, not hidden", %{conn: conn} do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
     child = Ideation.add_child!(session, root, %{title: "Dead End", score: 2.0}, "")

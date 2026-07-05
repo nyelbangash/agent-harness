@@ -24,6 +24,7 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:page_title, "Ideation")
      |> assign(:sessions, Ideation.list_sessions())
      |> assign(:selected_node, nil)
+     |> assign(:artifact_open, false)
      |> assign(:policy, policy)
      |> assign(:window_note, Policy.window_note(policy: policy, now: now))
      |> assign(:budget_minutes, budget)
@@ -41,7 +42,11 @@ defmodule HarnessWeb.IdeationLive do
         # navigating to a session starts with no artifact open
         if connected?(socket), do: Ideation.subscribe(String.to_integer(id))
 
-        {:noreply, socket |> assign(:selected_node, nil) |> load_session(String.to_integer(id))}
+        {:noreply,
+         socket
+         |> assign(:selected_node, nil)
+         |> assign(:artifact_open, false)
+         |> load_session(String.to_integer(id))}
     end
   end
 
@@ -98,9 +103,16 @@ defmodule HarnessWeb.IdeationLive do
 
   def handle_event("select_node", %{"id" => id}, socket) do
     idea = Ideation.get_idea!(String.to_integer(id))
+    artifact = Ideation.read_artifact(idea)
 
     {:noreply,
-     assign(socket, :selected_node, %{idea: idea, artifact: Ideation.read_artifact(idea)})}
+     socket
+     |> assign(:selected_node, %{idea: idea, artifact: artifact})
+     |> assign(:artifact_open, artifact != nil)}
+  end
+
+  def handle_event("close_artifact", _params, socket) do
+    {:noreply, assign(socket, :artifact_open, false)}
   end
 
   def handle_event("stop_session", %{"id" => id}, socket) do
@@ -152,6 +164,15 @@ defmodule HarnessWeb.IdeationLive do
     case Integer.parse(to_string(value)) do
       {n, _} when n > 0 -> n
       _ -> default
+    end
+  end
+
+  # best-effort markdown → HTML; Earmark still returns usable HTML alongside
+  # errors, and artifacts are locally-generated content
+  defp artifact_html(md) do
+    case Earmark.as_html(md) do
+      {:ok, html, _} -> Phoenix.HTML.raw(html)
+      {:error, html, _} -> Phoenix.HTML.raw(html)
     end
   end
 
@@ -460,10 +481,16 @@ defmodule HarnessWeb.IdeationLive do
                     <p class="font-body text-[13px] text-ink-dim mb-2">
                       {@selected_node.idea.summary}
                     </p>
-                    <pre
-                      :if={@selected_node.artifact}
-                      class="font-body text-[12px] text-ink whitespace-pre-wrap leading-relaxed"
-                    >{@selected_node.artifact}</pre>
+                    <div :if={@selected_node.artifact}>
+                      <button
+                        phx-click="select_node"
+                        phx-value-id={@selected_node.idea.id}
+                        class="font-display uppercase text-[10px] tracking-widest px-2 py-1 mb-2 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
+                      >
+                        Expand
+                      </button>
+                      <div class="artifact-prose">{artifact_html(@selected_node.artifact)}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -476,6 +503,36 @@ defmodule HarnessWeb.IdeationLive do
               </div>
             </div>
           </section>
+        </div>
+      </div>
+
+      <div
+        :if={@artifact_open && @selected_node && @selected_node.artifact}
+        id="artifact-modal"
+        phx-window-keydown="close_artifact"
+        phx-key="escape"
+        class="fixed inset-0 z-50 flex items-center justify-center p-6"
+        aria-modal="true"
+        role="dialog"
+      >
+        <div class="absolute inset-0 bg-bg/85" phx-click="close_artifact" aria-hidden="true"></div>
+        <div class="relative w-full max-w-3xl max-h-[72vh] flex flex-col rounded-sm bg-surface border border-surface-2 shadow-2xl">
+          <div class="flex items-center gap-3 px-5 py-3 border-b border-surface-2 shrink-0">
+            <span class="font-display text-sm text-ink">{@selected_node.idea.title}</span>
+            <span class="font-mono text-[10px] text-ink-dim tabular-nums">
+              score {@selected_node.idea.score} · d{@selected_node.idea.depth} · {@selected_node.idea.status}
+            </span>
+            <button
+              phx-click="close_artifact"
+              aria-label="close"
+              class="ml-auto font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-alert hover:text-alert"
+            >
+              Close
+            </button>
+          </div>
+          <div class="artifact-prose overflow-y-auto px-5 py-4 min-h-0">
+            {artifact_html(@selected_node.artifact)}
+          </div>
         </div>
       </div>
     </Layouts.app>

@@ -172,6 +172,53 @@ body {
   }
 }
 
+/* rendered idea artifacts — markdown made native to the cluster */
+.artifact-prose {
+  color: var(--color-ink);
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+.artifact-prose h1, .artifact-prose h2, .artifact-prose h3, .artifact-prose h4 {
+  font-family: var(--font-display, inherit);
+  color: var(--color-ink);
+  letter-spacing: 0.04em;
+  margin: 1.1em 0 0.4em;
+  line-height: 1.25;
+}
+.artifact-prose h1 { font-size: 1.15rem; }
+.artifact-prose h2 { font-size: 1.02rem; }
+.artifact-prose h3 { font-size: 0.92rem; }
+.artifact-prose p { margin: 0.55em 0; }
+.artifact-prose ul, .artifact-prose ol { margin: 0.55em 0; padding-left: 1.4em; }
+.artifact-prose ul { list-style: disc; }
+.artifact-prose ol { list-style: decimal; }
+.artifact-prose li { margin: 0.25em 0; }
+.artifact-prose strong { color: var(--color-ink); font-weight: 600; }
+.artifact-prose em { color: var(--color-ink-dim); }
+.artifact-prose a { color: var(--color-accent); text-decoration: underline; }
+.artifact-prose code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8em;
+  background: var(--color-surface-2);
+  padding: 0.1em 0.35em;
+  border-radius: 2px;
+}
+.artifact-prose pre {
+  background: var(--color-surface-2);
+  border-radius: 2px;
+  padding: 0.7em 0.9em;
+  overflow-x: auto;
+  margin: 0.7em 0;
+}
+.artifact-prose pre code { background: none; padding: 0; }
+.artifact-prose blockquote {
+  border-left: 2px solid var(--color-accent);
+  padding-left: 0.9em;
+  margin: 0.7em 0;
+  color: var(--color-ink-dim);
+}
+.artifact-prose hr { border-color: var(--color-surface-2); margin: 1.2em 0; }
+
 /* every place data appears reads like an odometer */
 .tabular, table, [data-numeric] {
   font-variant-numeric: tabular-nums;

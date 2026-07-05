@@ -41,6 +41,7 @@ defmodule Harness.MixProject do
   defp deps do
     [
       {:phoenix, "~> 1.8.8"},
+      {:earmark, "~> 1.4"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, ">= 0.0.0"},
