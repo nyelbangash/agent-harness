@@ -57,12 +57,39 @@ defmodule Harness.GitHub.ClientTest do
              Client.list_assigned_issues("owner/repo", "nyelbangash", ~s(W/"abc123"))
   end
 
-  test "post_issue_comment returns the comment id" do
+  test "post_issue_comment returns comment id and created_at" do
     Req.Test.stub(__MODULE__, fn conn ->
       assert conn.method == "POST"
-      conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 987})
+
+      conn
+      |> Plug.Conn.put_status(201)
+      |> Req.Test.json(%{"id" => 987, "created_at" => "2026-07-05T10:00:00Z"})
     end)
 
-    assert {:ok, 987} = Client.post_issue_comment("owner/repo", 5, "plan attached")
+    assert {:ok, 987, "2026-07-05T10:00:00Z"} =
+             Client.post_issue_comment("owner/repo", 5, "plan attached")
+  end
+
+  test "newest_issue_comment returns the most recent comment" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+      assert conn.query_params["per_page"] == "1"
+      assert conn.query_params["direction"] == "desc"
+
+      Req.Test.json(conn, [
+        %{"id" => 1, "body" => "hello", "created_at" => "2026-07-05T09:00:00Z"}
+      ])
+    end)
+
+    assert {:ok, %{"id" => 1, "body" => "hello"}} =
+             Client.newest_issue_comment("owner/repo", 5)
+  end
+
+  test "newest_issue_comment returns nil when there are no comments" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      Req.Test.json(conn, [])
+    end)
+
+    assert {:ok, nil} = Client.newest_issue_comment("owner/repo", 5)
   end
 end

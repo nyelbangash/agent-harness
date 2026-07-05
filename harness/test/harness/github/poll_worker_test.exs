@@ -124,6 +124,98 @@ defmodule Harness.GitHub.PollWorkerTest do
     assert GitHub.get_issue_by(@repo, 10).pipeline_state == "plan_ready"
   end
 
+  test "plan comment self-acknowledge: stored timestamp advances, next poll enqueues nothing" do
+    stub_issues([gh_issue_payload(number: 20, updated_at: "2026-07-04T12:00:00Z")])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 20)
+    GitHub.transition!(issue, "plan_ready")
+    Harness.Repo.delete_all(Oban.Job)
+
+    # Simulate what PlanWorker does: advance github_updated_at to comment time
+    GitHub.acknowledge_comment_timestamp!(issue, "2026-07-04T13:00:00Z")
+
+    # Poll with the same updated_at as what we just stored — no delta
+    stub_issues([
+      gh_issue_payload(number: 20, id: issue.github_id, updated_at: "2026-07-04T13:00:00Z")
+    ])
+
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    refute_enqueued(worker: Harness.GitHub.TriageWorker)
+    assert GitHub.get_issue_by(@repo, 20).pipeline_state == "plan_ready"
+  end
+
+  test "belt-and-braces: harness-authored newest comment suppresses re-triage" do
+    stub_issues([gh_issue_payload(number: 21, updated_at: "2026-07-04T12:00:00Z")])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 21)
+    GitHub.transition!(issue, "plan_ready")
+    Harness.Repo.delete_all(Oban.Job)
+
+    harness_body = Harness.GitHub.Provenance.stamp("plan content", "plan", "run-1")
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      cond do
+        conn.request_path == "/user" ->
+          Req.Test.json(conn, %{"login" => "nyelbangash"})
+
+        conn.method == "GET" and not String.contains?(conn.request_path, "comments") ->
+          conn
+          |> Plug.Conn.put_resp_header("etag", ~s(W/"tag-2"))
+          |> Req.Test.json([
+            gh_issue_payload(number: 21, id: issue.github_id, updated_at: "2026-07-04T13:00:00Z")
+          ])
+
+        true ->
+          Req.Test.json(conn, [
+            %{"body" => harness_body, "created_at" => "2026-07-04T13:00:00Z", "id" => 100}
+          ])
+      end
+    end)
+
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    refute_enqueued(worker: Harness.GitHub.TriageWorker)
+  end
+
+  test "belt-and-braces: human newest comment still triggers re-triage" do
+    stub_issues([gh_issue_payload(number: 22, updated_at: "2026-07-04T12:00:00Z")])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 22)
+    GitHub.transition!(issue, "plan_ready")
+    Harness.Repo.delete_all(Oban.Job)
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      cond do
+        conn.request_path == "/user" ->
+          Req.Test.json(conn, %{"login" => "nyelbangash"})
+
+        conn.method == "GET" and not String.contains?(conn.request_path, "comments") ->
+          conn
+          |> Plug.Conn.put_resp_header("etag", ~s(W/"tag-3"))
+          |> Req.Test.json([
+            gh_issue_payload(number: 22, id: issue.github_id, updated_at: "2026-07-04T13:00:00Z")
+          ])
+
+        true ->
+          Req.Test.json(conn, [
+            %{
+              "body" => "human comment, no provenance marker",
+              "created_at" => "2026-07-04T13:00:00Z",
+              "id" => 101
+            }
+          ])
+      end
+    end)
+
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    assert_enqueued(worker: Harness.GitHub.TriageWorker, args: %{issue_id: issue.id})
+  end
+
   test "issues that vanish from the open list are closed out" do
     stub_issues([gh_issue_payload(number: 11)])
     assert :ok = perform_job(PollWorker, %{})

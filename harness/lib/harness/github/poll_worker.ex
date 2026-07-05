@@ -17,7 +17,7 @@ defmodule Harness.GitHub.PollWorker do
   import Ecto.Query
 
   alias Harness.GitHub
-  alias Harness.GitHub.{Client, Issue}
+  alias Harness.GitHub.{Client, Issue, Provenance}
 
   # states it is safe to re-triage from when the issue changes upstream
   @retriageable ~w(incoming triaged plan_ready failed skipped done)
@@ -111,7 +111,7 @@ defmodule Harness.GitHub.PollWorker do
         enqueue_triage(issue)
 
       change == :updated and issue.pipeline_state in @retriageable ->
-        enqueue_triage(issue)
+        unless harness_caused_update?(issue), do: enqueue_triage(issue)
 
       true ->
         :ok
@@ -124,6 +124,29 @@ defmodule Harness.GitHub.PollWorker do
     %{issue_id: issue.id}
     |> Harness.GitHub.TriageWorker.new()
     |> Oban.insert()
+  end
+
+  defp harness_caused_update?(issue) do
+    case Client.newest_issue_comment(issue.repo, issue.number) do
+      {:ok, %{"body" => body, "created_at" => created_at_iso}} ->
+        Provenance.harness_authored?(body) and comment_accounts_for_delta?(created_at_iso, issue)
+
+      _ ->
+        false
+    end
+  end
+
+  defp comment_accounts_for_delta?(created_at_iso, issue) do
+    case DateTime.from_iso8601(created_at_iso) do
+      {:ok, comment_time, _} ->
+        # GitHub sets issue.updated_at = comment.created_at when a comment lands.
+        # If the comment timestamp is >= the stored github_updated_at, the comment
+        # is what caused the delta.
+        DateTime.compare(comment_time, issue.github_updated_at) in [:gt, :eq]
+
+      _ ->
+        false
+    end
   end
 
   # cancel queued/running local pipeline jobs + kill any live session for this

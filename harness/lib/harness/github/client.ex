@@ -60,7 +60,19 @@ defmodule Harness.GitHub.Client do
 
   def post_issue_comment(repo, number, body) do
     case request(:post, "/repos/#{repo}/issues/#{number}/comments", json: %{body: body}) do
-      {:ok, %{status: 201, body: %{"id" => id}}} -> {:ok, id}
+      {:ok, %{status: 201, body: %{"id" => id, "created_at" => created_at}}} ->
+        {:ok, id, created_at}
+
+      {:ok, %{status: status}} -> {:error, {:http_status, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def newest_issue_comment(repo, number) do
+    case request(:get, "/repos/#{repo}/issues/#{number}/comments",
+           params: [per_page: 1, direction: "desc"]) do
+      {:ok, %{status: 200, body: [comment | _]}} -> {:ok, comment}
+      {:ok, %{status: 200, body: []}} -> {:ok, nil}
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
       {:error, reason} -> {:error, reason}
     end

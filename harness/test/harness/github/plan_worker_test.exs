@@ -86,7 +86,7 @@ defmodule Harness.GitHub.PlanWorkerTest do
         {"POST", true} ->
           {:ok, raw, conn} = Plug.Conn.read_body(conn)
           Agent.update(captured, fn _ -> Jason.decode!(raw)["body"] end)
-          conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 4242})
+          conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 4242, "created_at" => "2026-07-05T10:00:00Z"})
 
         _ ->
           Plug.Conn.send_resp(conn, 500, "")
@@ -118,6 +118,9 @@ defmodule Harness.GitHub.PlanWorkerTest do
 
     body = Agent.get(captured, & &1)
     assert Harness.GitHub.Provenance.harness_authored?(body)
+
+    refreshed = GitHub.get_issue!(issue.id)
+    assert DateTime.compare(refreshed.github_updated_at, ~U[2026-07-05 10:00:00Z]) == :eq
   end
 
   test "a run that writes no artifacts fails the issue", ctx do

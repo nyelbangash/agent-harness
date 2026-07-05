@@ -176,7 +176,8 @@ defmodule Harness.GitHub.PlanWorker do
       body = Provenance.stamp(raw_body, "plan", run_id)
 
       case Client.post_issue_comment(issue.repo, issue.number, body) do
-        {:ok, comment_id} ->
+        {:ok, comment_id, created_at} ->
+          GitHub.acknowledge_comment_timestamp!(issue, created_at)
           {nil, comment_id}
 
         {:error, reason} ->
