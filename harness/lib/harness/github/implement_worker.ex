@@ -27,6 +27,7 @@ defmodule Harness.GitHub.ImplementWorker do
 
   alias Harness.GitHub
   alias Harness.GitHub.Client
+  alias Harness.GitHub.Provenance
   alias Harness.Runs.RunSpec
   alias Harness.{Policy, Repos, Runs, Verifier}
 
@@ -267,7 +268,7 @@ defmodule Harness.GitHub.ImplementWorker do
   defp pr_body(issue, run_id, approach, changed_files) do
     test_files = Enum.filter(changed_files, &test_or_ci_file?/1)
 
-    """
+    body = """
     ## Summary
 
     Automated fix for ##{issue.number} (#{issue.title}), produced by the harness auto lane.
@@ -291,6 +292,8 @@ defmodule Harness.GitHub.ImplementWorker do
     ---
     _The harness never merges — review required._
     """
+
+    Provenance.stamp(body, "pr", run_id)
   end
 
   # the agent has Write access to the worktree the gate runs in, so surface

@@ -76,11 +76,20 @@ defmodule Harness.GitHub.PlanWorkerTest do
     issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "triaged"})
     FakeRunner.script([writes_artifacts()])
 
+    captured = start_supervised!({Agent, fn -> nil end})
+
     Req.Test.stub(__MODULE__, fn conn ->
       case {conn.method, conn.request_path =~ "/comments"} do
-        {"GET", true} -> Req.Test.json(conn, [])
-        {"POST", true} -> conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 4242})
-        _ -> Plug.Conn.send_resp(conn, 500, "")
+        {"GET", true} ->
+          Req.Test.json(conn, [])
+
+        {"POST", true} ->
+          {:ok, raw, conn} = Plug.Conn.read_body(conn)
+          Agent.update(captured, fn _ -> Jason.decode!(raw)["body"] end)
+          conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 4242})
+
+        _ ->
+          Plug.Conn.send_resp(conn, 500, "")
       end
     end)
 
@@ -106,6 +115,9 @@ defmodule Harness.GitHub.PlanWorkerTest do
     plan = GitHub.ready_plan(issue.id)
     assert plan.issue_comment_id == 4242
     assert plan.branch == nil
+
+    body = Agent.get(captured, & &1)
+    assert Harness.GitHub.Provenance.harness_authored?(body)
   end
 
   test "a run that writes no artifacts fails the issue", ctx do
