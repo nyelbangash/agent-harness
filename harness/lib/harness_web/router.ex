@@ -28,10 +28,10 @@ defmodule HarnessWeb.Router do
     end
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", HarnessWeb do
-  #   pipe_through :api
-  # end
+  scope "/", HarnessWeb do
+    pipe_through :api
+    get "/healthz", HealthController, :index
+  end
 
   # Enable LiveDashboard in development
   if Application.compile_env(:harness, :dev_routes) do

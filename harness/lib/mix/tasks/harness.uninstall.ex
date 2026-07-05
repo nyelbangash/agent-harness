@@ -11,6 +11,7 @@ defmodule Mix.Tasks.Harness.Uninstall do
   use Mix.Task
 
   @label "com.nyel.harness"
+  @watchdog_label "com.nyel.harness.watchdog"
 
   @impl Mix.Task
   def run(_args) do
@@ -27,6 +28,17 @@ defmodule Mix.Tasks.Harness.Uninstall do
     if File.exists?(plist) do
       File.rm!(plist)
       Mix.shell().info("  ✓ removed #{plist}")
+    end
+
+    System.cmd("launchctl", ["bootout", "gui/#{uid}/#{@watchdog_label}"],
+      stderr_to_stdout: true
+    )
+
+    watchdog_plist = Path.expand("~/Library/LaunchAgents/#{@watchdog_label}.plist")
+
+    if File.exists?(watchdog_plist) do
+      File.rm!(watchdog_plist)
+      Mix.shell().info("  ✓ removed #{watchdog_plist}")
     end
   end
 end
