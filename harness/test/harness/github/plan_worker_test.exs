@@ -70,6 +70,9 @@ defmodule Harness.GitHub.PlanWorkerTest do
     assert spec.max_turns == 40
     assert spec.prompt =~ "PLAN.md"
     assert spec.prompt =~ "untrusted"
+    assert spec.prompt =~ "40 turns total"
+    assert spec.prompt =~ "16 turns"
+    assert spec.prompt =~ "you will not re-read files"
   end
 
   test "post_to_issue policy publishes a comment instead of a branch", ctx do

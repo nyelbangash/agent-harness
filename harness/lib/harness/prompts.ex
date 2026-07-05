@@ -22,7 +22,7 @@ defmodule Harness.Prompts do
     )
   end
 
-  def plan(issue, comments, triage, default_branch, failure_transcript \\ nil) do
+  def plan(issue, comments, triage, default_branch, plan_max_turns, failure_transcript \\ nil) do
     render("plan.md.eex",
       repo: issue.repo,
       issue_number: issue.number,
@@ -31,6 +31,7 @@ defmodule Harness.Prompts do
       issue_body: truncate(issue.body || "(no body)", @max_body_chars),
       comments: prepare_comments(comments),
       default_branch: default_branch,
+      plan_max_turns: plan_max_turns,
       estimated_scope: (triage && triage.estimated_scope) || "unknown",
       risk_flags: (triage && triage.risk_flags) || [],
       triage_reasoning: truncate((triage && triage.reasoning) || "(no triage reasoning)", 2_000),
