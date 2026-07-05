@@ -19,8 +19,8 @@ defmodule Harness.Briefing do
   @topic "briefings"
 
   schema "briefings" do
-    field :date,         :date
-    field :markdown,     :string
+    field :date, :date
+    field :markdown, :string
     field :dismissed_at, :utc_datetime_usec
 
     timestamps(type: :utc_datetime_usec)
@@ -80,14 +80,14 @@ defmodule Harness.Briefing do
   Pure DB reads — no model call.
   """
   def assemble(since) do
-    prs      = query_prs(since)
-    plans    = query_ready_plans(since)
-    triages  = query_triage_counts(since)
+    prs = query_prs(since)
+    plans = query_ready_plans(since)
+    triages = query_triage_counts(since)
     ideation = query_ideation(since)
-    budget   = query_budget()
+    budget = query_budget()
     failures = query_failures(since)
 
-    markdown  = render_markdown(prs, plans, triages, ideation, budget, failures)
+    markdown = render_markdown(prs, plans, triages, ideation, budget, failures)
     one_liner = render_one_liner(prs, plans, failures)
 
     {markdown, one_liner}
@@ -303,8 +303,11 @@ defmodule Harness.Briefing do
   end
 
   defp budget_section(budget) do
-    opus_pct = if budget.opus_cap > 0, do: round(budget.opus_hours / budget.opus_cap * 100), else: 0
-    overflow_pct = if budget.overflow_cap > 0, do: round(budget.overflow / budget.overflow_cap * 100), else: 0
+    opus_pct =
+      if budget.opus_cap > 0, do: round(budget.opus_hours / budget.opus_cap * 100), else: 0
+
+    overflow_pct =
+      if budget.overflow_cap > 0, do: round(budget.overflow / budget.overflow_cap * 100), else: 0
 
     lines = [
       maybe_util_line("5-hr utilization", budget.five_hour_util, budget.stale),

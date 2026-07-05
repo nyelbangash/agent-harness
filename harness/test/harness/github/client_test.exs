@@ -96,7 +96,9 @@ defmodule Harness.GitHub.ClientTest do
   test "get_pull_request returns state/merged/merge_commit_sha" do
     Req.Test.stub(__MODULE__, fn conn ->
       Req.Test.json(conn, %{
-        "state" => "closed", "merged" => true, "merge_commit_sha" => "abc123"
+        "state" => "closed",
+        "merged" => true,
+        "merge_commit_sha" => "abc123"
       })
     end)
 

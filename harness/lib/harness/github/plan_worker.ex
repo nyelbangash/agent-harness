@@ -176,14 +176,10 @@ defmodule Harness.GitHub.PlanWorker do
       body = Provenance.stamp(raw_body, "plan", run_id)
 
       case Client.post_issue_comment(issue.repo, issue.number, body) do
-        {:ok, comment_id} ->
+        {:ok, comment_id, created_at} ->
           # self-acknowledge: our comment bumped updated_at; swallow it so the
           # next poll does not re-triage our own write (issue #28)
-          case Client.issue_updated_at(issue.repo, issue.number) do
-            {:ok, updated_at} -> GitHub.acknowledge_self_update!(issue, updated_at)
-            _ -> :ok
-          end
-
+          GitHub.acknowledge_comment_timestamp!(issue, created_at)
           {nil, comment_id}
 
         {:error, reason} ->

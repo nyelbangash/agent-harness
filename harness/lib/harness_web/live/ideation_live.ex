@@ -664,7 +664,7 @@ defmodule HarnessWeb.IdeationLive do
       >
         <div class="absolute inset-0 bg-bg/85" phx-click="close_artifact" aria-hidden="true"></div>
         <div class="relative w-full max-w-3xl max-h-[80vh] flex flex-col rounded-sm bg-surface border border-surface-2 shadow-2xl">
-          <%# Breadcrumb — hidden for root nodes (ancestors is empty) %>
+          
           <div
             :if={@selected_node.ancestors != []}
             class="flex items-center gap-1 flex-wrap px-5 py-2 border-b border-surface-2 shrink-0"
@@ -681,7 +681,6 @@ defmodule HarnessWeb.IdeationLive do
             </span>
           </div>
 
-          <%# Modal header: title, meta, close button %>
           <div class="flex items-center gap-3 px-5 py-3 border-b border-surface-2 shrink-0">
             <span class="font-display text-sm text-ink">{@selected_node.idea.title}</span>
             <span class="font-mono text-[10px] text-ink-dim tabular-nums">
@@ -696,12 +695,10 @@ defmodule HarnessWeb.IdeationLive do
             </button>
           </div>
 
-          <%# Artifact body %>
           <div class="artifact-prose overflow-y-auto px-5 py-4 min-h-0">
             {artifact_html(@selected_node.artifact)}
           </div>
 
-          <%# Children list — hidden when node is a leaf %>
           <div
             :if={@selected_node.children != []}
             class="border-t border-surface-2 px-5 py-3 shrink-0"

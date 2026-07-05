@@ -22,8 +22,15 @@ defmodule Harness.GitHub.TriageOutcome do
 
   def changeset(to, attrs) do
     to
-    |> cast(attrs, [:issue_id, :triage_id, :outcome, :resolved_at,
-                    :days_open, :amend_commit_count, :shadow])
+    |> cast(attrs, [
+      :issue_id,
+      :triage_id,
+      :outcome,
+      :resolved_at,
+      :days_open,
+      :amend_commit_count,
+      :shadow
+    ])
     |> validate_required([:issue_id, :outcome, :resolved_at, :days_open])
     |> validate_inclusion(:outcome, @outcomes)
     |> unique_constraint(:issue_id)

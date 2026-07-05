@@ -125,17 +125,26 @@ defmodule HarnessWeb.IdeationLiveTest do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
 
     parent =
-      Ideation.add_child!(session, root, %{title: "Parent Node", summary: "p", score: 7.0},
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Parent Node", summary: "p", score: 7.0},
         "# parent body"
       )
 
     child =
-      Ideation.add_child!(session, parent, %{title: "Child Node", summary: "c", score: 6.0},
+      Ideation.add_child!(
+        session,
+        parent,
+        %{title: "Child Node", summary: "c", score: 6.0},
         "# child body"
       )
 
     _leaf =
-      Ideation.add_child!(session, child, %{title: "Grandchild", summary: "g", score: 5.0},
+      Ideation.add_child!(
+        session,
+        child,
+        %{title: "Grandchild", summary: "g", score: 5.0},
         "# grand body"
       )
 
@@ -154,12 +163,18 @@ defmodule HarnessWeb.IdeationLiveTest do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
 
     sib_a =
-      Ideation.add_child!(session, root, %{title: "Sibling A", summary: "a", score: 6.0},
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Sibling A", summary: "a", score: 6.0},
         "# artifact a"
       )
 
     _sib_b =
-      Ideation.add_child!(session, root, %{title: "Sibling B", summary: "b", score: 5.0},
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Sibling B", summary: "b", score: 5.0},
         "# artifact b"
       )
 
@@ -176,12 +191,18 @@ defmodule HarnessWeb.IdeationLiveTest do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
 
     parent =
-      Ideation.add_child!(session, root, %{title: "Mid Node", summary: "m", score: 7.0},
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Mid Node", summary: "m", score: 7.0},
         "# mid artifact"
       )
 
     leaf =
-      Ideation.add_child!(session, parent, %{title: "Leaf Node", summary: "l", score: 6.0},
+      Ideation.add_child!(
+        session,
+        parent,
+        %{title: "Leaf Node", summary: "l", score: 6.0},
         "# leaf artifact"
       )
 

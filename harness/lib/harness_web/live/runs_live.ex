@@ -276,7 +276,9 @@ defmodule HarnessWeb.RunsLive do
 
   defp event(%{event: %{type: "verifier_output"}} = assigns) do
     ~H"""
-    <div class="font-mono text-[11px] text-ink whitespace-pre-wrap py-0.5">{@event.payload["text"]}</div>
+    <div class="font-mono text-[11px] text-ink whitespace-pre-wrap py-0.5">
+      {@event.payload["text"]}
+    </div>
     """
   end
 

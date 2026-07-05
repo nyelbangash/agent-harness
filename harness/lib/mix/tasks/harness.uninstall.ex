@@ -30,9 +30,7 @@ defmodule Mix.Tasks.Harness.Uninstall do
       Mix.shell().info("  ✓ removed #{plist}")
     end
 
-    System.cmd("launchctl", ["bootout", "gui/#{uid}/#{@watchdog_label}"],
-      stderr_to_stdout: true
-    )
+    System.cmd("launchctl", ["bootout", "gui/#{uid}/#{@watchdog_label}"], stderr_to_stdout: true)
 
     watchdog_plist = Path.expand("~/Library/LaunchAgents/#{@watchdog_label}.plist")
 

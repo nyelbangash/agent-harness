@@ -19,7 +19,7 @@ defmodule Harness.Ideation.Layout do
     children = Enum.group_by(ideas, & &1.parent_id)
     roots = Map.get(children, nil, []) |> Enum.sort_by(& &1.id)
 
-    {positions, next_x} =
+    {positions, _next_x} =
       Enum.reduce(roots, {%{}, 0}, fn root, {acc, x0} ->
         assign(root, children, acc, x0)
       end)

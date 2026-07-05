@@ -303,7 +303,10 @@ defmodule Harness.GitHub.PollWorkerTest do
     issue = GitHub.get_issue_by(@repo, 21)
 
     issue
-    |> Harness.GitHub.Issue.changeset(%{pr_number: 55, pr_url: "https://github.com/owner/polled/pull/55"})
+    |> Harness.GitHub.Issue.changeset(%{
+      pr_number: 55,
+      pr_url: "https://github.com/owner/polled/pull/55"
+    })
     |> Harness.Repo.update!()
 
     GitHub.transition!(issue, "pr_open")
@@ -328,7 +331,10 @@ defmodule Harness.GitHub.PollWorkerTest do
     issue = GitHub.get_issue_by(@repo, 22)
 
     issue
-    |> Harness.GitHub.Issue.changeset(%{pr_number: 56, pr_url: "https://github.com/owner/polled/pull/56"})
+    |> Harness.GitHub.Issue.changeset(%{
+      pr_number: 56,
+      pr_url: "https://github.com/owner/polled/pull/56"
+    })
     |> Harness.Repo.update!()
 
     GitHub.transition!(issue, "pr_open")

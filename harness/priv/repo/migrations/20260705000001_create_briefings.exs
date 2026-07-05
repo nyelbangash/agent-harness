@@ -3,8 +3,8 @@ defmodule Harness.Repo.Migrations.CreateBriefings do
 
   def change do
     create table(:briefings) do
-      add :date,         :date,             null: false
-      add :markdown,     :text,             null: false
+      add :date, :date, null: false
+      add :markdown, :text, null: false
       add :dismissed_at, :utc_datetime_usec
 
       timestamps(type: :utc_datetime_usec)

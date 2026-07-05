@@ -26,8 +26,13 @@ defmodule Harness.GitHub.TriageOutcomeTest do
   test "duplicate insert on same issue_id is ignored (on_conflict: :nothing)" do
     issue = issue_fixture()
     now = DateTime.utc_now()
-    attrs = %{issue_id: issue.id, outcome: "issue_closed_no_action",
-              resolved_at: now, days_open: 1.0}
+
+    attrs = %{
+      issue_id: issue.id,
+      outcome: "issue_closed_no_action",
+      resolved_at: now,
+      days_open: 1.0
+    }
 
     GitHub.record_triage_outcome!(attrs)
     GitHub.record_triage_outcome!(attrs)
@@ -37,10 +42,17 @@ defmodule Harness.GitHub.TriageOutcomeTest do
 
   test "invalid outcome string is rejected" do
     issue = issue_fixture()
-    attrs = %{issue_id: issue.id, outcome: "not_real", resolved_at: DateTime.utc_now(),
-              days_open: 1.0}
 
-    assert {:error, cs} = %TriageOutcome{} |> TriageOutcome.changeset(attrs) |> Harness.Repo.insert()
+    attrs = %{
+      issue_id: issue.id,
+      outcome: "not_real",
+      resolved_at: DateTime.utc_now(),
+      days_open: 1.0
+    }
+
+    assert {:error, cs} =
+             %TriageOutcome{} |> TriageOutcome.changeset(attrs) |> Harness.Repo.insert()
+
     assert "is invalid" in errors_on(cs).outcome
   end
 end

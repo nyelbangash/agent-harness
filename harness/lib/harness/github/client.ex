@@ -63,14 +63,18 @@ defmodule Harness.GitHub.Client do
       {:ok, %{status: 201, body: %{"id" => id, "created_at" => created_at}}} ->
         {:ok, id, created_at}
 
-      {:ok, %{status: status}} -> {:error, {:http_status, status}}
-      {:error, reason} -> {:error, reason}
+      {:ok, %{status: status}} ->
+        {:error, {:http_status, status}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   def newest_issue_comment(repo, number) do
     case request(:get, "/repos/#{repo}/issues/#{number}/comments",
-           params: [per_page: 1, direction: "desc"]) do
+           params: [per_page: 1, direction: "desc"]
+         ) do
       {:ok, %{status: 200, body: [comment | _]}} -> {:ok, comment}
       {:ok, %{status: 200, body: []}} -> {:ok, nil}
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
@@ -110,8 +114,8 @@ defmodule Harness.GitHub.Client do
   @doc "Fetch a single PR by number. Returns at least state, merged, merge_commit_sha."
   def get_pull_request(repo, number) do
     case request(:get, "/repos/#{repo}/pulls/#{number}") do
-      {:ok, %{status: 200, body: %{"state" => state, "merged" => merged,
-                                   "merge_commit_sha" => sha}}} ->
+      {:ok,
+       %{status: 200, body: %{"state" => state, "merged" => merged, "merge_commit_sha" => sha}}} ->
         {:ok, %{state: state, merged: merged, merge_commit_sha: sha}}
 
       {:ok, %{status: 404}} ->
@@ -127,8 +131,7 @@ defmodule Harness.GitHub.Client do
 
   @doc "List commits on a PR (up to 100). Used for amended-vs-untouched attribution."
   def list_pull_request_commits(repo, number) do
-    case request(:get, "/repos/#{repo}/pulls/#{number}/commits",
-                 params: [per_page: 100]) do
+    case request(:get, "/repos/#{repo}/pulls/#{number}/commits", params: [per_page: 100]) do
       {:ok, %{status: 200, body: commits}} when is_list(commits) ->
         {:ok, commits}
 

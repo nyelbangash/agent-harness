@@ -234,8 +234,10 @@ defmodule Harness.Ideation.WorkersTest do
     [spec] = FakeRunner.executed_specs()
     write_tools = ~w(Write Edit)
     bash_writes = Enum.filter(spec.allowed_tools, &String.starts_with?(&1, "Bash"))
+
     assert Enum.empty?(Enum.filter(spec.allowed_tools, &(&1 in write_tools))),
            "write tools must not be exposed to ideation: #{inspect(spec.allowed_tools)}"
+
     assert Enum.empty?(bash_writes),
            "Bash tools must not be exposed to ideation: #{inspect(spec.allowed_tools)}"
   end

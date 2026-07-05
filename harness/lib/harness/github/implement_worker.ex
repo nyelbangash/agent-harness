@@ -164,8 +164,11 @@ defmodule Harness.GitHub.ImplementWorker do
         next_seq = fn -> Agent.get_and_update(counter, fn s -> {s, s + 1} end) end
 
         run = Runs.update_run!(run, %{status: "verifying", ended_at: nil})
-        Runs.append_event!(run, next_seq.(), "phase",
-          %{"phase" => "verifying", "ts" => DateTime.to_iso8601(DateTime.utc_now())})
+
+        Runs.append_event!(run, next_seq.(), "phase", %{
+          "phase" => "verifying",
+          "ts" => DateTime.to_iso8601(DateTime.utc_now())
+        })
 
         on_output = fn chunk ->
           Runs.append_event!(run, next_seq.(), "verifier_output", %{"text" => chunk})
@@ -211,8 +214,10 @@ defmodule Harness.GitHub.ImplementWorker do
     next_seq = fn -> Agent.get_and_update(counter, fn s -> {s, s + 1} end) end
 
     try do
-      Runs.append_event!(run, next_seq.(), "phase",
-        %{"phase" => "pushing", "ts" => DateTime.to_iso8601(DateTime.utc_now())})
+      Runs.append_event!(run, next_seq.(), "phase", %{
+        "phase" => "pushing",
+        "ts" => DateTime.to_iso8601(DateTime.utc_now())
+      })
 
       run = Runs.update_run!(run, %{status: "pushing"})
 
@@ -227,8 +232,10 @@ defmodule Harness.GitHub.ImplementWorker do
         "Fix ##{issue.number}: #{issue.title}"
       )
 
-      Runs.append_event!(run, next_seq.(), "phase",
-        %{"phase" => "opening_pr", "ts" => DateTime.to_iso8601(DateTime.utc_now())})
+      Runs.append_event!(run, next_seq.(), "phase", %{
+        "phase" => "opening_pr",
+        "ts" => DateTime.to_iso8601(DateTime.utc_now())
+      })
 
       run = Runs.update_run!(run, %{status: "opening_pr"})
 
@@ -269,9 +276,7 @@ defmodule Harness.GitHub.ImplementWorker do
             error: "PR creation failed"
           })
 
-          Logger.error(
-            "PR creation failed for #{issue.repo}##{issue.number}: #{inspect(reason)}"
-          )
+          Logger.error("PR creation failed for #{issue.repo}##{issue.number}: #{inspect(reason)}")
 
           GitHub.transition!(issue, "failed")
           {:error, {:pr_creation_failed, reason}}

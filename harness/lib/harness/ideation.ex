@@ -30,11 +30,21 @@ defmodule Harness.Ideation do
 
   @doc "Inform the tree view which node the current iteration is developing."
   def broadcast_developing(session_id, node_id),
-    do: Phoenix.PubSub.broadcast(Harness.PubSub, "ideation:#{session_id}", {:developing_node, node_id})
+    do:
+      Phoenix.PubSub.broadcast(
+        Harness.PubSub,
+        "ideation:#{session_id}",
+        {:developing_node, node_id}
+      )
 
   @doc "Inform the tree view that a critique pass is now running."
   def broadcast_critique_running(session_id),
-    do: Phoenix.PubSub.broadcast(Harness.PubSub, "ideation:#{session_id}", {:critique_running, session_id})
+    do:
+      Phoenix.PubSub.broadcast(
+        Harness.PubSub,
+        "ideation:#{session_id}",
+        {:critique_running, session_id}
+      )
 
   # -- sessions ---------------------------------------------------------------
 
