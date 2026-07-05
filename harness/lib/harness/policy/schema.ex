@@ -31,7 +31,8 @@ defmodule Harness.Policy.Schema do
               ideate_iteration_max_turns: 25,
               triage_max_turns: 12,
               plan_max_turns: 40,
-              review_max_turns: 20
+              review_max_turns: 20,
+              compose_max_turns: 20
   end
 
   defmodule UtilizationGates do

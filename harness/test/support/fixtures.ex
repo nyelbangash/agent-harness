@@ -76,6 +76,17 @@ defmodule Harness.Fixtures do
     )
   end
 
+  def draft_fixture(attrs \\ %{}) do
+    defaults = %{
+      prompt: "Make the widget faster",
+      repo: "owner/fixture"
+    }
+
+    %Harness.Compose.IssueDraft{}
+    |> Harness.Compose.IssueDraft.changeset(Map.merge(defaults, attrs))
+    |> Harness.Repo.insert!()
+  end
+
   @doc """
   Create a local "remote" the Repos manager can clone: a bare repo at
   `{base}/{owner}/{name}.git` seeded with README/CLAUDE.md/src file on main.

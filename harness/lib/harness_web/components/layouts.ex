@@ -38,6 +38,7 @@ defmodule HarnessWeb.Layouts do
     {"Issues", "/issues"},
     {"Runs", "/runs"},
     {"Ideation", "/ideation"},
+    {"Compose", "/compose"},
     {"Budget", "/budget"}
   ]
   @nav_later ~w(Policy)

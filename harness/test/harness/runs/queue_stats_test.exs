@@ -32,7 +32,7 @@ defmodule Harness.Runs.QueueStatsTest do
 
   test "defaults to the configured queues (config.exs), plan split from implement" do
     stats = Runs.queue_stats()
-    assert Enum.map(stats, & &1.queue) == ["triage", "plan", "implement", "review", "ideate", "ops", "respond"]
+    assert Enum.map(stats, & &1.queue) == ["triage", "plan", "implement", "review", "ideate", "compose", "ops", "respond"]
   end
 
   test "normalizes keyword-style queue limits" do
