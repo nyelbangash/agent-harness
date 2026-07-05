@@ -75,30 +75,42 @@ defmodule HarnessWeb.IssuesLive do
       usage_mode={@usage_mode}
       usage_health={@usage_health}
     >
-      <h1 class="font-display uppercase tracking-[0.16em] text-sm text-ink-dim mb-6">Issue board</h1>
+      <div class="page-fit md:flex md:flex-col md:min-h-0 md:overflow-hidden">
+        <h1 class="font-display uppercase tracking-[0.16em] text-sm text-ink-dim mb-6">
+          Issue board
+        </h1>
 
-      <p :if={@empty?} class="font-body text-sm text-ink-dim">
-        No issues yet — add a repo to <span class="font-mono">ops/policy.yaml → github.repos</span>
-        and assign yourself an issue. The poller checks every 2 minutes.
-      </p>
+        <p :if={@empty?} class="font-body text-sm text-ink-dim">
+          No issues yet — add a repo to <span class="font-mono">ops/policy.yaml → github.repos</span>
+          and assign yourself an issue. The poller checks every 2 minutes.
+        </p>
 
-      <div :if={!@empty?} class="grid md:grid-cols-3 xl:grid-cols-5 gap-4">
-        <section :for={{key, title} <- @columns} aria-label={title} data-column={key}>
-          <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim mb-2 flex items-center gap-2">
-            {title}
-            <span class="font-mono tabular-nums text-[10px] px-1.5 rounded-sm bg-surface-2 text-ink-dim">
-              {length(Map.get(@board, key, []))}
-            </span>
-          </h2>
-          <div class="space-y-2">
-            <.issue_card
-              :for={issue <- Map.get(@board, key, [])}
-              issue={issue}
-              triage={@triages[issue.id]}
-              run_error={@run_errors[issue.id]}
-            />
-          </div>
-        </section>
+        <div
+          :if={!@empty?}
+          class="grid md:grid-cols-3 xl:grid-cols-5 gap-4 md:flex-1 md:min-h-0 md:auto-rows-fr"
+        >
+          <section
+            :for={{key, title} <- @columns}
+            aria-label={title}
+            data-column={key}
+            class="md:flex md:flex-col md:min-h-0"
+          >
+            <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim mb-2 flex items-center gap-2">
+              {title}
+              <span class="font-mono tabular-nums text-[10px] px-1.5 rounded-sm bg-surface-2 text-ink-dim">
+                {length(Map.get(@board, key, []))}
+              </span>
+            </h2>
+            <div class="space-y-2 md:flex-1 md:min-h-0 md:overflow-y-auto">
+              <.issue_card
+                :for={issue <- Map.get(@board, key, [])}
+                issue={issue}
+                triage={@triages[issue.id]}
+                run_error={@run_errors[issue.id]}
+              />
+            </div>
+          </section>
+        </div>
       </div>
     </Layouts.app>
     """

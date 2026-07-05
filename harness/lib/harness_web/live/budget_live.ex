@@ -57,61 +57,64 @@ defmodule HarnessWeb.BudgetLive do
       usage_mode={@usage_mode}
       usage_health={@usage_health}
     >
-      <h1 class="font-display uppercase tracking-[0.16em] text-sm text-ink-dim mb-6">Budget</h1>
-
-      <div class="grid lg:grid-cols-2 gap-6 mb-8">
-        <.cap_bar label="Opus hours (7d)" value={@opus_hours} cap={@opus_cap * 1.0} unit="h" />
-        <.cap_bar
-          label="Overflow spend (7d, est.)"
-          value={@overflow}
-          cap={@overflow_cap * 1.0}
-          unit="$"
-          prefix
-        />
-      </div>
-
-      <section class="mb-8">
-        <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim mb-3">
-          Utilization history · 7 days
-        </h2>
-        <div :if={@history == []} class="font-body text-sm text-ink-dim">
-          No utilization samples yet — the poller records one every ~10 minutes.
-        </div>
-        <div :if={@history != []} class="space-y-3">
-          <.sparkline label="5-hour" series={Enum.map(@history, & &1.five_hour)} />
-          <.sparkline label="Weekly" series={Enum.map(@history, & &1.seven_day)} />
-          <.sparkline label="Weekly Opus" series={Enum.map(@history, & &1.seven_day_opus)} />
-        </div>
-      </section>
-
-      <section class="mb-8">
-        <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim mb-3">
-          Token burn by lane · 7 days
-        </h2>
-        <div :if={@burn == []} class="font-body text-sm text-ink-dim">
-          No runs in the last 7 days.
-        </div>
-        <div :if={@burn != []}>
-          <.burn_chart burn={@burn} colors={@lane_colors} />
-          <div class="flex gap-4 mt-2 flex-wrap">
-            <span :for={{kind, color} <- @lane_colors} class="flex items-center gap-1.5">
-              <span class="inline-block size-2.5 rounded-sm" style={"background: #{color}"} />
-              <span class="font-mono text-[10px] text-ink-dim uppercase">{kind}</span>
-            </span>
+      <div class="page-fit md:flex md:flex-col md:min-h-0 md:overflow-hidden">
+        <h1 class="font-display uppercase tracking-[0.16em] text-sm text-ink-dim mb-6">Budget</h1>
+        <div class="md:flex-1 md:min-h-0 md:overflow-y-auto">
+          <div class="grid lg:grid-cols-2 gap-6 mb-8">
+            <.cap_bar label="Opus hours (7d)" value={@opus_hours} cap={@opus_cap * 1.0} unit="h" />
+            <.cap_bar
+              label="Overflow spend (7d, est.)"
+              value={@overflow}
+              cap={@overflow_cap * 1.0}
+              unit="$"
+              prefix
+            />
           </div>
-        </div>
-      </section>
 
-      <section :if={@calendar_notes != []}>
-        <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim mb-3">
-          Annotated events
-        </h2>
-        <ul class="space-y-1">
-          <li :for={note <- @calendar_notes} class="font-mono text-[12px] text-ink-dim flex gap-2">
-            <span class="text-accent">◆</span>{note}
-          </li>
-        </ul>
-      </section>
+          <section class="mb-8">
+            <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim mb-3">
+              Utilization history · 7 days
+            </h2>
+            <div :if={@history == []} class="font-body text-sm text-ink-dim">
+              No utilization samples yet — the poller records one every ~10 minutes.
+            </div>
+            <div :if={@history != []} class="space-y-3">
+              <.sparkline label="5-hour" series={Enum.map(@history, & &1.five_hour)} />
+              <.sparkline label="Weekly" series={Enum.map(@history, & &1.seven_day)} />
+              <.sparkline label="Weekly Opus" series={Enum.map(@history, & &1.seven_day_opus)} />
+            </div>
+          </section>
+
+          <section class="mb-8">
+            <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim mb-3">
+              Token burn by lane · 7 days
+            </h2>
+            <div :if={@burn == []} class="font-body text-sm text-ink-dim">
+              No runs in the last 7 days.
+            </div>
+            <div :if={@burn != []}>
+              <.burn_chart burn={@burn} colors={@lane_colors} />
+              <div class="flex gap-4 mt-2 flex-wrap">
+                <span :for={{kind, color} <- @lane_colors} class="flex items-center gap-1.5">
+                  <span class="inline-block size-2.5 rounded-sm" style={"background: #{color}"} />
+                  <span class="font-mono text-[10px] text-ink-dim uppercase">{kind}</span>
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section :if={@calendar_notes != []}>
+            <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim mb-3">
+              Annotated events
+            </h2>
+            <ul class="space-y-1">
+              <li :for={note <- @calendar_notes} class="font-mono text-[12px] text-ink-dim flex gap-2">
+                <span class="text-accent">◆</span>{note}
+              </li>
+            </ul>
+          </section>
+        </div>
+      </div>
     </Layouts.app>
     """
   end

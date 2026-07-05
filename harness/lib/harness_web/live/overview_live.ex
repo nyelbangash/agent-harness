@@ -140,106 +140,112 @@ defmodule HarnessWeb.OverviewLive do
       usage_mode={@usage_mode}
       usage_health={@usage_health}
     >
-      <div
-        :if={@usage_stale}
-        class="mb-6 px-4 py-3 rounded-sm border border-alert/60 bg-alert/10 font-mono text-sm text-ink"
-        data-testid="stale-banner"
-      >
-        <span class="text-alert font-medium">USAGE TELEMETRY STALE</span>
-        — the claude.ai usage endpoint hasn't answered recently; gates are failing closed to plan-only.
-      </div>
-
-      <section aria-label="instrument cluster" class="mb-10">
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <.gauge
-            :for={gauge <- @gauges}
-            id={gauge.id}
-            label={gauge.label}
-            value={gauge.value}
-            max={gauge.max}
-            redline={gauge.redline}
-            display={gauge.display}
-            sublabel={gauge.sublabel}
-            stale={gauge.stale}
-          />
+      <div class="page-fit md:flex md:flex-col md:min-h-0 md:overflow-hidden">
+        <div
+          :if={@usage_stale}
+          class="mb-6 px-4 py-3 rounded-sm border border-alert/60 bg-alert/10 font-mono text-sm text-ink"
+          data-testid="stale-banner"
+        >
+          <span class="text-alert font-medium">USAGE TELEMETRY STALE</span>
+          — the claude.ai usage endpoint hasn't answered recently; gates are failing closed to plan-only.
         </div>
-      </section>
 
-      <div class="grid lg:grid-cols-5 gap-8">
-        <section aria-label="activity" class="lg:col-span-3">
-          <h2 class="font-display uppercase tracking-[0.16em] text-[12px] text-ink-dim mb-3">
-            Activity
-          </h2>
-          <div id="activity" phx-update="stream" class="divide-y divide-surface-2">
-            <div
-              :for={{dom_id, run} <- @streams.activity}
-              id={dom_id}
-              class="py-2.5 flex items-center gap-3"
-            >
-              <.status_dot status={run.status} />
-              <span class="font-mono text-xs text-ink-dim tabular-nums shrink-0">#{run.id}</span>
-              <span class="font-display uppercase tracking-wide text-[11px] text-ink shrink-0">{run.kind}</span>
-              <span class="font-mono text-xs text-ink-dim truncate flex-1">{run.ref}</span>
-              <span class="font-mono text-[11px] text-ink-dim tabular-nums shrink-0">{run.model}</span>
-              <span class="font-mono text-[11px] tabular-nums shrink-0" data-status={run.status}>
-                {status_text(run)}
-              </span>
-              <button
-                :if={run.status == "running"}
-                phx-click="kill_run"
-                phx-value-id={run.id}
-                data-confirm={"Kill run ##{run.id}?"}
-                class="font-display uppercase text-[10px] tracking-widest px-2 py-0.5 border border-alert text-alert rounded-sm hover:bg-alert hover:text-ink"
-              >
-                Kill
-              </button>
-            </div>
+        <section aria-label="instrument cluster" class="mb-10">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <.gauge
+              :for={gauge <- @gauges}
+              id={gauge.id}
+              label={gauge.label}
+              value={gauge.value}
+              max={gauge.max}
+              redline={gauge.redline}
+              display={gauge.display}
+              sublabel={gauge.sublabel}
+              stale={gauge.stale}
+            />
           </div>
-          <p :if={!@any_runs?} class="font-body text-sm text-ink-dim py-4">
-            No runs yet — assign yourself a GitHub issue in a policy repo and the pipeline takes it from there.
-          </p>
         </section>
 
-        <section aria-label="needs you" class="lg:col-span-2">
-          <h2 class="font-display uppercase tracking-[0.16em] text-[12px] text-ink-dim mb-3">
-            Needs you
-          </h2>
-          <div class="space-y-3">
+        <div class="grid lg:grid-cols-5 gap-8 md:flex-1 md:min-h-0 md:auto-rows-fr">
+          <section aria-label="activity" class="lg:col-span-3 md:flex md:flex-col md:min-h-0">
+            <h2 class="font-display uppercase tracking-[0.16em] text-[12px] text-ink-dim mb-3">
+              Activity
+            </h2>
             <div
-              :for={issue <- @needs_you}
-              class="rounded-sm bg-surface border border-surface-2 px-4 py-3"
-              data-testid="needs-you-card"
+              id="activity"
+              phx-update="stream"
+              class="divide-y divide-surface-2 md:flex-1 md:min-h-0 md:overflow-y-auto"
             >
-              <div class="flex items-center gap-2 mb-1">
-                <span class="font-mono text-xs text-ink-dim tabular-nums">{issue.repo}#{issue.number}</span>
-                <span class={[
-                  "font-display uppercase text-[10px] tracking-widest px-1.5 py-0.5 rounded-sm",
-                  issue.pipeline_state == "failed" && "bg-alert/20 text-alert",
-                  issue.pipeline_state == "plan_ready" && "bg-accent/20 text-accent"
-                ]}>
-                  {String.replace(issue.pipeline_state, "_", " ")}
+              <div
+                :for={{dom_id, run} <- @streams.activity}
+                id={dom_id}
+                class="py-2.5 flex items-center gap-3"
+              >
+                <.status_dot status={run.status} />
+                <span class="font-mono text-xs text-ink-dim tabular-nums shrink-0">#{run.id}</span>
+                <span class="font-display uppercase tracking-wide text-[11px] text-ink shrink-0">{run.kind}</span>
+                <span class="font-mono text-xs text-ink-dim truncate flex-1">{run.ref}</span>
+                <span class="font-mono text-[11px] text-ink-dim tabular-nums shrink-0">{run.model}</span>
+                <span class="font-mono text-[11px] tabular-nums shrink-0" data-status={run.status}>
+                  {status_text(run)}
                 </span>
-              </div>
-              <p class="font-body text-sm text-ink mb-2">{issue.title}</p>
-              <div :if={plan = List.first(issue.plans)} class="font-mono text-[11px] text-ink-dim">
-                <span :if={plan.branch}>branch: {plan.branch}</span>
-                <span :if={plan.issue_comment_id}>plan posted to issue</span>
                 <button
-                  :if={issue.pipeline_state == "plan_ready"}
-                  phx-click="promote_to_auto"
-                  phx-value-id={issue.id}
-                  data-confirm={"Promote #{issue.repo}##{issue.number} to auto? An implement session will run against the reviewed plan and open a PR."}
-                  class="ml-2 px-1.5 py-0.5 border border-accent text-accent rounded-sm hover:bg-accent hover:text-bg"
+                  :if={run.status == "running"}
+                  phx-click="kill_run"
+                  phx-value-id={run.id}
+                  data-confirm={"Kill run ##{run.id}?"}
+                  class="font-display uppercase text-[10px] tracking-widest px-2 py-0.5 border border-alert text-alert rounded-sm hover:bg-alert hover:text-ink"
                 >
-                  Promote to auto
+                  Kill
                 </button>
               </div>
             </div>
-            <p :if={@needs_you == []} class="font-body text-sm text-ink-dim py-4">
-              Nothing needs you. Plans ready for review and failed runs land here.
+            <p :if={!@any_runs?} class="font-body text-sm text-ink-dim py-4">
+              No runs yet — assign yourself a GitHub issue in a policy repo and the pipeline takes it from there.
             </p>
-          </div>
-        </section>
+          </section>
+
+          <section aria-label="needs you" class="lg:col-span-2 md:flex md:flex-col md:min-h-0">
+            <h2 class="font-display uppercase tracking-[0.16em] text-[12px] text-ink-dim mb-3">
+              Needs you
+            </h2>
+            <div class="space-y-3 md:flex-1 md:min-h-0 md:overflow-y-auto">
+              <div
+                :for={issue <- @needs_you}
+                class="rounded-sm bg-surface border border-surface-2 px-4 py-3"
+                data-testid="needs-you-card"
+              >
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="font-mono text-xs text-ink-dim tabular-nums">{issue.repo}#{issue.number}</span>
+                  <span class={[
+                    "font-display uppercase text-[10px] tracking-widest px-1.5 py-0.5 rounded-sm",
+                    issue.pipeline_state == "failed" && "bg-alert/20 text-alert",
+                    issue.pipeline_state == "plan_ready" && "bg-accent/20 text-accent"
+                  ]}>
+                    {String.replace(issue.pipeline_state, "_", " ")}
+                  </span>
+                </div>
+                <p class="font-body text-sm text-ink mb-2">{issue.title}</p>
+                <div :if={plan = List.first(issue.plans)} class="font-mono text-[11px] text-ink-dim">
+                  <span :if={plan.branch}>branch: {plan.branch}</span>
+                  <span :if={plan.issue_comment_id}>plan posted to issue</span>
+                  <button
+                    :if={issue.pipeline_state == "plan_ready"}
+                    phx-click="promote_to_auto"
+                    phx-value-id={issue.id}
+                    data-confirm={"Promote #{issue.repo}##{issue.number} to auto? An implement session will run against the reviewed plan and open a PR."}
+                    class="ml-2 px-1.5 py-0.5 border border-accent text-accent rounded-sm hover:bg-accent hover:text-bg"
+                  >
+                    Promote to auto
+                  </button>
+                </div>
+              </div>
+              <p :if={@needs_you == []} class="font-body text-sm text-ink-dim py-4">
+                Nothing needs you. Plans ready for review and failed runs land here.
+              </p>
+            </div>
+          </section>
+        </div>
       </div>
     </Layouts.app>
     """
