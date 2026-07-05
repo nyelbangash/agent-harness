@@ -52,6 +52,8 @@ defmodule HarnessWeb.IdeationLiveTest do
 
     assert_patched(view, ~p"/ideation/1")
     assert render(view) =~ "Session #1"
+    # composer clears for the next seed
+    refute render(view) =~ "a calmer inbox</textarea>"
 
     session = Ideation.get_session!(1)
     assert session.seed_prompt == "a calmer inbox"

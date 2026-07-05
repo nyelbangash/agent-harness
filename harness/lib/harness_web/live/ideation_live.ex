@@ -88,7 +88,11 @@ defmodule HarnessWeb.IdeationLive do
     else
       budget = parse_int(params["budget_minutes"], 180)
       {session, _root} = Ideation.start_session(%{seed_prompt: seed, budget_minutes: budget})
-      {:noreply, push_patch(socket, to: ~p"/ideation/#{session.id}")}
+
+      {:noreply,
+       socket
+       |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => to_string(budget)}))
+       |> push_patch(to: ~p"/ideation/#{session.id}")}
     end
   end
 
