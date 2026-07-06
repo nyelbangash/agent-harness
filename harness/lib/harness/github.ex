@@ -80,9 +80,20 @@ defmodule Harness.GitHub do
   end
 
   defp changed?(existing, attrs) do
-    not same_instant?(existing.github_updated_at, attrs.github_updated_at) or
+    timestamp_advanced?(existing.github_updated_at, attrs.github_updated_at) or
       existing.state != attrs.state or existing.labels != attrs.labels
   end
+
+  # GitHub list endpoints can serve snapshots that lag a just-posted comment;
+  # a payload OLDER than what we stored is staleness, not an update — treating
+  # it as changed regresses the stored timestamp and re-triggers the pipeline
+  # (the #70 loop). Time only moves forward here.
+  defp timestamp_advanced?(nil, nil), do: false
+  defp timestamp_advanced?(nil, %DateTime{}), do: true
+  defp timestamp_advanced?(%DateTime{}, nil), do: false
+
+  defp timestamp_advanced?(%DateTime{} = stored, %DateTime{} = incoming),
+    do: DateTime.compare(incoming, stored) == :gt
 
   # struct equality is wrong for DateTimes round-tripped through the DB
   # (microsecond precision differs); compare instants
