@@ -392,4 +392,18 @@ defmodule Harness.ReposTest do
     Repos.ensure_base!(repo)
     assert File.exists?(Path.join(path, "NEW.md"))
   end
+
+  test "ensure_base! resolves the git credential via the repo's owner", %{repo: repo} do
+    # the fixture remote is file:// (no credential helper round-trip to
+    # assert against), so this stubs Secrets.github_pat/1 for the repo's
+    # owner and asserts the git operation still succeeds — i.e. `git/4`
+    # resolved (and didn't choke on) a per-owner credential rather than the
+    # single global one.
+    owner = Harness.Secrets.owner_of(repo)
+    Application.put_env(:harness, :github_pat_overrides, %{owner => "owner-scoped-pat"})
+    on_exit(fn -> Application.delete_env(:harness, :github_pat_overrides) end)
+
+    path = Repos.ensure_base!(repo)
+    assert File.dir?(Path.join(path, ".git"))
+  end
 end

@@ -62,26 +62,38 @@ defmodule Harness.Doctor do
         # presence check is network-free so it can safely gate boot
         boot: :required,
         run: &check_github_pat/0
-      },
-      %Check{
-        id: :github_api,
-        label: "GitHub API reachable with PAT",
-        boot: :none,
-        run: &check_github_api/0
-      },
-      %Check{
-        id: :launchd,
-        label: "launchd agent",
-        boot: :none,
-        run: &check_launchd/0
-      },
-      %Check{
-        id: :usage_schema,
-        label: "usage endpoint schema (schema drift?)",
-        boot: :none,
-        run: &check_usage_schema/0
       }
-    ]
+    ] ++
+      github_api_checks() ++
+      [
+        %Check{
+          id: :launchd,
+          label: "launchd agent",
+          boot: :none,
+          run: &check_launchd/0
+        },
+        %Check{
+          id: :usage_schema,
+          label: "usage endpoint schema (schema drift?)",
+          boot: :none,
+          run: &check_usage_schema/0
+        }
+      ]
+  end
+
+  # One reachability check per owner configured in ops/policy.yaml — a
+  # missing/expired org token is a named red line, not a mysterious 404
+  # mid-pipeline. `boot: :none` (see boot_check.ex): network checks never
+  # gate boot, so an expired org PAT can't crash-loop the daemon.
+  defp github_api_checks do
+    for owner <- configured_owners() do
+      %Check{
+        id: :"github_api_#{owner}",
+        label: "GitHub API reachable (#{owner})",
+        boot: :none,
+        run: fn -> check_github_api(owner) end
+      }
+    end
   end
 
   @doc "Run every check. Returns `[{check, result}]`."
@@ -161,16 +173,46 @@ defmodule Harness.Doctor do
   end
 
   defp check_policy do
+    case configured_policy() do
+      {:ok, policy} ->
+        {:ok, "mode: #{policy.mode}, repos: #{length(policy.github.repos)}"}
+
+      {:error, message} ->
+        {:error, message}
+    end
+  end
+
+  # `Harness.BootCheck.assert!/0` runs `checks/0` before the supervision
+  # tree starts, so this re-parses ops/policy.yaml directly rather than
+  # calling `Harness.Policy.get()` — the `:persistent_term` it reads from
+  # isn't populated yet.
+  defp configured_policy do
     path = Application.fetch_env!(:harness, :policy_path)
 
     with true <- File.exists?(path) || :missing,
          {:ok, raw} <- YamlElixir.read_from_file(path),
          {:ok, policy} <- Harness.Policy.Schema.parse(raw) do
-      {:ok, "mode: #{policy.mode}, repos: #{length(policy.github.repos)}"}
+      {:ok, policy}
     else
       :missing -> {:error, "#{path} not found — cp ops/policy.example.yaml ops/policy.yaml"}
       {:error, errors} when is_list(errors) -> {:error, Enum.join(errors, "; ")}
       {:error, reason} -> {:error, "#{path}: #{inspect(reason)}"}
+    end
+  end
+
+  defp configured_repo_names do
+    case configured_policy() do
+      {:ok, policy} -> {:ok, Enum.map(policy.github.repos, & &1.name)}
+      {:error, message} -> {:error, message}
+    end
+  end
+
+  # A fresh, not-yet-onboarded install (or an unparseable policy file) still
+  # gets one meaningful GitHub API check instead of an empty check list.
+  defp configured_owners do
+    case configured_repo_names() do
+      {:ok, [_ | _] = repo_names} -> repo_names |> Enum.map(&Secrets.owner_of/1) |> Enum.uniq()
+      _ -> ["default"]
     end
   end
 
@@ -181,8 +223,8 @@ defmodule Harness.Doctor do
     end
   end
 
-  defp check_github_api do
-    with {:ok, pat} <- Secrets.github_pat() do
+  defp check_github_api(owner) do
+    with {:ok, pat} <- Secrets.github_pat_for_owner(owner) do
       {:ok, _} = Application.ensure_all_started(:req)
 
       case Req.get(
@@ -197,7 +239,9 @@ defmodule Harness.Doctor do
           {:ok, "authenticated as #{login}#{pat_expiry_note(resp)}"}
 
         {:ok, %{status: 401}} ->
-          {:error, "PAT rejected (401) — expired or revoked; rotate via `mix harness.setup`"}
+          {:error,
+           "PAT rejected (401) for #{owner} — expired or revoked; rotate via " <>
+             "`mix harness.setup #{owner}`"}
 
         {:ok, %{status: status}} ->
           {:warn, "GET /user returned #{status}"}
@@ -206,7 +250,7 @@ defmodule Harness.Doctor do
           {:warn, "GitHub unreachable: #{inspect(reason)}"}
       end
     else
-      {:error, :not_found} -> {:warn, "skipped — no PAT in Keychain"}
+      {:error, :not_found} -> {:warn, "skipped — no PAT in Keychain for #{owner}"}
     end
   end
 

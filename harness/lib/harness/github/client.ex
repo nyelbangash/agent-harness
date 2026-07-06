@@ -16,7 +16,7 @@ defmodule Harness.GitHub.Client do
   @api_version "2022-11-28"
 
   def viewer_login do
-    case request(:get, "/user") do
+    case request(nil, :get, "/user") do
       {:ok, %{status: 200, body: %{"login" => login}}} -> {:ok, login}
       {:ok, %{status: 401}} -> {:error, :unauthorized}
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
@@ -31,7 +31,7 @@ defmodule Harness.GitHub.Client do
   def list_assigned_issues(repo, assignee, etag \\ nil) do
     headers = if etag, do: [{"if-none-match", etag}], else: []
 
-    case request(:get, "/repos/#{repo}/issues",
+    case request(repo, :get, "/repos/#{repo}/issues",
            params: [assignee: assignee, state: "open", per_page: 100],
            headers: headers
          ) do
@@ -51,7 +51,7 @@ defmodule Harness.GitHub.Client do
   end
 
   def list_issue_comments(repo, number) do
-    case request(:get, "/repos/#{repo}/issues/#{number}/comments", params: [per_page: 50]) do
+    case request(repo, :get, "/repos/#{repo}/issues/#{number}/comments", params: [per_page: 50]) do
       {:ok, %{status: 200, body: comments}} when is_list(comments) -> {:ok, comments}
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
       {:error, reason} -> {:error, reason}
@@ -59,7 +59,7 @@ defmodule Harness.GitHub.Client do
   end
 
   def post_issue_comment(repo, number, body) do
-    case request(:post, "/repos/#{repo}/issues/#{number}/comments", json: %{body: body}) do
+    case request(repo, :post, "/repos/#{repo}/issues/#{number}/comments", json: %{body: body}) do
       {:ok, %{status: 201, body: %{"id" => id, "created_at" => created_at}}} ->
         {:ok, id, created_at}
 
@@ -77,7 +77,7 @@ defmodule Harness.GitHub.Client do
     # silently returned the OLDEST comment, which made harness_caused_update?
     # fail for any issue with >1 comment (the #48 slow loop). Fetch a full page
     # and take the last.
-    case request(:get, "/repos/#{repo}/issues/#{number}/comments", params: [per_page: 100]) do
+    case request(repo, :get, "/repos/#{repo}/issues/#{number}/comments", params: [per_page: 100]) do
       {:ok, %{status: 200, body: [_ | _] = comments}} -> {:ok, List.last(comments)}
       {:ok, %{status: 200, body: []}} -> {:ok, nil}
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
@@ -87,7 +87,7 @@ defmodule Harness.GitHub.Client do
 
   @doc "Fetch one issue's current `updated_at` (self-acknowledge after harness writes)."
   def issue_updated_at(repo, number) do
-    case request(:get, "/repos/#{repo}/issues/#{number}", []) do
+    case request(repo, :get, "/repos/#{repo}/issues/#{number}", []) do
       {:ok, %{status: 200, body: %{"updated_at" => updated_at}}} -> {:ok, updated_at}
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
       {:error, reason} -> {:error, reason}
@@ -101,7 +101,7 @@ defmodule Harness.GitHub.Client do
       |> maybe_put(:assignees, Keyword.get(opts, :assignees, []))
       |> maybe_put(:labels, Keyword.get(opts, :labels, []))
 
-    case request(:post, "/repos/#{repo}/issues", json: payload) do
+    case request(repo, :post, "/repos/#{repo}/issues", json: payload) do
       {:ok, %{status: 201, body: %{"number" => number, "html_url" => url}}} ->
         {:ok, %{number: number, url: url}}
 
@@ -115,7 +115,7 @@ defmodule Harness.GitHub.Client do
 
   @doc "Edit an existing issue (PATCH). Used to backfill the epic task list after children are created."
   def edit_issue(repo, number, attrs) do
-    case request(:patch, "/repos/#{repo}/issues/#{number}", json: attrs) do
+    case request(repo, :patch, "/repos/#{repo}/issues/#{number}", json: attrs) do
       {:ok, %{status: 200}} -> :ok
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
       {:error, reason} -> {:error, reason}
@@ -124,7 +124,7 @@ defmodule Harness.GitHub.Client do
 
   @doc "Open a PR. Returns `{:ok, %{number: n, url: html_url}}`."
   def create_pull_request(repo, head, base, title, body) do
-    case request(:post, "/repos/#{repo}/pulls",
+    case request(repo, :post, "/repos/#{repo}/pulls",
            json: %{title: title, head: head, base: base, body: body}
          ) do
       {:ok, %{status: 201, body: %{"number" => number, "html_url" => url}}} ->
@@ -157,7 +157,7 @@ defmodule Harness.GitHub.Client do
   end
 
   defp do_get_pull_request(repo, number) do
-    case request(:get, "/repos/#{repo}/pulls/#{number}") do
+    case request(repo, :get, "/repos/#{repo}/pulls/#{number}") do
       {:ok,
        %{
          status: 200,
@@ -204,7 +204,7 @@ defmodule Harness.GitHub.Client do
 
   @doc "List commits on a PR (up to 100). Used for amended-vs-untouched attribution."
   def list_pull_request_commits(repo, number) do
-    case request(:get, "/repos/#{repo}/pulls/#{number}/commits", params: [per_page: 100]) do
+    case request(repo, :get, "/repos/#{repo}/pulls/#{number}/commits", params: [per_page: 100]) do
       {:ok, %{status: 200, body: commits}} when is_list(commits) ->
         {:ok, commits}
 
@@ -218,7 +218,7 @@ defmodule Harness.GitHub.Client do
 
   @doc "Post a PR review. `event` is \"APPROVE\" | \"REQUEST_CHANGES\" | \"COMMENT\"."
   def create_pull_request_review(repo, pr_number, event, body) do
-    case request(:post, "/repos/#{repo}/pulls/#{pr_number}/reviews",
+    case request(repo, :post, "/repos/#{repo}/pulls/#{pr_number}/reviews",
            json: %{body: body, event: event}
          ) do
       {:ok, %{status: 200, body: %{"id" => id}}} ->
@@ -236,7 +236,7 @@ defmodule Harness.GitHub.Client do
   def list_pr_review_comments(repo, pr_number, since \\ nil) do
     params = Keyword.reject([per_page: 100, since: since], fn {_, v} -> is_nil(v) end)
 
-    case request(:get, "/repos/#{repo}/pulls/#{pr_number}/comments", params: params) do
+    case request(repo, :get, "/repos/#{repo}/pulls/#{pr_number}/comments", params: params) do
       {:ok, %{status: 200, body: comments}} when is_list(comments) -> {:ok, comments}
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
       {:error, reason} -> {:error, reason}
@@ -247,7 +247,7 @@ defmodule Harness.GitHub.Client do
   def list_pr_issue_comments(repo, pr_number, since \\ nil) do
     params = Keyword.reject([per_page: 100, since: since], fn {_, v} -> is_nil(v) end)
 
-    case request(:get, "/repos/#{repo}/issues/#{pr_number}/comments", params: params) do
+    case request(repo, :get, "/repos/#{repo}/issues/#{pr_number}/comments", params: params) do
       {:ok, %{status: 200, body: comments}} when is_list(comments) -> {:ok, comments}
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
       {:error, reason} -> {:error, reason}
@@ -256,7 +256,7 @@ defmodule Harness.GitHub.Client do
 
   @doc "Post a threaded reply to an inline review comment. Returns `{:ok, id, created_at}`."
   def post_pr_review_comment_reply(repo, pr_number, comment_id, body) do
-    case request(:post, "/repos/#{repo}/pulls/#{pr_number}/comments/#{comment_id}/replies",
+    case request(repo, :post, "/repos/#{repo}/pulls/#{pr_number}/comments/#{comment_id}/replies",
            json: %{body: body}
          ) do
       {:ok, %{status: 201, body: %{"id" => id, "created_at" => created_at}}} ->
@@ -272,7 +272,9 @@ defmodule Harness.GitHub.Client do
 
   @doc "Find the open PR whose head is `head` (e.g. \"owner:branch\"), for 422 reconciliation."
   def find_pull_request(repo, head) do
-    case request(:get, "/repos/#{repo}/pulls", params: [head: head, state: "open", per_page: 1]) do
+    case request(repo, :get, "/repos/#{repo}/pulls",
+           params: [head: head, state: "open", per_page: 1]
+         ) do
       {:ok, %{status: 200, body: [%{"number" => n, "html_url" => u} | _]}} ->
         {:ok, %{number: n, url: u}}
 
@@ -290,8 +292,10 @@ defmodule Harness.GitHub.Client do
   defp maybe_put(map, _key, []), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
-  defp request(method, path, opts \\ []) do
-    with {:ok, pat} <- Harness.Secrets.github_pat() do
+  defp request(repo, method, path, opts \\ []) do
+    pat_result = if repo, do: Harness.Secrets.github_pat(repo), else: Harness.Secrets.github_pat()
+
+    with {:ok, pat} <- pat_result do
       headers =
         [
           {"authorization", "Bearer #{pat}"},
