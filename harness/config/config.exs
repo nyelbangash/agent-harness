@@ -11,6 +11,14 @@ config :harness,
   ecto_repos: [Harness.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+# .log/.diff/.patch have no entry in MIME's default type list, but
+# ComposeLive/IdeationLive's attachment uploads accept them as plain text.
+# MIME's :types config fully replaces the extension list for a redefined
+# type, so the default "txt"/"text" extensions must be repeated here.
+config :mime, :types, %{
+  "text/plain" => ["txt", "text", "log", "diff", "patch"]
+}
+
 # Repo root of this project (ProjectEx) — ops/, workspaces/ live one level above the app
 config :harness, :project_root, Path.expand("../..", __DIR__)
 config :harness, :boot_check_level, :strict

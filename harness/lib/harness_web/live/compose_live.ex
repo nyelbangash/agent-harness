@@ -13,6 +13,8 @@ defmodule HarnessWeb.ComposeLive do
 
   require Logger
 
+  @allowed_attachment_exts ~w(.png .jpg .jpeg .gif .webp .txt .md .log .pdf .diff .patch)
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: Compose.subscribe()
@@ -28,7 +30,12 @@ defmodule HarnessWeb.ComposeLive do
      |> assign(:repos, policy.github.repos)
      |> assign(:exploring, false)
      |> assign(:run_error, nil)
-     |> assign(:form, to_form(%{"prompt" => "", "repo" => ""}))}
+     |> assign(:form, to_form(%{"prompt" => "", "repo" => ""}))
+     |> allow_upload(:attachments,
+       accept: @allowed_attachment_exts,
+       max_entries: 5,
+       max_file_size: 15_000_000
+     )}
   end
 
   @impl true
@@ -80,6 +87,11 @@ defmodule HarnessWeb.ComposeLive do
 
       true ->
         draft = Compose.create_draft!(%{prompt: prompt, repo: repo})
+        entries = persist_attachments(socket, draft)
+
+        if entries != [] do
+          Compose.update_draft!(draft, %{attachments: Jason.encode!(entries)})
+        end
 
         ExploreWorker.new(%{draft_id: draft.id})
         |> Oban.insert!()
@@ -89,6 +101,10 @@ defmodule HarnessWeb.ComposeLive do
          |> assign(:form, to_form(%{"prompt" => "", "repo" => ""}))
          |> push_patch(to: ~p"/compose/#{draft.id}")}
     end
+  end
+
+  def handle_event("cancel_attachment", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :attachments, ref)}
   end
 
   def handle_event("approve", %{"title" => title, "body" => body}, socket) do
@@ -182,6 +198,45 @@ defmodule HarnessWeb.ComposeLive do
     draft.run && draft.run.status in ~w(queued running)
   end
 
+  defp entry_errors(uploads) do
+    Enum.flat_map(uploads.entries, fn entry ->
+      Enum.map(upload_errors(uploads, entry), &{entry, &1})
+    end)
+  end
+
+  defp upload_error_message(:too_large), do: "file is too large (max 15 MB)"
+  defp upload_error_message(:too_many_files), do: "too many files (max 5)"
+  defp upload_error_message(:not_accepted), do: "unsupported file type"
+  defp upload_error_message(other), do: to_string(other)
+
+  defp persist_attachments(socket, draft) do
+    dir = Compose.draft_dir(draft)
+    File.mkdir_p!(dir)
+
+    consume_uploaded_entries(socket, :attachments, fn %{path: tmp_path}, entry ->
+      # client_name is browser-supplied — strip any path components so a name
+      # like "../../../x.png" can't escape the draft dir on cp, and so the
+      # stored filename can't forge prompt trust-boundary markers downstream.
+      filename = safe_filename(entry.client_name)
+      dest = Path.join(dir, filename)
+      File.cp!(tmp_path, dest)
+      {:ok, %{filename: filename, path: dest, content_type: entry.client_type}}
+    end)
+  end
+
+  # Reduce a client-supplied filename to a single safe path segment. basename
+  # drops directory components (defeating ../ traversal); we then reject any
+  # residual separators or empty/dot-only names, falling back to a stable name.
+  defp safe_filename(client_name) do
+    name = client_name |> to_string() |> Path.basename() |> String.trim()
+
+    if name in ["", ".", ".."] or String.contains?(name, ["/", "\\"]) do
+      "attachment"
+    else
+      name
+    end
+  end
+
   defp open_questions(%{open_questions: nil}), do: []
 
   defp open_questions(%{open_questions: json}) do
@@ -220,6 +275,39 @@ defmodule HarnessWeb.ComposeLive do
               <option value="">— target repo —</option>
               <option :for={r <- @repos} value={r.name}>{r.name}</option>
             </select>
+            <div>
+              <label class="font-mono text-[10px] text-ink-dim block mb-1">
+                Attachments (optional)
+              </label>
+              <.live_file_input upload={@uploads.attachments} />
+              <div
+                :for={entry <- @uploads.attachments.entries}
+                class="flex items-center gap-2 mt-1"
+              >
+                <span class="font-mono text-[11px] text-ink-dim truncate">{entry.client_name}</span>
+                <progress class="flex-1" value={entry.progress} max="100">{entry.progress}%</progress>
+                <button
+                  type="button"
+                  phx-click="cancel_attachment"
+                  phx-value-ref={entry.ref}
+                  class="font-mono text-[10px] text-alert"
+                >
+                  &times;
+                </button>
+              </div>
+              <p
+                :for={err <- upload_errors(@uploads.attachments)}
+                class="font-mono text-[10px] text-alert mt-1"
+              >
+                {upload_error_message(err)}
+              </p>
+              <p
+                :for={{entry, err} <- entry_errors(@uploads.attachments)}
+                class="font-mono text-[10px] text-alert mt-1"
+              >
+                {entry.client_name}: {upload_error_message(err)}
+              </p>
+            </div>
             <div class="flex justify-end">
               <button class="font-display uppercase text-[10px] tracking-widest px-3 py-1.5 bg-accent text-bg rounded-sm">
                 Explore
@@ -336,6 +424,29 @@ defmodule HarnessWeb.ComposeLive do
                       class="font-body text-sm text-ink-dim"
                     >
                       · {q}
+                    </li>
+                  </ul>
+                </div>
+
+                <div
+                  :if={Compose.attachments(@draft) != []}
+                  class="border-t border-surface-2 pt-3"
+                >
+                  <h3 class="font-mono text-[10px] text-ink-dim uppercase tracking-wider mb-2">
+                    Attachments
+                  </h3>
+                  <ul class="space-y-1">
+                    <li
+                      :for={a <- Compose.attachments(@draft)}
+                      class="font-body text-sm text-ink-dim"
+                    >
+                      <.link
+                        href={~p"/compose/#{@draft.id}/attachments/#{a["filename"]}"}
+                        target="_blank"
+                        class="text-accent hover:underline"
+                      >
+                        {a["filename"]}
+                      </.link>
                     </li>
                   </ul>
                 </div>

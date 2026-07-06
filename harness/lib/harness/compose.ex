@@ -40,6 +40,28 @@ defmodule Harness.Compose do
     |> tap(&broadcast({:draft_updated, &1}))
   end
 
+  # -- attachments --------------------------------------------------------------
+
+  @doc "On-disk directory for a draft's uploaded attachments."
+  def draft_dir(%IssueDraft{id: id}) do
+    Path.join([
+      Application.fetch_env!(:harness, :harness_home),
+      "compose",
+      "draft-#{id}",
+      "attachments"
+    ])
+  end
+
+  @doc "Decodes the `attachments` JSON column into a list of `%{filename, path, content_type}` maps."
+  def attachments(%IssueDraft{attachments: nil}), do: []
+
+  def attachments(%IssueDraft{attachments: json}) do
+    case Jason.decode(json) do
+      {:ok, list} when is_list(list) -> list
+      _ -> []
+    end
+  end
+
   # -- lifecycle --------------------------------------------------------------
 
   @doc """

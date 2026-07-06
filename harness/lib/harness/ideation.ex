@@ -48,8 +48,16 @@ defmodule Harness.Ideation do
 
   # -- sessions ---------------------------------------------------------------
 
-  @doc "Create a session, seed its root idea, and enqueue the first iteration."
-  def start_session(attrs) do
+  @doc """
+  Create a session, seed its root idea, and enqueue the first iteration.
+
+  `attachment_fun`, if given, is called with the session's attachments
+  directory *before* the first iteration is enqueued — it must return a list
+  of `%{filename, path, content_type}` maps (or `[]`), which is persisted onto
+  the session before the ideation loop starts, so the very first iteration's
+  prompt can never race an attachment write.
+  """
+  def start_session(attrs, attachment_fun \\ fn _dir -> [] end) do
     session =
       %Session{}
       |> Session.changeset(Map.put(attrs, :started_at, DateTime.utc_now()))
@@ -58,6 +66,17 @@ defmodule Harness.Ideation do
     File.mkdir_p!(session_dir(session))
     write_journal_header(session)
     attach_seed_repos!(session)
+
+    entries = attachment_fun.(attachments_dir(session))
+
+    session =
+      if entries != [] do
+        session
+        |> Session.changeset(%{attachments: Jason.encode!(entries)})
+        |> Repo.update!()
+      else
+        session
+      end
 
     root =
       %Idea{}
@@ -272,6 +291,17 @@ defmodule Harness.Ideation do
 
   def journal_path(session), do: Path.join(session_dir(session), "JOURNAL.md")
   def synthesis_path(session), do: Path.join(session_dir(session), "SYNTHESIS.md")
+  def attachments_dir(session), do: Path.join(session_dir(session), "attachments")
+
+  @doc "Decodes the `attachments` JSON column into a list of `%{filename, path, content_type}` maps."
+  def attachments(%Session{attachments: nil}), do: []
+
+  def attachments(%Session{attachments: json}) do
+    case Jason.decode(json) do
+      {:ok, list} when is_list(list) -> list
+      _ -> []
+    end
+  end
 
   def read_journal(session) do
     case File.read(journal_path(session)) do

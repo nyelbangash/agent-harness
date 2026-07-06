@@ -9,14 +9,29 @@ defmodule Harness.BuildInfo do
   reloads update every changed module EXCEPT the one holding the SHA.
   """
 
-  git_dir = Path.expand("../../../.git", __DIR__)
+  dot_git = Path.expand("../../../.git", __DIR__)
+
+  # In a linked worktree, `.git` is a file ("gitdir: <path>") rather than a
+  # directory, and its per-worktree HEAD/refs live under that path while
+  # branch refs are shared via a `commondir` pointing back at the main repo.
+  git_dir =
+    case File.read(dot_git) do
+      {:ok, "gitdir: " <> gitdir} -> gitdir |> String.trim() |> Path.expand(Path.dirname(dot_git))
+      _ -> dot_git
+    end
+
+  common_dir =
+    case File.read(Path.join(git_dir, "commondir")) do
+      {:ok, dir} -> dir |> String.trim() |> Path.expand(git_dir)
+      _ -> git_dir
+    end
 
   @external_resource Path.join(git_dir, "HEAD")
 
   head = Path.join(git_dir, "HEAD") |> File.read!() |> String.trim()
 
   with "ref: " <> ref <- head,
-       ref_path = Path.join(git_dir, ref),
+       ref_path = Path.join(common_dir, ref),
        true <- File.exists?(ref_path) do
     @external_resource ref_path
   end

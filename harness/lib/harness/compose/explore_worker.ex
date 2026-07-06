@@ -43,7 +43,14 @@ defmodule Harness.Compose.ExploreWorker do
 
     try do
       repo_map = Repos.repo_map(draft.repo)
-      prompt = Harness.Prompts.explore(draft.prompt, repo_map, policy.budgets.compose_max_turns)
+
+      prompt =
+        Harness.Prompts.explore(
+          draft.prompt,
+          repo_map,
+          policy.budgets.compose_max_turns,
+          Compose.attachments(draft)
+        )
 
       spec = %RunSpec{
         kind: :explore,

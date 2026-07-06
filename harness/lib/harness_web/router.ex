@@ -34,6 +34,8 @@ defmodule HarnessWeb.Router do
     get "/ideation/:id/export.zip", DownloadController, :zip
     get "/ideation/nodes/:idea_id/artifact.md", DownloadController, :node
     get "/compose/:id/draft.md", DownloadController, :draft
+    get "/compose/:id/attachments/:filename", DownloadController, :draft_attachment
+    get "/ideation/:id/attachments/:filename", DownloadController, :ideation_attachment
   end
 
   scope "/", HarnessWeb do
