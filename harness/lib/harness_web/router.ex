@@ -20,6 +20,7 @@ defmodule HarnessWeb.Router do
     live_session :mission_control, on_mount: [HarnessWeb.RailHooks] do
       live "/", OverviewLive
       live "/issues", IssuesLive
+      live "/issues/:id", IssuesLive
       live "/runs", RunsLive
       live "/runs/:id", RunsLive
       live "/ideation", IdeationLive

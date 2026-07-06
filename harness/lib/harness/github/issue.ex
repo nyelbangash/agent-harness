@@ -5,14 +5,14 @@ defmodule Harness.GitHub.Issue do
   `pipeline_state` is ours (GitHub's open/closed lives in `state`):
 
       incoming → triaging → triaged → planning → plan_ready
-                                    ↘ (Phase 2) implementing → pr_open
+                                    ↘ (Phase 2) implementing → pr_open → review_stalled
       terminal: done · failed · skipped
   """
 
   use Ecto.Schema
   import Ecto.Changeset
 
-  @pipeline_states ~w(incoming triaging triaged planning plan_ready implementing pr_open done failed skipped)
+  @pipeline_states ~w(incoming triaging triaged planning plan_ready implementing pr_open review_stalled done failed skipped)
 
   schema "issues" do
     field :repo, :string
@@ -84,5 +84,24 @@ defmodule Harness.GitHub.Issue do
   def column("implementing"), do: :in_progress
   def column("plan_ready"), do: :review
   def column("pr_open"), do: :review
+  def column("review_stalled"), do: :review_stalled
   def column(state) when state in @terminal_states, do: :done
+
+  @doc """
+  Deterministic branch name for a harness-authored PR on this issue —
+  the same formula `ImplementWorker` uses to push and `RespondWorker` uses to
+  find the branch again, kept in one place so every caller derives it
+  identically.
+  """
+  def branch_name(%__MODULE__{number: number, title: title}) do
+    "harness/issue-#{number}-#{slug(title)}"
+  end
+
+  defp slug(title) do
+    title
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/, "-")
+    |> String.trim("-")
+    |> String.slice(0, 40)
+  end
 end

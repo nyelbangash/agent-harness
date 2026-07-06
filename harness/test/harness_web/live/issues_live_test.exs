@@ -1,5 +1,6 @@
 defmodule HarnessWeb.IssuesLiveTest do
   use HarnessWeb.ConnCase, async: false
+  use Oban.Testing, repo: Harness.Repo, engine: Oban.Engines.Lite
 
   import Phoenix.LiveViewTest
   import Harness.Fixtures
@@ -176,5 +177,103 @@ defmodule HarnessWeb.IssuesLiveTest do
     {:ok, _view, html} = live(conn, ~p"/issues")
     [_, done_col] = String.split(html, ~s(data-column="done"))
     assert done_col =~ "turn cap 41/40"
+  end
+
+  describe "issue detail view" do
+    test "clicking a card title patches to the detail route and shows run history", %{conn: conn} do
+      issue = issue_fixture(%{title: "Detail me", pipeline_state: "pr_open", pr_number: 9})
+
+      Runs.create_run!(%{
+        kind: "implement",
+        ref: "owner/fixture##{issue.number}",
+        model: "sonnet",
+        status: "succeeded",
+        issue_id: issue.id
+      })
+
+      {:ok, view, _html} = live(conn, ~p"/issues")
+
+      html =
+        view
+        |> element("a[href='/issues/#{issue.id}']", "Detail me")
+        |> render_click()
+
+      assert html =~ "issue-detail-modal"
+      assert html =~ "implement"
+      assert html =~ "succeeded"
+    end
+
+    test "navigating straight to /issues/:id renders the detail modal", %{conn: conn} do
+      issue = issue_fixture(%{title: "Direct nav", pipeline_state: "plan_ready"})
+
+      {:ok, _view, html} = live(conn, ~p"/issues/#{issue.id}")
+
+      assert html =~ "issue-detail-modal"
+      assert html =~ "Direct nav"
+      assert html =~ "No runs yet."
+    end
+
+    test "adversarial review button enqueues ReviewWorker for an issue with an open PR", %{
+      conn: conn
+    } do
+      issue =
+        issue_fixture(%{
+          title: "Review me",
+          pipeline_state: "review_stalled",
+          pr_number: 42
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/issues/#{issue.id}")
+
+      view |> element("button", "Adversarial review") |> render_click()
+
+      assert_enqueued(worker: Harness.GitHub.ReviewWorker, args: %{issue_id: issue.id})
+    end
+
+    test "bug-hunt and format buttons each enqueue a RespondWorker pass", %{conn: conn} do
+      issue = issue_fixture(%{title: "Sweep me", pipeline_state: "pr_open", pr_number: 43})
+
+      {:ok, view, _html} = live(conn, ~p"/issues/#{issue.id}")
+
+      view |> element("button", "Bug-hunt pass") |> render_click()
+      view |> element("button", "Format pass") |> render_click()
+
+      jobs = all_enqueued(worker: Harness.GitHub.RespondWorker)
+      assert length(jobs) == 2
+      assert Enum.all?(jobs, &(&1.args["issue_id"] == issue.id))
+      assert Harness.Repo.aggregate(Harness.GitHub.PrCommentHandle, :count) == 2
+    end
+
+    test "issues without an open PR show no action buttons", %{conn: conn} do
+      issue = issue_fixture(%{title: "No PR yet", pipeline_state: "plan_ready"})
+
+      {:ok, _view, html} = live(conn, ~p"/issues/#{issue.id}")
+
+      refute html =~ "Adversarial review"
+      assert html =~ "no open PR"
+    end
+
+    test "posting a thread comment calls the GitHub client and flashes success", %{conn: conn} do
+      issue = issue_fixture(%{title: "Thread me", pipeline_state: "pr_open", pr_number: 44})
+
+      Application.put_env(:harness, :github_req_options, plug: {Req.Test, __MODULE__})
+
+      Req.Test.stub(__MODULE__, fn conn ->
+        conn
+        |> Plug.Conn.put_status(201)
+        |> Req.Test.json(%{"id" => 5001, "created_at" => "2026-07-06T10:00:00Z"})
+      end)
+
+      on_exit(fn -> Application.delete_env(:harness, :github_req_options) end)
+
+      {:ok, view, _html} = live(conn, ~p"/issues/#{issue.id}")
+
+      html =
+        view
+        |> form("form[phx-submit='post_thread_comment']", %{"body" => "please tighten this up"})
+        |> render_submit()
+
+      assert html =~ "Comment posted"
+    end
   end
 end

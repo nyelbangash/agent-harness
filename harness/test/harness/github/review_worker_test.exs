@@ -1,6 +1,7 @@
 defmodule Harness.GitHub.ReviewWorkerTest do
   use Harness.DataCase, async: false
 
+  alias Harness.GitHub
   alias Harness.GitHub.ReviewWorker
   alias Harness.Runs
   alias Harness.Runs.FakeRunner
@@ -145,6 +146,26 @@ defmodule Harness.GitHub.ReviewWorkerTest do
     assert spec.output_mode == :json
   end
 
+  test "a clean re-review un-stalls a review_stalled issue back to pr_open", ctx do
+    put_repo_policy(ctx.repo, "true")
+    branch = "harness/issue-1b-fix"
+    push_harness_branch!(ctx.bare, branch)
+    stub_reviews_endpoint(55)
+
+    issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "review_stalled"})
+    FakeRunner.script([no_findings_result()])
+
+    assert :ok =
+             perform_job(ReviewWorker, %{
+               issue_id: issue.id,
+               pr_number: 55,
+               round: 0,
+               branch: branch
+             })
+
+    assert GitHub.get_issue!(issue.id).pipeline_state == "pr_open"
+  end
+
   test "high-confidence findings → findings COMMENT + fix run + re-review enqueued", ctx do
     put_repo_policy(ctx.repo, "test -f fix_applied.txt")
     branch = "harness/issue-2-fix"
@@ -180,13 +201,15 @@ defmodule Harness.GitHub.ReviewWorkerTest do
     assert refs =~ branch
   end
 
-  test "loop cap: round >= max_rounds runs review but skips fix and re-review", ctx do
+  test "loop cap: round >= max_rounds with open findings stalls the review and notifies", ctx do
     put_repo_policy(ctx.repo, "true")
     branch = "harness/issue-3-fix"
     push_harness_branch!(ctx.bare, branch)
     stub_reviews_endpoint(55)
 
     issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "pr_open"})
+
+    Harness.Notify.TestBackend.subscribe()
 
     # max_rounds defaults to 1 in policy; round: 1 equals max_rounds
     FakeRunner.script([findings_result([sample_finding(0.9)])])
@@ -204,6 +227,32 @@ defmodule Harness.GitHub.ReviewWorkerTest do
     assert spec.kind == :review
 
     # no new ReviewWorker job
+    assert [] = all_enqueued(worker: ReviewWorker)
+
+    # the issue is left in a visibly distinct state, not silently "pr_open"
+    assert GitHub.get_issue!(issue.id).pipeline_state == "review_stalled"
+    assert_receive {:notify, :review_stalled, _title, _message}
+  end
+
+  test "loop cap: round >= max_rounds with no findings stays clean, no stall", ctx do
+    put_repo_policy(ctx.repo, "true")
+    branch = "harness/issue-3b-fix"
+    push_harness_branch!(ctx.bare, branch)
+    stub_reviews_endpoint(55)
+
+    issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "pr_open"})
+
+    FakeRunner.script([no_findings_result()])
+
+    assert :ok =
+             perform_job(ReviewWorker, %{
+               issue_id: issue.id,
+               pr_number: 55,
+               round: 1,
+               branch: branch
+             })
+
+    assert GitHub.get_issue!(issue.id).pipeline_state == "pr_open"
     assert [] = all_enqueued(worker: ReviewWorker)
   end
 
