@@ -79,7 +79,7 @@ defmodule HarnessWeb.OverviewLiveTest do
     assert html =~ "Improve the flux capacitor"
     assert html =~ "plan ready"
     assert html =~ "harness/plans/issue-#{issue.number}"
-    assert html =~ "Promote to auto"
+    assert html =~ "Start implementing"
   end
 
   test "the rail shows the mode and the master kill", %{conn: conn} do

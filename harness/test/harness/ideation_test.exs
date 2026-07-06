@@ -173,4 +173,30 @@ defmodule Harness.IdeationTest do
       assert "SYNTHESIS.md" in names
     end
   end
+
+  describe "delete_session!/1" do
+    test "removes the DB row, its ideas, and the on-disk session dir" do
+      %{session: session, root: root} = new_session()
+      _child = Ideation.add_child!(session, root, %{title: "a", score: 6.0}, "artifact a body")
+      Ideation.stop_session!(session, :operator)
+      dir = Ideation.session_dir(session)
+      assert File.dir?(dir)
+
+      assert Ideation.delete_session!(Ideation.get_session!(session.id)) == :ok
+
+      assert_raise Ecto.NoResultsError, fn -> Ideation.get_session!(session.id) end
+      assert Ideation.tree(session.id) == []
+      refute File.exists?(dir)
+    end
+
+    test "refuses to delete a running session" do
+      %{session: session} = new_session()
+      dir = Ideation.session_dir(session)
+
+      assert Ideation.delete_session!(session) == {:error, :running}
+
+      assert Ideation.get_session!(session.id)
+      assert File.dir?(dir)
+    end
+  end
 end

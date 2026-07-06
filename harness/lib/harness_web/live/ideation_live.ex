@@ -232,6 +232,28 @@ defmodule HarnessWeb.IdeationLive do
     {:noreply, put_flash(socket, :info, "Synthesis running — SYNTHESIS.md will open when ready.")}
   end
 
+  def handle_event("delete_session", %{"id" => id}, socket) do
+    session = id |> String.to_integer() |> Ideation.get_session!()
+
+    case Ideation.delete_session!(session) do
+      :ok ->
+        socket =
+          if socket.assigns[:session] && socket.assigns.session.id == session.id do
+            push_patch(socket, to: ~p"/ideation")
+          else
+            socket
+          end
+
+        {:noreply,
+         socket
+         |> assign(:sessions, Ideation.list_sessions())
+         |> put_flash(:info, "Session ##{session.id} deleted.")}
+
+      {:error, :running} ->
+        {:noreply, put_flash(socket, :error, "Stop the session before deleting it.")}
+    end
+  end
+
   def handle_event("submit_nudge", %{"session_id" => id, "nudge" => nudge}, socket) do
     nudge = String.trim(nudge)
 
@@ -564,6 +586,19 @@ defmodule HarnessWeb.IdeationLive do
               <p :if={@sessions == []} class="font-body text-sm text-ink-dim">
                 No sessions yet — seed one idea and give it three hours.
               </p>
+              <script :type={Phoenix.LiveView.ColocatedHook} name=".DeleteSession">
+                export default {
+                  mounted() {
+                    this.el.addEventListener("click", e => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (window.confirm(this.el.dataset.confirm)) {
+                        this.pushEvent("delete_session", {id: this.el.dataset.sessionId})
+                      }
+                    })
+                  }
+                }
+              </script>
               <.link
                 :for={s <- @sessions}
                 patch={
@@ -587,6 +622,18 @@ defmodule HarnessWeb.IdeationLive do
                   <span class="font-mono text-[10px] text-ink-dim ml-auto tabular-nums">
                     {s.iterations}it
                   </span>
+                  <button
+                    :if={s.status != "running"}
+                    type="button"
+                    phx-hook=".DeleteSession"
+                    id={"delete-session-#{s.id}"}
+                    data-session-id={s.id}
+                    data-confirm={"Delete session ##{s.id}? This removes its ideas and files and cannot be undone."}
+                    class="text-ink-dim/50 hover:text-alert shrink-0"
+                    aria-label={"Delete session ##{s.id}"}
+                  >
+                    <.icon name="hero-trash" class="size-3" />
+                  </button>
                 </div>
                 <p class="font-body text-[12px] text-ink mt-1 line-clamp-2">{s.seed_prompt}</p>
               </.link>

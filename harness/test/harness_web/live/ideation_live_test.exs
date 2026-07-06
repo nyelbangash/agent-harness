@@ -736,4 +736,45 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert html =~ "focus on pricing"
     assert Ideation.get_session!(session.id).nudge == "focus on pricing"
   end
+
+  test "deleting a stopped session removes it from the rail and from the DB", %{conn: conn} do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "throwaway", budget_minutes: 60})
+    Ideation.stop_session!(session, :operator)
+
+    {:ok, view, html} = live(conn, ~p"/ideation")
+    assert html =~ "throwaway"
+
+    html = render_click(view, "delete_session", %{"id" => "#{session.id}"})
+
+    refute html =~ "throwaway"
+    assert Enum.empty?(Ideation.list_sessions())
+    assert_raise Ecto.NoResultsError, fn -> Ideation.get_session!(session.id) end
+  end
+
+  test "deleting the session currently open returns to the no-session-selected state", %{
+    conn: conn
+  } do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "open session", budget_minutes: 60})
+    Ideation.stop_session!(session, :operator)
+
+    {:ok, view, html} = live(conn, ~p"/ideation/#{session.id}")
+    assert html =~ "Session ##{session.id}"
+
+    render_click(view, "delete_session", %{"id" => "#{session.id}"})
+
+    assert_patched(view, ~p"/ideation")
+    refute has_element?(view, "h1", "Session ##{session.id}")
+  end
+
+  test "a running session cannot be deleted", %{conn: conn} do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "still running", budget_minutes: 60})
+
+    {:ok, view, html} = live(conn, ~p"/ideation")
+    refute html =~ "Delete session ##{session.id}"
+
+    html = render_click(view, "delete_session", %{"id" => "#{session.id}"})
+
+    assert html =~ "Stop the session before deleting it."
+    assert Ideation.get_session!(session.id)
+  end
 end
