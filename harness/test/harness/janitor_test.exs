@@ -1,6 +1,8 @@
 defmodule Harness.JanitorTest do
   use Harness.DataCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Harness.{GitHub, Janitor, Runs}
   alias Harness.GitHub.TriageWorker
 
@@ -97,5 +99,22 @@ defmodule Harness.JanitorTest do
 
     assert :ok = perform_job(Janitor, %{})
     refute_enqueued(worker: TriageWorker)
+  end
+
+  test "starts a configured queue absent from running Oban" do
+    current = Application.fetch_env!(:harness, Oban)
+    updated = Keyword.update!(current, :queues, &Keyword.put(&1, :ghost, 1))
+    Application.put_env(:harness, Oban, updated)
+
+    on_exit(fn ->
+      Application.put_env(:harness, Oban, current)
+    end)
+
+    log = capture_log(fn -> assert :ok = perform_job(Janitor, %{}) end)
+    assert log =~ "starting queue ghost"
+  end
+
+  test "no-op when all configured queues are already running" do
+    assert :ok = perform_job(Janitor, %{})
   end
 end

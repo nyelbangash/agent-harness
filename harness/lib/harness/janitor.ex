@@ -29,6 +29,7 @@ defmodule Harness.Janitor do
     unwedge_stuck_issues()
     retriage_updated_issues()
     resume_stalled_ideation()
+    reconcile_queues()
     :ok
   end
 
@@ -156,5 +157,25 @@ defmodule Harness.Janitor do
     |> Enum.any?(fn run ->
       Registry.lookup(Harness.Runs.Registry, run.id) != []
     end)
+  end
+
+  defp reconcile_queues do
+    conf = Oban.config()
+    configured = Application.fetch_env!(:harness, Oban)[:queues] || []
+    running_names = conf.queues |> Keyword.keys() |> MapSet.new()
+
+    for {queue, opts} <- configured, queue not in running_names do
+      limit = if is_integer(opts), do: opts, else: Keyword.get(opts, :limit, 1)
+
+      Logger.warning(
+        "janitor: starting queue #{queue} at runtime — restart recommended at next quiet moment"
+      )
+
+      # In testing mode Oban.config().queues is [] so every queue looks absent;
+      # calling start_queue would launch real producers that can't check out sandbox connections.
+      unless conf.testing in [:manual, :inline] do
+        Oban.start_queue(queue: queue, limit: limit)
+      end
+    end
   end
 end
