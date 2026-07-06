@@ -156,6 +156,12 @@ defmodule Harness.Runs do
     |> Repo.one()
   end
 
+  @doc "Every run tied to an issue, newest first — the issue detail page's timeline."
+  def runs_for_issue(issue_id) do
+    from(r in Run, where: r.issue_id == ^issue_id, order_by: [desc: r.id])
+    |> Repo.all()
+  end
+
   @doc "Kind of the most recent run for an issue, or nil if none exists."
   def latest_issue_run_kind(issue_id) do
     from(r in Run,

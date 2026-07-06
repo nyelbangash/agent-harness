@@ -2,8 +2,9 @@ defmodule Harness.GitHub.RespondWorker do
   @moduledoc """
   Responds to operator review comments on harness/* PRs.
 
-  Triggered by PollWorker when it finds an operator-authored,
-  non-harness-stamped comment on a `pr_open` issue's PR. Runs two phases:
+  Triggered by PollWorker when it finds a non-harness-stamped comment on a
+  PR belonging to an issue in `@respondable_states` — not just the PAT
+  owner's comments, any collaborator's. Runs two phases:
 
   1. Pre-flight (structured output): decides `fix` or `decline_with_reason`
      using read-only tools; if out of scope, posts a stamped decline reply.
@@ -22,13 +23,17 @@ defmodule Harness.GitHub.RespondWorker do
   require Logger
 
   alias Harness.GitHub
-  alias Harness.GitHub.{Client, PrCommentHandle, Provenance}
+  alias Harness.GitHub.{Client, Issue, PrCommentHandle, Provenance}
   alias Harness.Runs.RunSpec
   alias Harness.{Policy, Repos, Runs, Verifier}
 
   @read_only_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
   @implement_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
+
+  # Pipeline states with a standing PR that a scoped continuation can push a
+  # fix commit to. Kept in sync with `PollWorker.@respondable`.
+  @respondable_states ~w(pr_open review_stalled plan_ready failed done)
 
   @impl Oban.Worker
   def perform(%Oban.Job{
@@ -42,7 +47,7 @@ defmodule Harness.GitHub.RespondWorker do
     issue = GitHub.get_issue!(issue_id)
 
     cond do
-      issue.pipeline_state != "pr_open" ->
+      issue.pipeline_state not in @respondable_states or is_nil(issue.pr_number) ->
         {:cancel, :issue_no_longer_actionable}
 
       true ->
@@ -61,7 +66,7 @@ defmodule Harness.GitHub.RespondWorker do
     if repo_cfg == nil do
       {:cancel, :repo_not_in_policy}
     else
-      branch = "harness/issue-#{issue.number}-#{slug(issue.title)}"
+      branch = Issue.branch_name(issue)
       run_in_worktree(handle, issue, policy, repo_cfg, branch, args)
     end
   end
@@ -360,13 +365,5 @@ defmodule Harness.GitHub.RespondWorker do
       required: ["action", "reason"],
       additionalProperties: false
     })
-  end
-
-  defp slug(title) do
-    title
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9]+/, "-")
-    |> String.trim("-")
-    |> String.slice(0, 40)
   end
 end

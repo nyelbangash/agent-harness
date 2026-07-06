@@ -102,7 +102,105 @@ defmodule HarnessWeb.RailHooks do
     end
   end
 
+  defp handle_event("enqueue_review", %{"id" => id}, socket) do
+    with_open_pr(socket, id, fn issue ->
+      %{
+        issue_id: issue.id,
+        pr_number: issue.pr_number,
+        round: 0,
+        branch: Harness.GitHub.Issue.branch_name(issue)
+      }
+      |> Harness.GitHub.ReviewWorker.new()
+      |> Oban.insert()
+
+      "Adversarial review queued"
+    end)
+  end
+
+  defp handle_event("enqueue_bug_hunt", %{"id" => id}, socket) do
+    enqueue_operator_pass(socket, id, operator_pass_prompt(:bug_hunt), "Bug-hunt pass queued")
+  end
+
+  defp handle_event("enqueue_format", %{"id" => id}, socket) do
+    enqueue_operator_pass(socket, id, operator_pass_prompt(:format), "Format pass queued")
+  end
+
+  defp handle_event("post_thread_comment", %{"issue_id" => id, "body" => body}, socket) do
+    body = String.trim(body)
+    issue = Harness.GitHub.get_issue!(String.to_integer(id))
+    target_number = issue.pr_number || issue.number
+
+    if body == "" do
+      {:halt, socket}
+    else
+      case Harness.GitHub.Client.post_issue_comment(issue.repo, target_number, body) do
+        {:ok, _comment_id, _created_at} ->
+          {:halt,
+           put_flash(
+             socket,
+             :info,
+             "Comment posted — the harness will pick it up on the next poll."
+           )}
+
+        {:error, reason} ->
+          {:halt, put_flash(socket, :error, "GitHub error: #{inspect(reason)}")}
+      end
+    end
+  end
+
   defp handle_event(_event, _params, socket), do: {:cont, socket}
+
+  defp with_open_pr(socket, id, fun) do
+    issue = Harness.GitHub.get_issue!(String.to_integer(id))
+
+    if issue.pr_number do
+      {:halt, put_flash(socket, :info, fun.(issue))}
+    else
+      {:halt, put_flash(socket, :error, "No open PR for this issue")}
+    end
+  end
+
+  # Bug-hunt/format one-click actions reuse RespondWorker's existing
+  # pre-flight/fix worker rather than introducing new job types — the same
+  # scoped-continuation path a real operator PR comment takes, just
+  # dispatched immediately instead of waiting for the next poll sweep. The
+  # synthetic (negative) comment_id can never collide with a real GitHub id.
+  defp enqueue_operator_pass(socket, id, prompt, flash_message) do
+    with_open_pr(socket, id, fn issue ->
+      attrs = %{
+        repo: issue.repo,
+        pr_number: issue.pr_number,
+        comment_id: -System.unique_integer([:positive]),
+        comment_type: "issue"
+      }
+
+      {:inserted, handle} = Harness.GitHub.maybe_insert_pr_comment_handle!(attrs)
+
+      %{
+        pr_comment_handle_id: handle.id,
+        issue_id: issue.id,
+        comment_body: prompt,
+        comment_path: nil,
+        comment_line: nil,
+        comment_diff_hunk: nil
+      }
+      |> Harness.GitHub.RespondWorker.new()
+      |> Oban.insert()
+
+      flash_message
+    end)
+  end
+
+  defp operator_pass_prompt(:bug_hunt) do
+    "Do an adversarial bug-hunt pass over this branch: look for correctness bugs, " <>
+      "edge cases, and regressions the existing tests don't cover. If you find real " <>
+      "bugs, fix them and add a test proving the fix. If you find nothing, say so."
+  end
+
+  defp operator_pass_prompt(:format) do
+    "Run the project's formatter/linter over this branch and fix any formatting or " <>
+      "style violations. Do not change behavior."
+  end
 
   defp handle_info(:rail_tick, socket), do: {:halt, assign(socket, rail_state())}
   defp handle_info({:policy_reloaded, _}, socket), do: {:cont, assign(socket, rail_state())}

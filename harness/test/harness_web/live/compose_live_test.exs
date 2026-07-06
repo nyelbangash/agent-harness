@@ -51,9 +51,15 @@ defmodule HarnessWeb.ComposeLiveTest do
     assert html =~ "Explore"
   end
 
-  test "submit with blank prompt shows error flash and does not clear persisted draft", %{
-    conn: conn
-  } do
+  test "renders the styled attachment dropzone instead of a bare file input", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/compose")
+
+    assert html =~ "attachments-dropzone"
+    assert html =~ "Drop files, click to browse, or paste an image"
+    assert html =~ ~s(phx-hook="HarnessWeb.CoreComponents.PasteUpload")
+  end
+
+  test "submit with blank prompt shows error flash", %{conn: conn} do
     ctx = with_policy_repo(%{})
     {:ok, view, _html} = live(conn, ~p"/compose")
 

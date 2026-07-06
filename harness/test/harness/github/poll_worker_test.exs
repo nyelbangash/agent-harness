@@ -546,7 +546,7 @@ defmodule Harness.GitHub.PollWorkerTest do
     assert Harness.Repo.aggregate(Harness.GitHub.PrCommentHandle, :count) == 0
   end
 
-  test "third-party comment is ignored (not the operator's login)" do
+  test "third-party (non-PAT-owner) comment still enqueues RespondWorker" do
     issue =
       issue_fixture(%{
         repo: @repo,
@@ -570,7 +570,40 @@ defmodule Harness.GitHub.PollWorkerTest do
 
     assert :ok = perform_job(PollWorker, %{})
 
-    refute_enqueued(worker: Harness.GitHub.RespondWorker)
-    assert Harness.Repo.aggregate(Harness.GitHub.PrCommentHandle, :count) == 0
+    assert_enqueued(worker: Harness.GitHub.RespondWorker)
+    assert Harness.Repo.aggregate(Harness.GitHub.PrCommentHandle, :count) == 1
+
+    [job] = all_enqueued(worker: Harness.GitHub.RespondWorker)
+    assert job.args["issue_id"] == issue.id
+    assert job.args["comment_body"] == "looks wrong to me"
+  end
+
+  test "review_stalled issue with a new PR comment enqueues RespondWorker" do
+    issue =
+      issue_fixture(%{
+        repo: @repo,
+        number: 33,
+        pipeline_state: "review_stalled",
+        pr_number: 45
+      })
+
+    stub_with_pr_comments(
+      [gh_issue_payload(number: 33, id: issue.github_id)],
+      [],
+      [
+        %{
+          "id" => 3002,
+          "body" => "please tighten this up",
+          "user" => %{"login" => "some_other_contributor"},
+          "created_at" => "2026-07-06T10:00:00Z"
+        }
+      ]
+    )
+
+    assert :ok = perform_job(PollWorker, %{})
+
+    assert_enqueued(worker: Harness.GitHub.RespondWorker)
+    [job] = all_enqueued(worker: Harness.GitHub.RespondWorker)
+    assert job.args["issue_id"] == issue.id
   end
 end

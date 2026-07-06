@@ -16,6 +16,7 @@ defmodule HarnessWeb.IssuesLive do
     {:triaged, "Triaged"},
     {:in_progress, "In progress"},
     {:review, "Ready for review"},
+    {:review_stalled, "Review stalled"},
     {:done, "Done · Failed"}
   ]
 
@@ -32,12 +33,57 @@ defmodule HarnessWeb.IssuesLive do
      |> assign(:columns, @columns)
      |> assign(:selected_ids, MapSet.new())
      |> assign(:last_selected_id, nil)
+     |> assign(:selected_issue, nil)
+     |> assign(:issue_runs, [])
      |> load_board()}
   end
 
   @impl true
-  def handle_info({:issue_updated, _issue}, socket), do: {:noreply, load_board(socket)}
-  def handle_info({:run_updated, _run}, socket), do: {:noreply, load_board(socket)}
+  def handle_params(params, _uri, socket) do
+    case params["id"] do
+      nil ->
+        {:noreply, socket |> assign(:selected_issue, nil) |> assign(:issue_runs, [])}
+
+      id ->
+        {:noreply, load_issue_detail(socket, String.to_integer(id))}
+    end
+  end
+
+  defp load_issue_detail(socket, issue_id) do
+    issue = GitHub.get_issue!(issue_id)
+
+    socket
+    |> assign(:selected_issue, issue)
+    |> assign(:issue_runs, Runs.runs_for_issue(issue_id))
+  end
+
+  @impl true
+  def handle_info({:issue_updated, issue}, socket) do
+    socket = load_board(socket)
+
+    socket =
+      if socket.assigns.selected_issue && socket.assigns.selected_issue.id == issue.id do
+        load_issue_detail(socket, issue.id)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:run_updated, run}, socket) do
+    socket = load_board(socket)
+
+    socket =
+      if socket.assigns.selected_issue && run.issue_id == socket.assigns.selected_issue.id do
+        assign(socket, :issue_runs, Runs.runs_for_issue(socket.assigns.selected_issue.id))
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
   def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
@@ -244,7 +290,7 @@ defmodule HarnessWeb.IssuesLive do
           :if={!@empty?}
           id="issue-board"
           data-selected-ids={Enum.join(@selected_ids, ",")}
-          class="grid md:grid-cols-3 xl:grid-cols-5 gap-4 md:flex-1 md:min-h-0 md:auto-rows-fr"
+          class="grid md:grid-cols-3 xl:grid-cols-6 gap-4 md:flex-1 md:min-h-0 md:auto-rows-fr"
         >
           <section
             :for={{key, title} <- @columns}
@@ -271,9 +317,158 @@ defmodule HarnessWeb.IssuesLive do
           </section>
         </div>
       </div>
+
+      <.issue_detail_modal
+        :if={@selected_issue}
+        issue={@selected_issue}
+        runs={@issue_runs}
+      />
     </Layouts.app>
     """
   end
+
+  attr :issue, :map, required: true
+  attr :runs, :list, required: true
+
+  defp issue_detail_modal(assigns) do
+    ~H"""
+    <div
+      id="issue-detail-modal"
+      class="fixed inset-0 z-50 flex items-center justify-center p-6"
+      aria-modal="true"
+      role="dialog"
+      data-testid="issue-detail-modal"
+    >
+      <.link
+        patch={~p"/issues"}
+        class="absolute inset-0 bg-bg/85"
+        aria-hidden="true"
+      ></.link>
+      <div class="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-sm bg-surface border border-surface-2 shadow-2xl">
+        <div class="flex items-center gap-3 px-5 py-3 border-b border-surface-2 shrink-0">
+          <span class="font-mono text-[11px] text-accent tabular-nums">
+            {@issue.repo}#{@issue.number}
+          </span>
+          <span class="font-display text-sm text-ink truncate flex-1">{@issue.title}</span>
+          <span class="font-mono text-[10px] text-ink-dim uppercase shrink-0">
+            {@issue.pipeline_state}
+          </span>
+          <.link
+            patch={~p"/issues"}
+            aria-label="close"
+            class="font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-alert hover:text-alert shrink-0"
+          >
+            Close
+          </.link>
+        </div>
+
+        <div class="overflow-y-auto px-5 py-4 space-y-4 min-h-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <a
+              href={@issue.url}
+              target="_blank"
+              rel="noopener"
+              class="font-mono text-[10px] text-accent hover:underline"
+            >
+              View on GitHub ↗
+            </a>
+            <a
+              :if={@issue.pr_url}
+              href={@issue.pr_url}
+              target="_blank"
+              rel="noopener"
+              class="font-mono text-[10px] text-accent hover:underline"
+            >
+              PR #{@issue.pr_number} ↗
+            </a>
+          </div>
+
+          <div class="flex items-center gap-2 flex-wrap">
+            <button
+              :if={@issue.pr_number}
+              phx-click="enqueue_review"
+              phx-value-id={@issue.id}
+              class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-accent text-accent rounded-sm hover:bg-accent/10"
+            >
+              Adversarial review
+            </button>
+            <button
+              :if={@issue.pr_number}
+              phx-click="enqueue_bug_hunt"
+              phx-value-id={@issue.id}
+              class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
+            >
+              Bug-hunt pass
+            </button>
+            <button
+              :if={@issue.pr_number}
+              phx-click="enqueue_format"
+              phx-value-id={@issue.id}
+              class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
+            >
+              Format pass
+            </button>
+            <span :if={!@issue.pr_number} class="font-mono text-[10px] text-ink-dim">
+              no open PR — actions unlock once one exists
+            </span>
+          </div>
+
+          <div>
+            <h3 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-2">
+              Run history
+            </h3>
+            <p :if={@runs == []} class="font-body text-sm text-ink-dim">No runs yet.</p>
+            <ul :if={@runs != []} class="space-y-1">
+              <li
+                :for={run <- @runs}
+                class="flex items-center gap-2 text-[12px]"
+                data-testid="issue-run-row"
+              >
+                <.link
+                  navigate={~p"/runs/#{run.id}"}
+                  class="font-mono text-[10px] text-accent hover:underline tabular-nums"
+                >
+                  #{run.id}
+                </.link>
+                <span class="font-mono text-[10px] text-ink-dim uppercase">{run.kind}</span>
+                <span class={run_status_class(run.status)}>{run.status}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-2">
+              Thread
+            </h3>
+            <form phx-submit="post_thread_comment" class="flex gap-1.5">
+              <input type="hidden" name="issue_id" value={@issue.id} />
+              <input
+                name="body"
+                type="text"
+                placeholder="Post a comment/request — reaches GitHub and the harness"
+                autocomplete="off"
+                class="flex-1 min-w-0 bg-bg border border-surface-2 rounded-sm px-2 py-1 font-mono text-[11px] text-ink focus:outline-2 focus:outline-accent"
+              />
+              <button
+                type="submit"
+                class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent shrink-0"
+              >
+                Post
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp run_status_class("succeeded"), do: "font-mono text-[10px] uppercase text-ok"
+
+  defp run_status_class(status) when status in ~w(failed killed),
+    do: "font-mono text-[10px] uppercase text-alert"
+
+  defp run_status_class(_), do: "font-mono text-[10px] uppercase text-ink-dim"
 
   attr :issue, :map, required: true
   attr :triage, :map, default: nil
@@ -343,7 +538,12 @@ defmodule HarnessWeb.IssuesLive do
         </span>
       </div>
 
-      <p class="font-body text-[13px] leading-snug text-ink mb-1.5">{@issue.title}</p>
+      <.link
+        patch={~p"/issues/#{@issue.id}"}
+        class="block font-body text-[13px] leading-snug text-ink mb-1.5 hover:text-accent"
+      >
+        {@issue.title}
+      </.link>
 
       <div :if={@issue.pr_url} class="mb-1.5">
         <a

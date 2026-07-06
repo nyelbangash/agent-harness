@@ -3,8 +3,11 @@ defmodule Harness.GitHub.ReviewWorker do
   Adversarial review pass on every harness-authored PR (spec §4.3 extension).
 
   Triggered by ImplementWorker after a PR is opened. Runs a read-only reviewer
-  session against the PR diff, posts a structured GitHub PR review, and can
-  drive at most one bounded fix-and-re-review cycle before stopping.
+  session against the PR diff, posts a structured GitHub PR review, and drives
+  a bounded fix-and-re-review cycle (up to `policy.review.max_rounds`) before
+  stopping. If the round ceiling is hit while actionable findings are still
+  open, the issue transitions to `review_stalled` (distinct from a clean
+  `pr_open`) and an operator is notified — see `Harness.GitHub.Issue.column/1`.
 
   Job args: issue_id, pr_number, round (0 = initial review), branch.
   """
@@ -23,7 +26,9 @@ defmodule Harness.GitHub.ReviewWorker do
 
   @conflict_resolution_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
-  @review_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
+  # the initial review pass genuinely is read-only: no Write/Edit, so the
+  # reviewer can only critique, never quietly patch the PR it's judging.
+  @review_tools ~w(Bash Read Glob Grep WebSearch WebFetch)
 
   @implement_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
 
@@ -42,7 +47,7 @@ defmodule Harness.GitHub.ReviewWorker do
     policy = Policy.get()
 
     cond do
-      issue.state != "open" or issue.pipeline_state not in ~w(pr_open) ->
+      issue.state != "open" or issue.pipeline_state not in ~w(pr_open review_stalled) ->
         {:cancel, :issue_no_longer_actionable}
 
       round > policy.review.max_rounds ->
@@ -183,11 +188,37 @@ defmodule Harness.GitHub.ReviewWorker do
         )
     end
 
-    if actionable != [] and round < policy.review.max_rounds do
-      fix_cycle(issue, pr_number, round, branch, worktree, actionable, policy)
-    else
-      :ok
+    cond do
+      actionable != [] and round < policy.review.max_rounds ->
+        fix_cycle(issue, pr_number, round, branch, worktree, actionable, policy)
+
+      actionable != [] ->
+        stall_review(issue, pr_number, round, actionable)
+
+      issue.pipeline_state == "review_stalled" ->
+        # a re-review (operator-triggered or after a scoped fix) came back
+        # clean — un-stall the issue rather than leaving it stuck forever.
+        GitHub.transition!(issue, "pr_open")
+        :ok
+
+      true ->
+        :ok
     end
+  end
+
+  # round ceiling hit with findings still open — make that terminal state
+  # visible (`review_stalled`, distinct from a clean `pr_open`) instead of
+  # silently leaving the PR indistinguishable from a passed review.
+  defp stall_review(issue, pr_number, round, actionable) do
+    GitHub.transition!(issue, "review_stalled")
+
+    Harness.Notify.notify(
+      :review_stalled,
+      "Review for #{issue.repo}##{pr_number} hit the round cap (round #{round}) with " <>
+        "#{length(actionable)} unresolved finding(s) — needs a human look."
+    )
+
+    :ok
   end
 
   defp fix_cycle(issue, pr_number, round, branch, worktree, actionable, policy) do

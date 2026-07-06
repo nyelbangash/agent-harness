@@ -451,6 +451,99 @@ defmodule HarnessWeb.CoreComponents do
     """
   end
 
+  @doc """
+  A styled drag-and-drop / click-to-browse attachment upload zone with image
+  thumbnails, replacing a bare `<.live_file_input>`. Also accepts pasted
+  clipboard images via the colocated `.PasteUpload` hook — see issue #83.
+
+  The host LiveView must still `allow_upload(@upload.name, ...)` (e.g. via
+  `Harness.Attachments.upload_opts/0`) and handle a `"cancel_attachment"`
+  event with the entry `ref`.
+
+  ## Examples
+
+      <.attachment_dropzone upload={@uploads.attachments} />
+  """
+  attr :upload, Phoenix.LiveView.UploadConfig, required: true
+
+  def attachment_dropzone(assigns) do
+    ~H"""
+    <div
+      id={"#{@upload.name}-dropzone"}
+      phx-hook=".PasteUpload"
+      phx-drop-target={@upload.ref}
+      data-upload-name={@upload.name}
+      class="rounded-sm border border-dashed border-surface-2 hover:border-accent/60 px-3 py-3 text-center transition-colors"
+    >
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".PasteUpload">
+        export default {
+          mounted() {
+            this.handler = e => {
+              const items = Array.from(e.clipboardData?.items || [])
+              const files = items
+                .filter(item => item.kind === "file" && item.type.startsWith("image/"))
+                .map(item => item.getAsFile())
+                .filter(Boolean)
+              if (files.length > 0) {
+                e.preventDefault()
+                this.uploadTo(this.el, this.el.dataset.uploadName, files)
+              }
+            }
+            document.addEventListener("paste", this.handler)
+          },
+          destroyed() {
+            document.removeEventListener("paste", this.handler)
+          }
+        }
+      </script>
+      <label class="font-mono text-[10px] text-ink-dim cursor-pointer block">
+        <.live_file_input upload={@upload} class="hidden" />
+        Drop files, click to browse, or paste an image
+      </label>
+      <div :if={@upload.entries != []} class="mt-2 space-y-1.5 text-left">
+        <div
+          :for={entry <- @upload.entries}
+          class="flex items-center gap-2"
+          data-testid="attachment-entry"
+        >
+          <.live_img_preview
+            :if={Harness.Attachments.image?(entry.client_type)}
+            entry={entry}
+            class="size-8 rounded-sm object-cover shrink-0 border border-surface-2"
+          />
+          <.icon
+            :if={!Harness.Attachments.image?(entry.client_type)}
+            name="hero-document"
+            class="size-6 text-ink-dim shrink-0"
+          />
+          <span class="font-mono text-[11px] text-ink-dim truncate flex-1">{entry.client_name}</span>
+          <progress class="w-16 shrink-0" value={entry.progress} max="100">{entry.progress}%</progress>
+          <button
+            type="button"
+            phx-click="cancel_attachment"
+            phx-value-ref={entry.ref}
+            class="font-mono text-[10px] text-alert shrink-0"
+          >
+            &times;
+          </button>
+        </div>
+      </div>
+      <p
+        :for={err <- upload_errors(@upload)}
+        class="font-mono text-[10px] text-alert mt-1"
+      >
+        {Harness.Attachments.upload_error_message(err)}
+      </p>
+      <p
+        :for={{entry, err} <- Harness.Attachments.entry_errors(@upload)}
+        class="font-mono text-[10px] text-alert mt-1"
+      >
+        {entry.client_name}: {Harness.Attachments.upload_error_message(err)}
+      </p>
+    </div>
+    """
+  end
+
   ## JS Commands
 
   def show(js \\ %JS{}, selector) do

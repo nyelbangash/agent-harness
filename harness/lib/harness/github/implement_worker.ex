@@ -27,7 +27,7 @@ defmodule Harness.GitHub.ImplementWorker do
 
   alias Harness.GitHub
   alias Harness.GitHub.Client
-  alias Harness.GitHub.Provenance
+  alias Harness.GitHub.{Issue, Provenance}
   alias Harness.Runs.RunSpec
   alias Harness.{Policy, Repos, Runs, Verifier}
 
@@ -202,7 +202,7 @@ defmodule Harness.GitHub.ImplementWorker do
 
       run = Runs.update_run!(run, %{status: "pushing"})
 
-      branch = "harness/issue-#{issue.number}-#{slug(issue.title)}"
+      branch = Issue.branch_name(issue)
       changed = Repos.changed_files(worktree)
 
       Repos.publish_branch!(
@@ -365,13 +365,5 @@ defmodule Harness.GitHub.ImplementWorker do
       path =~ ~r{\.(test|spec)\.\w+$} or
       path =~ ~r{(^|/)\.github/} or
       path =~ ~r{(^|/)(ci|\.circleci|\.gitlab-ci)}
-  end
-
-  defp slug(title) do
-    title
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9]+/, "-")
-    |> String.trim("-")
-    |> String.slice(0, 40)
   end
 end

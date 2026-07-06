@@ -11,6 +11,7 @@ defmodule HarnessWeb.IdeationLive do
 
   use HarnessWeb, :live_view
 
+  alias Harness.Attachments
   alias Harness.Ideation
   alias Harness.Ideation.Outline
   alias Harness.Policy
@@ -48,11 +49,7 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:promote_open, false)
      |> assign(:promote_node_id, nil)
      |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => "#{budget}"}))
-     |> allow_upload(:attachments,
-       accept: @allowed_attachment_exts,
-       max_entries: 5,
-       max_file_size: 15_000_000
-     )}
+     |> allow_upload(:attachments, Attachments.upload_opts())}
   end
 
   @impl true
@@ -365,17 +362,7 @@ defmodule HarnessWeb.IdeationLive do
   def handle_info(_message, socket), do: {:noreply, socket}
 
   defp persist_attachments(socket, dir) do
-    File.mkdir_p!(dir)
-
-    consume_uploaded_entries(socket, :attachments, fn %{path: tmp_path}, entry ->
-      # client_name is browser-supplied — strip any path components so a name
-      # like "../../../x.png" can't escape the session dir on cp, and so the
-      # stored filename can't forge prompt trust-boundary markers downstream.
-      filename = safe_filename(entry.client_name)
-      dest = Path.join(dir, filename)
-      File.cp!(tmp_path, dest)
-      {:ok, %{filename: filename, path: dest, content_type: entry.client_type}}
-    end)
+    Attachments.persist_uploaded_entries(socket, :attachments, dir)
   end
 
   # Reduce a client-supplied filename to a single safe path segment. basename
@@ -553,34 +540,7 @@ defmodule HarnessWeb.IdeationLive do
                 <label class="font-mono text-[10px] text-ink-dim block mb-1">
                   Attachments (optional)
                 </label>
-                <.live_file_input upload={@uploads.attachments} />
-                <div
-                  :for={entry <- @uploads.attachments.entries}
-                  class="flex items-center gap-2 mt-1"
-                >
-                  <span class="font-mono text-[11px] text-ink-dim truncate">{entry.client_name}</span>
-                  <progress class="flex-1" value={entry.progress} max="100">{entry.progress}%</progress>
-                  <button
-                    type="button"
-                    phx-click="cancel_attachment"
-                    phx-value-ref={entry.ref}
-                    class="font-mono text-[10px] text-alert"
-                  >
-                    &times;
-                  </button>
-                </div>
-                <p
-                  :for={err <- upload_errors(@uploads.attachments)}
-                  class="font-mono text-[10px] text-alert mt-1"
-                >
-                  {upload_error_message(err)}
-                </p>
-                <p
-                  :for={{entry, err} <- entry_errors(@uploads.attachments)}
-                  class="font-mono text-[10px] text-alert mt-1"
-                >
-                  {entry.client_name}: {upload_error_message(err)}
-                </p>
+                <.attachment_dropzone upload={@uploads.attachments} />
               </div>
               <div class="flex justify-end">
                 <button class="font-display uppercase text-[10px] tracking-widest px-3 py-1.5 bg-accent text-bg rounded-sm">
