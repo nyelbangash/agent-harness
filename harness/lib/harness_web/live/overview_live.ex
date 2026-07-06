@@ -30,6 +30,7 @@ defmodule HarnessWeb.OverviewLive do
      |> assign(:needs_you, GitHub.needs_attention())
      |> assign(:briefing, Harness.Briefing.latest_undismissed())
      |> assign(:lamps, Harness.Manager.LampServer.get_all())
+     |> assign(:manager_last_sweep, Harness.Manager.LampServer.last_sweep_at())
      |> assign(:any_runs?, recent != [])
      |> stream(:activity, recent)}
   end
@@ -54,7 +55,10 @@ defmodule HarnessWeb.OverviewLive do
   end
 
   def handle_info({:lamps_updated, lamps}, socket) do
-    {:noreply, assign(socket, :lamps, lamps)}
+    {:noreply,
+     socket
+     |> assign(:lamps, lamps)
+     |> assign(:manager_last_sweep, Harness.Manager.LampServer.last_sweep_at())}
   end
 
   def handle_info({:run_event, _event}, socket), do: {:noreply, socket}
@@ -215,11 +219,23 @@ defmodule HarnessWeb.OverviewLive do
           </div>
         </section>
 
-        <section
-          :if={Enum.any?(@lamps, &(&1.status == :on))}
-          aria-label="manager lamps"
-          class="mb-6 flex flex-wrap gap-2"
-        >
+        <section aria-label="manager lamps" class="mb-6 flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-surface border border-surface-2 font-mono text-[10px] uppercase tracking-widest text-ink-dim">
+            <span class={[
+              "inline-block size-2 rounded-full",
+              if(Enum.any?(@lamps, &(&1.status == :on)), do: "bg-alert animate-pulse", else: "bg-ok")
+            ]} />
+            <span>manager</span>
+            <span :if={@manager_last_sweep} class="normal-case tracking-normal">
+              · swept {Calendar.strftime(@manager_last_sweep, "%H:%M:%S")}
+            </span>
+            <span
+              :if={Enum.all?(@lamps, &(&1.status != :on))}
+              class="text-ok normal-case tracking-normal"
+            >
+              · all clear
+            </span>
+          </div>
           <%= for lamp <- @lamps, lamp.status == :on do %>
             <div class="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-surface border border-alert/60 font-mono text-[11px] text-alert">
               <span class="inline-block size-2 rounded-full bg-alert animate-pulse" />

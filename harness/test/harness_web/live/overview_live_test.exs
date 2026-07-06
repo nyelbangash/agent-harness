@@ -189,15 +189,15 @@ defmodule HarnessWeb.OverviewLiveTest do
     refute html =~ "Morning briefing"
   end
 
-  test "lamp strip is hidden when no lamps are on", %{conn: conn} do
+  test "lamp strip shows the all-clear heartbeat when no lamps are on", %{conn: conn} do
     for lamp <-
           ~w(loop_signature wedged_lane stalled_run stranded_state artifact_drift telemetry_silence stale_code)a do
       Harness.Manager.LampServer.clear(lamp)
     end
 
     {:ok, view, html} = live(conn, ~p"/")
-    refute html =~ "manager lamps"
-    refute has_element?(view, "[aria-label='manager lamps']")
+    assert has_element?(view, "[aria-label='manager lamps']")
+    assert html =~ "all clear"
   end
 
   test "lamp strip appears when a lamp is set via PubSub", %{conn: conn} do
