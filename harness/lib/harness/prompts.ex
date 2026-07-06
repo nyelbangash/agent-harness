@@ -84,7 +84,7 @@ defmodule Harness.Prompts do
       prompt: truncate(prompt, @max_body_chars),
       repo_map: truncate(repo_map, 20_000),
       max_turns: max_turns,
-      attachments: attachments
+      attachments: sanitize_attachments(attachments)
     )
   end
 
@@ -107,7 +107,7 @@ defmodule Harness.Prompts do
       journal: truncate(Ideation.read_journal(session), 8_000),
       grounding_repos: grounding_repos,
       nudge: nudge,
-      attachments: Ideation.attachments(session)
+      attachments: sanitize_attachments(Ideation.attachments(session))
     )
   end
 
@@ -211,12 +211,29 @@ defmodule Harness.Prompts do
     end
   end
 
-  # untrusted content must not be able to forge the trust-boundary markers
-  # the templates wrap it in (e.g. a premature <<<END-ISSUE-DATA>>> followed
-  # by a fake "trusted" section)
-  defp sanitize(text) do
+  @doc """
+  Neutralize trust-boundary markers in untrusted content so it can't forge the
+  `<<<`/`>>>` delimiters the templates wrap it in (e.g. a premature
+  `<<<END-ISSUE-DATA>>>` followed by a fake "trusted" section).
+  """
+  def sanitize(text) when is_binary(text) do
     text
     |> String.replace("<<<", "‹‹‹")
     |> String.replace(">>>", "›››")
+  end
+
+  def sanitize(other), do: other
+
+  # Attachment metadata (filename, content_type, path) is derived from
+  # client-supplied uploads, so every field is untrusted and gets sanitized
+  # before it reaches a template's (bounded) attachment listing.
+  defp sanitize_attachments(attachments) do
+    Enum.map(attachments, fn a ->
+      %{
+        "filename" => sanitize(a["filename"]),
+        "content_type" => sanitize(a["content_type"]),
+        "path" => sanitize(a["path"])
+      }
+    end)
   end
 end

@@ -366,10 +366,27 @@ defmodule HarnessWeb.IdeationLive do
     File.mkdir_p!(dir)
 
     consume_uploaded_entries(socket, :attachments, fn %{path: tmp_path}, entry ->
-      dest = Path.join(dir, entry.client_name)
+      # client_name is browser-supplied — strip any path components so a name
+      # like "../../../x.png" can't escape the session dir on cp, and so the
+      # stored filename can't forge prompt trust-boundary markers downstream.
+      filename = safe_filename(entry.client_name)
+      dest = Path.join(dir, filename)
       File.cp!(tmp_path, dest)
-      {:ok, %{filename: entry.client_name, path: dest, content_type: entry.client_type}}
+      {:ok, %{filename: filename, path: dest, content_type: entry.client_type}}
     end)
+  end
+
+  # Reduce a client-supplied filename to a single safe path segment. basename
+  # drops directory components (defeating ../ traversal); we then reject any
+  # residual separators or empty/dot-only names, falling back to a stable name.
+  defp safe_filename(client_name) do
+    name = client_name |> to_string() |> Path.basename() |> String.trim()
+
+    if name in ["", ".", ".."] or String.contains?(name, ["/", "\\"]) do
+      "attachment"
+    else
+      name
+    end
   end
 
   defp entry_errors(uploads) do
