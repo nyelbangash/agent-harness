@@ -18,6 +18,9 @@ defmodule HarnessWeb.IdeationLive do
 
   require Logger
 
+  @allowed_attachment_exts ~w(.png .jpg .jpeg .gif .webp .txt .md .log .pdf .diff .patch)
+  @seed_storage_key "ideation:seed-prompt"
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: Ideation.subscribe()
@@ -147,6 +150,7 @@ defmodule HarnessWeb.IdeationLive do
       {:noreply,
        socket
        |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => to_string(budget)}))
+       |> push_event("clear_draft", %{key: @seed_storage_key})
        |> push_patch(to: ~p"/ideation/#{session.id}")}
     end
   end
@@ -361,6 +365,32 @@ defmodule HarnessWeb.IdeationLive do
     Attachments.persist_uploaded_entries(socket, :attachments, dir)
   end
 
+  # Reduce a client-supplied filename to a single safe path segment. basename
+  # drops directory components (defeating ../ traversal); we then reject any
+  # residual separators or empty/dot-only names, falling back to a stable name.
+  defp safe_filename(client_name) do
+    name = client_name |> to_string() |> Path.basename() |> String.trim()
+
+    if name in ["", ".", ".."] or String.contains?(name, ["/", "\\"]) do
+      "attachment"
+    else
+      name
+    end
+  end
+
+  defp seed_storage_key, do: @seed_storage_key
+
+  defp entry_errors(uploads) do
+    Enum.flat_map(uploads.entries, fn entry ->
+      Enum.map(upload_errors(uploads, entry), &{entry, &1})
+    end)
+  end
+
+  defp upload_error_message(:too_large), do: "file is too large (max 15 MB)"
+  defp upload_error_message(:too_many_files), do: "too many files (max 5)"
+  defp upload_error_message(:not_accepted), do: "unsupported file type"
+  defp upload_error_message(other), do: to_string(other)
+
   # Past nudges, newest-first — parsed from the journal text `submit_nudge`
   # writes ("- nudge: ..." lines), so the operator can see what was asked for
   # instead of it vanishing after submit (issue #70).
@@ -465,10 +495,30 @@ defmodule HarnessWeb.IdeationLive do
               <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim">
                 Seed a session
               </h2>
+              <script :type={Phoenix.LiveView.ColocatedHook} name=".PersistDraft">
+                export default {
+                  mounted() {
+                    const key = this.el.dataset.storageKey
+                    const saved = window.localStorage.getItem(key)
+                    if (saved && !this.el.value) {
+                      this.el.value = saved
+                    }
+                    this.el.addEventListener("input", () => {
+                      window.localStorage.setItem(key, this.el.value)
+                    })
+                    this.handleEvent("clear_draft", ({key: clearedKey}) => {
+                      if (clearedKey === key) window.localStorage.removeItem(key)
+                    })
+                  }
+                }
+              </script>
               <textarea
+                id="ideation-seed-prompt"
                 name="seed_prompt"
                 rows="4"
                 placeholder="One broad product or feature thought…"
+                phx-hook=".PersistDraft"
+                data-storage-key={seed_storage_key()}
                 class="w-full bg-surface border border-surface-2 rounded-sm px-2 py-1.5 font-body text-sm text-ink focus:outline-2 focus:outline-accent"
               >{@form[:seed_prompt].value}</textarea>
               <div class="flex items-center gap-2">
