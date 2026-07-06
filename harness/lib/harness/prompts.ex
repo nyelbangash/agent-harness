@@ -79,11 +79,12 @@ defmodule Harness.Prompts do
     )
   end
 
-  def explore(prompt, repo_map, max_turns) do
+  def explore(prompt, repo_map, max_turns, attachments \\ []) do
     render("explore.md.eex",
       prompt: truncate(prompt, @max_body_chars),
       repo_map: truncate(repo_map, 20_000),
-      max_turns: max_turns
+      max_turns: max_turns,
+      attachments: attachments
     )
   end
 
@@ -105,7 +106,8 @@ defmodule Harness.Prompts do
       sibling_summaries: format_siblings(node),
       journal: truncate(Ideation.read_journal(session), 8_000),
       grounding_repos: grounding_repos,
-      nudge: nudge
+      nudge: nudge,
+      attachments: Ideation.attachments(session)
     )
   end
 

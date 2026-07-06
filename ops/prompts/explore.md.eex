@@ -14,7 +14,13 @@ The operator has a rough idea they want to develop into a well-specified issue. 
 <<<COMPOSE-PROMPT>>>
 <%= @prompt %>
 <<<END-COMPOSE-PROMPT>>>
-
+<%= if @attachments != [] do %>
+## Attached files
+The operator attached these local files — use the **Read** tool to view them before drafting.
+<%= for a <- @attachments do %>
+- `<%= a["filename"] %>` (<%= a["content_type"] %>): `<%= a["path"] %>`
+<% end %>
+<% end %>
 ## Repo structure
 
 <%= @repo_map %>

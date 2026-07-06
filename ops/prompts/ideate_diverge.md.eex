@@ -26,6 +26,13 @@ The following repositories are checked out for reference. Use the **Read** and *
 - **<%= repo %>**: `<%= path %>`
 <% end %>
 <% end %>
+<%= if @attachments != [] do %>
+## Attached files
+The operator attached these local files — use the **Read** tool to view them.
+<%= for a <- @attachments do %>
+- `<%= a["filename"] %>` (<%= a["content_type"] %>): `<%= a["path"] %>`
+<% end %>
+<% end %>
 <%= if @nudge && @nudge != "" do %>
 ## Operator nudge (address this in your response — consumed after this iteration)
 <%= @nudge %>

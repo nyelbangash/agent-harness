@@ -17,6 +17,8 @@ defmodule HarnessWeb.IdeationLive do
 
   require Logger
 
+  @allowed_attachment_exts ~w(.png .jpg .jpeg .gif .webp .txt .md .log .pdf .diff .patch)
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: Ideation.subscribe()
@@ -44,7 +46,12 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:search_query, "")
      |> assign(:promote_open, false)
      |> assign(:promote_node_id, nil)
-     |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => "#{budget}"}))}
+     |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => "#{budget}"}))
+     |> allow_upload(:attachments,
+       accept: @allowed_attachment_exts,
+       max_entries: 5,
+       max_file_size: 15_000_000
+     )}
   end
 
   @impl true
@@ -135,13 +142,22 @@ defmodule HarnessWeb.IdeationLive do
       {:noreply, put_flash(socket, :error, "Give it a seed idea first.")}
     else
       budget = parse_int(params["budget_minutes"], 180)
-      {session, _root} = Ideation.start_session(%{seed_prompt: seed, budget_minutes: budget})
+
+      {session, _root} =
+        Ideation.start_session(
+          %{seed_prompt: seed, budget_minutes: budget},
+          &persist_attachments(socket, &1)
+        )
 
       {:noreply,
        socket
        |> assign(:form, to_form(%{"seed_prompt" => "", "budget_minutes" => to_string(budget)}))
        |> push_patch(to: ~p"/ideation/#{session.id}")}
     end
+  end
+
+  def handle_event("cancel_attachment", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :attachments, ref)}
   end
 
   def handle_event("select_node", %{"id" => id}, socket) do
@@ -346,6 +362,27 @@ defmodule HarnessWeb.IdeationLive do
 
   def handle_info(_message, socket), do: {:noreply, socket}
 
+  defp persist_attachments(socket, dir) do
+    File.mkdir_p!(dir)
+
+    consume_uploaded_entries(socket, :attachments, fn %{path: tmp_path}, entry ->
+      dest = Path.join(dir, entry.client_name)
+      File.cp!(tmp_path, dest)
+      {:ok, %{filename: entry.client_name, path: dest, content_type: entry.client_type}}
+    end)
+  end
+
+  defp entry_errors(uploads) do
+    Enum.flat_map(uploads.entries, fn entry ->
+      Enum.map(upload_errors(uploads, entry), &{entry, &1})
+    end)
+  end
+
+  defp upload_error_message(:too_large), do: "file is too large (max 15 MB)"
+  defp upload_error_message(:too_many_files), do: "too many files (max 5)"
+  defp upload_error_message(:not_accepted), do: "unsupported file type"
+  defp upload_error_message(other), do: to_string(other)
+
   # Past nudges, newest-first — parsed from the journal text `submit_nudge`
   # writes ("- nudge: ..." lines), so the operator can see what was asked for
   # instead of it vanishing after submit (issue #70).
@@ -470,6 +507,39 @@ defmodule HarnessWeb.IdeationLive do
                 <span class="font-mono text-[11px] text-ink-dim tabular-nums w-14 text-right">
                   {@budget_minutes} min
                 </span>
+              </div>
+              <div>
+                <label class="font-mono text-[10px] text-ink-dim block mb-1">
+                  Attachments (optional)
+                </label>
+                <.live_file_input upload={@uploads.attachments} />
+                <div
+                  :for={entry <- @uploads.attachments.entries}
+                  class="flex items-center gap-2 mt-1"
+                >
+                  <span class="font-mono text-[11px] text-ink-dim truncate">{entry.client_name}</span>
+                  <progress class="flex-1" value={entry.progress} max="100">{entry.progress}%</progress>
+                  <button
+                    type="button"
+                    phx-click="cancel_attachment"
+                    phx-value-ref={entry.ref}
+                    class="font-mono text-[10px] text-alert"
+                  >
+                    &times;
+                  </button>
+                </div>
+                <p
+                  :for={err <- upload_errors(@uploads.attachments)}
+                  class="font-mono text-[10px] text-alert mt-1"
+                >
+                  {upload_error_message(err)}
+                </p>
+                <p
+                  :for={{entry, err} <- entry_errors(@uploads.attachments)}
+                  class="font-mono text-[10px] text-alert mt-1"
+                >
+                  {entry.client_name}: {upload_error_message(err)}
+                </p>
               </div>
               <div class="flex justify-end">
                 <button class="font-display uppercase text-[10px] tracking-widest px-3 py-1.5 bg-accent text-bg rounded-sm">
@@ -788,6 +858,23 @@ defmodule HarnessWeb.IdeationLive do
                       <p class="font-mono text-[11px] text-ink-dim tabular-nums mt-0.5">
                         tokens {@tokens_in + @tokens_out} ({@tokens_in}↑ {@tokens_out}↓)
                       </p>
+
+                      <div :if={Ideation.attachments(@session) != []} class="mt-2">
+                        <h5 class="font-display uppercase tracking-[0.14em] text-[9px] text-ink-dim/70 mb-1">
+                          Attachments
+                        </h5>
+                        <ul class="space-y-0.5">
+                          <li :for={a <- Ideation.attachments(@session)}>
+                            <.link
+                              href={~p"/ideation/#{@session.id}/attachments/#{a["filename"]}"}
+                              target="_blank"
+                              class="font-mono text-[10px] text-accent hover:underline"
+                            >
+                              {a["filename"]}
+                            </.link>
+                          </li>
+                        </ul>
+                      </div>
 
                       <div :if={@session.status == "running"} class="mt-3">
                         <h5 class="font-display uppercase tracking-[0.14em] text-[9px] text-ink-dim/70 mb-1">

@@ -63,4 +63,24 @@ defmodule HarnessWeb.DownloadController do
       conn |> put_status(404) |> text("not found")
     end
   end
+
+  def draft_attachment(conn, %{"id" => id, "filename" => filename}) do
+    draft = Compose.get_draft!(id)
+    serve_attachment(conn, Compose.attachments(draft), filename)
+  end
+
+  def ideation_attachment(conn, %{"id" => id, "filename" => filename}) do
+    session = Ideation.get_session!(id)
+    serve_attachment(conn, Ideation.attachments(session), filename)
+  end
+
+  defp serve_attachment(conn, attachments, filename) do
+    case Enum.find(attachments, &(&1["filename"] == filename)) do
+      nil ->
+        conn |> put_status(404) |> text("not found")
+
+      %{"path" => path} ->
+        send_file(conn, 200, path)
+    end
+  end
 end
