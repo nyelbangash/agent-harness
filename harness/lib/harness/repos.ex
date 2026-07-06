@@ -402,9 +402,9 @@ defmodule Harness.Repos do
   # must actually be signaled — killing only the BEAM task would leak a live
   # git holding locks on the clone, silently breaking this GenServer's
   # single-writer guarantee when the Oban retry runs a second git against it.
-  defp git(cd, args, _repo, extra_env \\ []) do
+  defp git(cd, args, repo, extra_env \\ []) do
     env =
-      case Harness.Secrets.github_pat() do
+      case Harness.Secrets.github_pat(repo) do
         {:ok, pat} -> [{~c"GH_TOKEN", String.to_charlist(pat)}]
         _ -> []
       end ++ extra_env

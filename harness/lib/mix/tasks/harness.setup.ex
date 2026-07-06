@@ -2,13 +2,19 @@ defmodule Mix.Tasks.Harness.Setup do
   @shortdoc "One-time setup: ~/.harness directories + GitHub PAT into Keychain"
 
   @moduledoc """
-  Creates the `~/.harness` directory tree and stores the fine-grained GitHub
+  Creates the `~/.harness` directory tree and stores a fine-grained GitHub
   PAT in the macOS login Keychain (service `com.nyel.harness.github`).
 
   `security` prompts for the token on the terminal so it never appears in
   shell history or `ps` output. Re-run any time to rotate the PAT.
 
       mix harness.setup
+
+  Fine-grained PATs bind to a single resource owner. To store a PAT for an
+  org or collaborator repo's owner (service `com.nyel.harness.github.<owner>`,
+  falls back to the default service when unset), pass the owner:
+
+      mix harness.setup my-org
   """
 
   use Mix.Task
@@ -16,7 +22,7 @@ defmodule Mix.Tasks.Harness.Setup do
   @requirements ["app.config"]
 
   @impl Mix.Task
-  def run(_args) do
+  def run(args) do
     home = Application.fetch_env!(:harness, :harness_home)
 
     for dir <- ["repos", "plans", "logs", "ideation"] do
@@ -25,8 +31,13 @@ defmodule Mix.Tasks.Harness.Setup do
       Mix.shell().info("  ✓ #{path}")
     end
 
-    service = Harness.Secrets.pat_service()
+    case args do
+      [] -> setup_service(Harness.Secrets.pat_service(), nil)
+      [owner] -> setup_service(Harness.Secrets.pat_service(owner), owner)
+    end
+  end
 
+  defp setup_service(service, owner) do
     # Deliberately NOT prompting from inside Mix: without a real controlling
     # TTY, `security -w` cannot disable echo and the pasted token appears in
     # plaintext in the terminal. The user runs the command in their own shell.
@@ -45,6 +56,8 @@ defmodule Mix.Tasks.Harness.Setup do
     Verify afterwards with: mix harness.doctor
     """)
 
-    Harness.Secrets.forget_github_pat()
+    if owner,
+      do: Harness.Secrets.forget_github_pat(owner),
+      else: Harness.Secrets.forget_github_pat()
   end
 end

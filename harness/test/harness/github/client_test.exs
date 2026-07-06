@@ -221,4 +221,24 @@ defmodule Harness.GitHub.ClientTest do
 
     assert :ok = Client.edit_issue("owner/repo", 42, %{body: "updated body with task list"})
   end
+
+  test "requests for different repos' owners send different Authorization headers" do
+    Application.put_env(:harness, :github_pat_overrides, %{
+      "ownera" => "pat-a",
+      "ownerb" => "pat-b"
+    })
+
+    on_exit(fn -> Application.delete_env(:harness, :github_pat_overrides) end)
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      case Plug.Conn.get_req_header(conn, "authorization") do
+        ["Bearer pat-a"] -> Req.Test.json(conn, [%{"id" => 1}])
+        ["Bearer pat-b"] -> Req.Test.json(conn, [%{"id" => 2}])
+        other -> conn |> Plug.Conn.put_status(500) |> Req.Test.json(%{"got" => other})
+      end
+    end)
+
+    assert {:ok, [%{"id" => 1}]} = Client.list_issue_comments("ownera/repo", 1)
+    assert {:ok, [%{"id" => 2}]} = Client.list_issue_comments("ownerb/repo", 1)
+  end
 end
