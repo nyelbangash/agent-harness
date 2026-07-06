@@ -160,25 +160,6 @@ defmodule HarnessWeb.IssuesLiveTest do
     assert GitHub.get_issue!(issue.id).dismissed_at
   end
 
-  test "failed issue card shows turn cap reason badge with counts", %{conn: conn} do
-    issue = issue_fixture(%{title: "Capped issue", pipeline_state: "failed"})
-
-    run =
-      Runs.create_run!(%{
-        kind: "implement",
-        ref: "owner/fixture##{issue.number}",
-        model: "sonnet",
-        status: "queued",
-        issue_id: issue.id
-      })
-
-    Runs.update_run!(run, %{status: "killed", error: "turn cap 41/40"})
-
-    {:ok, _view, html} = live(conn, ~p"/issues")
-    [_, done_col] = String.split(html, ~s(data-column="done"))
-    assert done_col =~ "turn cap 41/40"
-  end
-
   test "plan_ready cards in the review column show an Implement button, pr_open cards do not", %{
     conn: conn
   } do
@@ -324,4 +305,5 @@ defmodule HarnessWeb.IssuesLiveTest do
 
       assert html =~ "Comment posted"
     end
+  end
 end

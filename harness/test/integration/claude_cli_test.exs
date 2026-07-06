@@ -60,7 +60,6 @@ defmodule Harness.Integration.ClaudeCLITest do
       output_mode: :json,
       json_schema: Triage.schema_json(),
       allowed_tools: ["Read", "Glob", "Grep", "Bash(ls *)"],
-      max_turns: 8,
       ref: "fixture/app#1",
       timeout_ms: :timer.minutes(5)
     }

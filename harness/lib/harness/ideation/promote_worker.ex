@@ -87,7 +87,6 @@ defmodule Harness.Ideation.PromoteWorker do
       output_mode: :json,
       json_schema: @promote_schema,
       allowed_tools: ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch),
-      max_turns: 10,
       ref: "promote-#{session.id}-#{idea.id}"
     }
 

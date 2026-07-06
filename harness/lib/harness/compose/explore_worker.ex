@@ -48,7 +48,6 @@ defmodule Harness.Compose.ExploreWorker do
         Harness.Prompts.explore(
           draft.prompt,
           repo_map,
-          policy.budgets.compose_max_turns,
           Compose.attachments(draft)
         )
 
@@ -60,7 +59,6 @@ defmodule Harness.Compose.ExploreWorker do
         worktree: worktree,
         output_mode: :stream_json,
         allowed_tools: @explore_tools,
-        max_turns: policy.budgets.compose_max_turns,
         ref: "compose/draft-#{draft.id}"
       }
 

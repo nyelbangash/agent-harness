@@ -132,7 +132,6 @@ defmodule Harness.GitHub.ImplementWorker do
       worktree: worktree,
       output_mode: :stream_json,
       allowed_tools: @implement_tools,
-      max_turns: policy.budgets.implement_max_turns,
       issue_id: issue.id,
       ref: "#{issue.repo}##{issue.number}",
       timeout_ms: :timer.minutes(45)

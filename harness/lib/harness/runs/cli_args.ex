@@ -25,8 +25,6 @@ defmodule Harness.Runs.CLIArgs do
       [
         "--model",
         spec.model,
-        "--max-turns",
-        Integer.to_string(spec.max_turns),
         "--permission-mode",
         spec.permission_mode,
         "--allowedTools",

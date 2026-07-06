@@ -608,7 +608,6 @@ defmodule HarnessWeb.IssuesLive do
 
   defp run_reason_badge(error) do
     cond do
-      String.starts_with?(error, "turn cap ") -> error
       error =~ "operator" -> "operator kill"
       error =~ "reaped" or error =~ "daemon shutdown" -> "orphaned by restart"
       error =~ "timeout" -> "timeout"

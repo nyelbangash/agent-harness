@@ -77,7 +77,6 @@ defmodule Harness.Ideation.CritiqueWorker do
       output_mode: :json,
       json_schema: @critique_schema,
       allowed_tools: ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch),
-      max_turns: 15,
       ref: "ideation-#{session.id}",
       timeout_ms: :timer.minutes(15)
     }
@@ -140,7 +139,6 @@ defmodule Harness.Ideation.CritiqueWorker do
       cwd: Ideation.session_dir(session),
       output_mode: :stream_json,
       allowed_tools: ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch),
-      max_turns: 20,
       ref: "ideation-#{session.id}",
       timeout_ms: :timer.minutes(15)
     }

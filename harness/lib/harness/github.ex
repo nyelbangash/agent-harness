@@ -95,12 +95,6 @@ defmodule Harness.GitHub do
   defp timestamp_advanced?(%DateTime{} = stored, %DateTime{} = incoming),
     do: DateTime.compare(incoming, stored) == :gt
 
-  # struct equality is wrong for DateTimes round-tripped through the DB
-  # (microsecond precision differs); compare instants
-  defp same_instant?(nil, nil), do: true
-  defp same_instant?(%DateTime{} = a, %DateTime{} = b), do: DateTime.compare(a, b) == :eq
-  defp same_instant?(_, _), do: false
-
   defp parse_time(nil), do: nil
 
   defp parse_time(iso) do

@@ -32,8 +32,7 @@ defmodule Harness.Runs.ContentionTest do
       model: "sonnet",
       prompt: "contention test",
       cwd: tmp,
-      allowed_tools: [],
-      max_turns: 10
+      allowed_tools: []
     }
   end
 

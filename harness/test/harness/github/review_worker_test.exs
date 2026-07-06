@@ -62,13 +62,13 @@ defmodule Harness.GitHub.ReviewWorkerTest do
     output
   end
 
-  defp stub_reviews_endpoint(pr_number \\ 55, response_id \\ 100) do
+  defp stub_reviews_endpoint(pr_number) do
     Req.Test.stub(__MODULE__, fn conn ->
       case {conn.method, conn.request_path} do
         {"GET", path} when binary_part(path, 0, 1) == "/" ->
           cond do
             path =~ ~r|/pulls/#{pr_number}/reviews| ->
-              conn |> Plug.Conn.put_status(200) |> Req.Test.json(%{"id" => response_id})
+              conn |> Plug.Conn.put_status(200) |> Req.Test.json(%{"id" => 100})
 
             path =~ "/comments" ->
               Req.Test.json(conn, [])
@@ -80,7 +80,7 @@ defmodule Harness.GitHub.ReviewWorkerTest do
         {"POST", path} ->
           cond do
             path =~ ~r|/pulls/#{pr_number}/reviews| ->
-              conn |> Plug.Conn.put_status(200) |> Req.Test.json(%{"id" => response_id})
+              conn |> Plug.Conn.put_status(200) |> Req.Test.json(%{"id" => 100})
 
             path =~ "/comments" ->
               conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 1})
@@ -111,7 +111,7 @@ defmodule Harness.GitHub.ReviewWorkerTest do
     end
   end
 
-  defp sample_finding(confidence \\ 0.9) do
+  defp sample_finding(confidence) do
     %{
       "file" => "lib/foo.ex",
       "line" => 10,

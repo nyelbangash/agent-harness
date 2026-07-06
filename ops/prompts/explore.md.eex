@@ -40,7 +40,7 @@ Use Read, Glob, Grep, and git tools to:
 - Assess the scope (xs = trivial, s = small, m = medium, l = large) and feasibility
 - Note any open questions the operator must answer before implementation begins
 
-Budget: <%= @max_turns %> turns. Start writing DRAFT.json early — you can revise it as you learn more. Do not wait until the last turn.
+Start writing DRAFT.json early — you can revise it as you learn more. Don't wait until you've explored everything to begin.
 
 ## Output contract
 

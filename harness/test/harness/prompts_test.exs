@@ -15,13 +15,13 @@ defmodule Harness.PromptsTest do
     end
   end
 
-  describe "explore/4 attachment listing" do
+  describe "explore/3 attachment listing" do
     test "renders attachments inside the untrusted-content boundary" do
       attachments = [
         %{"filename" => "diagram.png", "content_type" => "image/png", "path" => "/tmp/d/diagram.png"}
       ]
 
-      prompt = Prompts.explore("an idea", "repo map", 20, attachments)
+      prompt = Prompts.explore("an idea", "repo map", attachments)
 
       # The listing must sit between the boundary markers, not before them.
       assert prompt =~ "<<<ATTACHED-FILES>>>"
@@ -44,7 +44,7 @@ defmodule Harness.PromptsTest do
         }
       ]
 
-      prompt = Prompts.explore("an idea", "repo map", 20, attachments)
+      prompt = Prompts.explore("an idea", "repo map", attachments)
 
       # Exactly one real closing marker exists (the template's own). The forged
       # one from the filename is neutralized to ›››, so it can't break out.

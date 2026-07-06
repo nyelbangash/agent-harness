@@ -26,13 +26,7 @@ defmodule Harness.Policy.Schema do
 
   defmodule Budgets do
     defstruct opus_hours_weekly_cap: 18,
-              overflow_usd_weekly_cap: 25,
-              implement_max_turns: 60,
-              ideate_iteration_max_turns: 25,
-              triage_max_turns: 12,
-              plan_max_turns: 40,
-              review_max_turns: 20,
-              compose_max_turns: 20
+              overflow_usd_weekly_cap: 25
   end
 
   defmodule UtilizationGates do

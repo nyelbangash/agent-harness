@@ -11,8 +11,8 @@ defmodule Harness.GitHub.RespondWorker do
   2. Fix session: runs the implement tool-set in the PR branch worktree,
      runs the verify gate (hard), pushes a new commit, posts a stamped reply.
 
-  Never force-pushes. Respects the pause gate. Bounded by
-  `policy.budgets.implement_max_turns` for the fix session.
+  Never force-pushes. Respects the pause gate. The fix session is bounded by
+  its wall-clock timeout, not a turn cap.
   """
 
   use Oban.Worker,
@@ -124,7 +124,6 @@ defmodule Harness.GitHub.RespondWorker do
       output_mode: :json,
       json_schema: respond_schema(),
       allowed_tools: @read_only_tools,
-      max_turns: 8,
       issue_id: issue.id,
       ref: "#{issue.repo}##{issue.number}",
       timeout_ms: :timer.minutes(10)
@@ -210,7 +209,6 @@ defmodule Harness.GitHub.RespondWorker do
       worktree: worktree,
       output_mode: :stream_json,
       allowed_tools: @implement_tools,
-      max_turns: policy.budgets.implement_max_turns,
       issue_id: issue.id,
       ref: "#{issue.repo}##{issue.number}",
       timeout_ms: :timer.minutes(45)

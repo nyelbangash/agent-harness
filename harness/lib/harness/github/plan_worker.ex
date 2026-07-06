@@ -73,8 +73,7 @@ defmodule Harness.GitHub.PlanWorker do
           comments,
           triage,
           default_branch,
-          failure_transcript,
-          policy.budgets.plan_max_turns
+          failure_transcript
         )
 
       issue = GitHub.transition!(issue, "planning")
@@ -87,7 +86,6 @@ defmodule Harness.GitHub.PlanWorker do
         worktree: worktree,
         output_mode: :stream_json,
         allowed_tools: @plan_tools,
-        max_turns: policy.budgets.plan_max_turns,
         issue_id: issue.id,
         ref: "#{issue.repo}##{issue.number}"
       }

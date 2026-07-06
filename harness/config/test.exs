@@ -8,7 +8,13 @@ import Config
 config :harness, Harness.Repo,
   database: Path.expand("../harness_test.db", __DIR__),
   pool_size: 5,
-  pool: Ecto.Adapters.SQL.Sandbox
+  pool: Ecto.Adapters.SQL.Sandbox,
+  # SQLite has a single writer. Under the full suite's parallelism (max_cases
+  # ~= 2x cores), async writers collide with the async: false LiveView tests
+  # and a waiter can exhaust the default 5s, surfacing as intermittent
+  # "Database busy". A longer test-only timeout absorbs the write bursts —
+  # it only ever waits when genuinely contended, so the happy path is unchanged.
+  busy_timeout: 30_000
 
 config :harness, Oban, testing: :manual
 

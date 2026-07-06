@@ -18,7 +18,6 @@ defmodule HarnessWeb.IdeationLive do
 
   require Logger
 
-  @allowed_attachment_exts ~w(.png .jpg .jpeg .gif .webp .txt .md .log .pdf .diff .patch)
   @seed_storage_key "ideation:seed-prompt"
 
   @impl true
@@ -201,19 +200,6 @@ defmodule HarnessWeb.IdeationLive do
     end
   end
 
-  defp navigate_sibling(%{assigns: %{selected_node: nil}} = socket, _dir),
-    do: {:noreply, socket}
-
-  defp navigate_sibling(%{assigns: %{selected_node: %{siblings: []}}} = socket, _dir),
-    do: {:noreply, socket}
-
-  defp navigate_sibling(socket, dir) do
-    %{siblings: siblings, sibling_index: idx} = socket.assigns.selected_node
-    new_idx = Integer.mod(idx + dir, length(siblings))
-    sibling = Enum.at(siblings, new_idx)
-    handle_event("select_node", %{"id" => to_string(sibling.id)}, socket)
-  end
-
   def handle_event("tree_search", %{"q" => q}, socket) do
     {:noreply, assign(socket, :search_query, String.trim(q))}
   end
@@ -336,6 +322,19 @@ defmodule HarnessWeb.IdeationLive do
     end
   end
 
+  defp navigate_sibling(%{assigns: %{selected_node: nil}} = socket, _dir),
+    do: {:noreply, socket}
+
+  defp navigate_sibling(%{assigns: %{selected_node: %{siblings: []}}} = socket, _dir),
+    do: {:noreply, socket}
+
+  defp navigate_sibling(socket, dir) do
+    %{siblings: siblings, sibling_index: idx} = socket.assigns.selected_node
+    new_idx = Integer.mod(idx + dir, length(siblings))
+    sibling = Enum.at(siblings, new_idx)
+    handle_event("select_node", %{"id" => to_string(sibling.id)}, socket)
+  end
+
   @impl true
   def handle_info({event, _}, socket)
       when event in [:session_started, :session_updated] do
@@ -387,31 +386,7 @@ defmodule HarnessWeb.IdeationLive do
     Attachments.persist_uploaded_entries(socket, :attachments, dir)
   end
 
-  # Reduce a client-supplied filename to a single safe path segment. basename
-  # drops directory components (defeating ../ traversal); we then reject any
-  # residual separators or empty/dot-only names, falling back to a stable name.
-  defp safe_filename(client_name) do
-    name = client_name |> to_string() |> Path.basename() |> String.trim()
-
-    if name in ["", ".", ".."] or String.contains?(name, ["/", "\\"]) do
-      "attachment"
-    else
-      name
-    end
-  end
-
   defp seed_storage_key, do: @seed_storage_key
-
-  defp entry_errors(uploads) do
-    Enum.flat_map(uploads.entries, fn entry ->
-      Enum.map(upload_errors(uploads, entry), &{entry, &1})
-    end)
-  end
-
-  defp upload_error_message(:too_large), do: "file is too large (max 15 MB)"
-  defp upload_error_message(:too_many_files), do: "too many files (max 5)"
-  defp upload_error_message(:not_accepted), do: "unsupported file type"
-  defp upload_error_message(other), do: to_string(other)
 
   # Past nudges, newest-first — parsed from the journal text `submit_nudge`
   # writes ("- nudge: ..." lines), so the operator can see what was asked for
@@ -513,7 +488,7 @@ defmodule HarnessWeb.IdeationLive do
       <div class="page-fit md:flex md:flex-col md:min-h-0 md:overflow-hidden">
         <div class="grid lg:grid-cols-4 gap-6 md:flex-1 md:min-h-0 md:auto-rows-fr">
           <aside class="lg:col-span-1 space-y-4 md:flex md:flex-col md:min-h-0">
-            <form phx-submit="start" phx-change="form_change" class="space-y-2">
+            <form id="ideation-seed-form" phx-submit="start" phx-change="form_change" class="space-y-2">
               <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim">
                 Seed a session
               </h2>

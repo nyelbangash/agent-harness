@@ -14,7 +14,6 @@ defmodule HarnessWeb.ComposeLive do
 
   require Logger
 
-  @allowed_attachment_exts ~w(.png .jpg .jpeg .gif .webp .txt .md .log .pdf .diff .patch)
   @draft_storage_key "compose:new-draft"
 
   @impl true

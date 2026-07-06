@@ -22,9 +22,6 @@ defmodule Harness.Policy.SchemaTest do
     assert policy.schedule.full_auto_windows == [{~T[20:00:00], ~T[06:00:00]}]
     assert policy.schedule.ideation_windows == [{~T[21:00:00], ~T[02:00:00]}]
     assert policy.budgets.opus_hours_weekly_cap == 18
-    assert policy.budgets.implement_max_turns == 60
-    assert policy.budgets.triage_max_turns == 12
-    assert policy.budgets.plan_max_turns == 40
     assert policy.utilization_gates.plan_only_above == 0.80
     assert policy.triage.auto_threshold == 0.75
     assert policy.triage.low_confidence_floor == 0.4
@@ -71,7 +68,7 @@ defmodule Harness.Policy.SchemaTest do
   end
 
   test "rejects non-positive budgets" do
-    raw = put_in(base_raw(), ["budgets", "plan_max_turns"], 0)
+    raw = put_in(base_raw(), ["budgets", "overflow_usd_weekly_cap"], 0)
     assert {:error, [error]} = Schema.parse(raw)
     assert error =~ "budgets"
   end

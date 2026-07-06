@@ -67,11 +67,8 @@ defmodule Harness.GitHub.PlanWorkerTest do
     assert spec.kind == :plan
     assert spec.output_mode == :stream_json
     assert "Write" in spec.allowed_tools
-    assert spec.max_turns == 40
     assert spec.prompt =~ "PLAN.md"
     assert spec.prompt =~ "untrusted"
-    assert spec.prompt =~ "40 turns"
-    assert spec.prompt =~ "~16 turns"
     assert spec.prompt =~ "you will not re-read"
   end
 

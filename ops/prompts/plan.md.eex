@@ -38,15 +38,14 @@ your plan should explain what went wrong and how a human should avoid it:
 <%= @failure_transcript %>
 <% end %>
 
-## Turn budget and pacing
+## Pacing
 
-You have <%= @plan_max_turns %> turns total. Spend at most the first
-~<%= round(@plan_max_turns * 0.4) %> turns exploring: read the files the issue
-touches, trace the relevant code paths, check git log/blame for prior related
-changes, and look for existing patterns the implementation should follow.
-After that exploration budget is spent, STOP reading and write PLAN.md and
-CONTEXT.md with what you have. Note unresolved questions in the plan's "Open
-questions" section rather than resolving them all through further reading.
+Front-load exploration: read the files the issue touches, trace the relevant
+code paths, check git log/blame for prior related changes, and look for existing
+patterns the implementation should follow. Once you understand the change,
+STOP reading and write PLAN.md and CONTEXT.md with what you have. Note
+unresolved questions in the plan's "Open questions" section rather than
+resolving them all through further reading.
 
 One pass per file: you will not re-read a file you have already read. Capture
 what you need the first time, then refer to those notes rather than re-opening

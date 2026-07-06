@@ -64,14 +64,6 @@ defmodule HarnessWeb.RunsLiveTest do
     assert html =~ "operator kill"
   end
 
-  test "killed run shows turn cap badge with counts", %{conn: conn} do
-    run = Runs.create_run!(%{kind: "implement", ref: "o/r#3", model: "sonnet", status: "queued"})
-    Runs.update_run!(run, %{status: "killed", error: "turn cap 41/40"})
-
-    {:ok, _view, html} = live(conn, ~p"/runs")
-    assert html =~ "turn cap 41/40"
-  end
-
   test "failed run shows orphaned badge when reaped by janitor", %{conn: conn} do
     run = Runs.create_run!(%{kind: "triage", ref: "o/r#4", model: "sonnet", status: "queued"})
 

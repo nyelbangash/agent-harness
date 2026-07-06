@@ -10,8 +10,7 @@ defmodule Harness.Runs.CLIArgsTest do
         model: "sonnet",
         prompt: "do the thing",
         cwd: "/tmp/wt",
-        allowed_tools: ["Read", "Glob", "Bash(git log *)"],
-        max_turns: 40
+        allowed_tools: ["Read", "Glob", "Bash(git log *)"]
       },
       overrides
     )
@@ -26,8 +25,6 @@ defmodule Harness.Runs.CLIArgsTest do
              "--verbose",
              "--model",
              "sonnet",
-             "--max-turns",
-             "40",
              "--permission-mode",
              "dontAsk",
              "--allowedTools",
@@ -41,7 +38,7 @@ defmodule Harness.Runs.CLIArgsTest do
 
   test "json mode with schema (triage shape)" do
     argv =
-      CLIArgs.build(spec(output_mode: :json, json_schema: ~s({"type":"object"}), max_turns: 12))
+      CLIArgs.build(spec(output_mode: :json, json_schema: ~s({"type":"object"})))
 
     assert ["-p", _, "--output-format", "json", "--json-schema", ~s({"type":"object"}) | _] = argv
     refute "--verbose" in argv

@@ -4,10 +4,9 @@ defmodule Harness.Runs.RunServer do
 
   Responsibilities: spawn with scrubbed env and isolation argv, stream stdout
   NDJSON into `EventIngest` (manual newline buffering — lines can exceed any
-  fixed line cap), enforce the wall-clock timeout and the Elixir-side turn
-  cap (belt-and-braces over `--max-turns`), and implement the kill switch
-  (SIGTERM → 5s → SIGKILL). Finalization derives run status from the result
-  envelope's `subtype` and replies to the awaiting `ClaudeCLI.execute/2`.
+  fixed line cap), enforce the wall-clock timeout, and implement the kill
+  switch (SIGTERM → 5s → SIGKILL). Finalization derives run status from the
+  result envelope's `subtype` and replies to the awaiting `ClaudeCLI.execute/2`.
   """
 
   use GenServer, restart: :temporary
@@ -211,16 +210,7 @@ defmodule Harness.Runs.RunServer do
         else
           state = %{state | turns: state.turns + 1, last_message_id: message_id}
           Runs.broadcast_counters(state.run.id, state.turns)
-
-          if state.turns > state.spec.max_turns and is_nil(state.killed) do
-            Logger.warning(
-              "run #{state.run.id} exceeded turn cap #{state.spec.max_turns}, killing"
-            )
-
-            do_kill(state, :turn_cap)
-          else
-            state
-          end
+          state
         end
 
       {:result, payload} ->
@@ -348,10 +338,6 @@ defmodule Harness.Runs.RunServer do
 
       state.killed == :timeout ->
         {"killed", "wall-clock timeout", {:error, :timeout}}
-
-      state.killed == :turn_cap ->
-        {"killed", "turn cap #{state.turns}/#{state.spec.max_turns}",
-         {:error, {:run_failed, :turn_cap}}}
 
       startup_error ->
         {"failed", startup_error, {:error, {:spawn_failed, startup_error}}}

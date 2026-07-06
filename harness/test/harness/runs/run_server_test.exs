@@ -34,8 +34,7 @@ defmodule Harness.Runs.RunServerTest do
         model: "sonnet",
         prompt: "irrelevant to the stub",
         cwd: tmp,
-        allowed_tools: ["Read"],
-        max_turns: 10
+        allowed_tools: ["Read"]
       },
       overrides
     )
@@ -154,32 +153,9 @@ defmodule Harness.Runs.RunServerTest do
     assert {:error, :killed} = Task.await(task, 10_000)
   end
 
-  test "the Elixir-side turn cap kills a runaway stream", %{tmp: tmp} do
-    # three distinct message ids, cap of 1 → killed on the second turn
-    lines =
-      for i <- 1..3 do
-        ~s({"type":"assistant","message":{"id":"msg_#{i}","role":"assistant","content":[{"type":"text","text":"t#{i}"}]},"uuid":"u#{i}"})
-      end
-
-    stub_executable(tmp, """
-    printf '%s\\n' '#{Enum.at(lines, 0)}'
-    printf '%s\\n' '#{Enum.at(lines, 1)}'
-    printf '%s\\n' '#{Enum.at(lines, 2)}'
-    sleep 30
-    """)
-
-    assert {:error, {:run_failed, :turn_cap}} = execute(spec(tmp, max_turns: 1))
-
-    [run] = Runs.recent_runs(1)
-    assert run.status == "killed"
-    assert run.error =~ "turn cap"
-    # must include actual/cap counts so the UI can surface "turn cap N/M"
-    assert run.error =~ "/"
-  end
-
   test "split assistant events with one message id count as one turn", %{tmp: tmp} do
-    # two events, same message id — must NOT trip a cap of 1... but a fresh
-    # message afterwards must
+    # two events sharing one message id must be counted as a single turn; a
+    # fresh message id would be a second turn.
     same_id_1 =
       ~s({"type":"assistant","message":{"id":"msg_same","role":"assistant","content":[{"type":"text","text":"a"}]},"uuid":"u1"})
 
@@ -195,8 +171,11 @@ defmodule Harness.Runs.RunServerTest do
     printf '%s\\n' '#{result}'
     """)
 
-    assert {:ok, result} = execute(spec(tmp, max_turns: 1))
+    assert {:ok, result} = execute(spec(tmp))
     assert result.subtype == "success"
+
+    [run] = Runs.recent_runs(1)
+    assert run.turns == 1
   end
 
   test "a spawn failure fails the run cleanly", %{tmp: tmp} do

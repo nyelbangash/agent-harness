@@ -15,10 +15,6 @@ schedule:
 budgets:
   opus_hours_weekly_cap: 18
   overflow_usd_weekly_cap: 25 # hard stop on API-rate overflow spend
-  implement_max_turns: 60
-  ideate_iteration_max_turns: 25
-  triage_max_turns: 12
-  plan_max_turns: 40
 utilization_gates: # polled from https://claude.ai/api/oauth/usage
   poll_minutes: 10
   full_auto_below: 0.60 # weekly (seven_day) utilization thresholds

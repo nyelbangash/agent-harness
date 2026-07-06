@@ -256,7 +256,6 @@ an error in the logs.
 | `schedule.ideation_windows` | `["21:00-02:00"]` | when ideation iterates (`[]` = anytime) |
 | `budgets.opus_hours_weekly_cap` | 18 | Opus wall-clock hours per trailing 7 days |
 | `budgets.overflow_usd_weekly_cap` | 25 | est. overflow $ per week — crossing it pauses everything |
-| `budgets.*_max_turns` | 12/40/60/25 | per-session turn caps (triage/plan/implement/ideate) |
 | `utilization_gates.*` | 0.60/0.80/0.90 | the automatic downshift thresholds (§7) |
 | `triage.auto_threshold` | 0.75 | min confidence for the auto route |
 | `plan.post_to_issue` | false | plan packets as issue comments instead of branches |
@@ -306,9 +305,9 @@ Daemon: `~/.harness/logs/harness.{out,err}.log`. Dev: your terminal.
   branches, force-with-lease). Enforced in code, not prompts.
 - Never runs with API-key billing — boot refuses, and every agent
   subprocess gets the key scrubbed from its environment.
-- Every agent session runs with an explicit tool whitelist, turn caps, and a
-  wall-clock timeout, isolated from your `~/.claude` settings and from any
-  `.mcp.json` in the target repo. Issue text is treated as untrusted input.
+- Every agent session runs with an explicit tool whitelist and a wall-clock
+  timeout, isolated from your `~/.claude` settings and from any `.mcp.json`
+  in the target repo. Issue text is treated as untrusted input.
 - Auto-lane PRs flag any test/CI files the agent touched — review those for
   substance, not just green checkmarks: the agent could theoretically pass
   the gate by weakening a test, and the flag makes that visible.

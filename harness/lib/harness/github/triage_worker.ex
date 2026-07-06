@@ -161,7 +161,7 @@ defmodule Harness.GitHub.TriageWorker do
     end
   end
 
-  defp run_once(issue, prompt, base, policy, model) do
+  defp run_once(issue, prompt, base, _policy, model) do
     Runs.execute(%RunSpec{
       kind: :triage,
       model: model,
@@ -170,7 +170,6 @@ defmodule Harness.GitHub.TriageWorker do
       output_mode: :json,
       json_schema: Triage.schema_json(),
       allowed_tools: @triage_tools,
-      max_turns: policy.budgets.triage_max_turns,
       issue_id: issue.id,
       ref: "#{issue.repo}##{issue.number}",
       timeout_ms: :timer.minutes(10)

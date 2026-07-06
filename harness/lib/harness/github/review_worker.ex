@@ -100,8 +100,7 @@ defmodule Harness.GitHub.ReviewWorker do
         output_mode: :json,
         json_schema: review_schema_json(),
         allowed_tools: @review_tools,
-        max_turns: policy.budgets.review_max_turns,
-        issue_id: issue.id,
+          issue_id: issue.id,
         ref: "#{issue.repo}##{issue.number}",
         timeout_ms: :timer.minutes(30)
       }
@@ -239,7 +238,6 @@ defmodule Harness.GitHub.ReviewWorker do
       worktree: worktree,
       output_mode: :stream_json,
       allowed_tools: @implement_tools,
-      max_turns: policy.budgets.review_max_turns,
       issue_id: issue.id,
       ref: "#{issue.repo}##{issue.number}",
       timeout_ms: :timer.minutes(45)
@@ -423,7 +421,6 @@ defmodule Harness.GitHub.ReviewWorker do
       worktree: worktree,
       output_mode: :stream_json,
       allowed_tools: @conflict_resolution_tools,
-      max_turns: 12,
       issue_id: issue.id,
       ref: "#{issue.repo}##{issue.number}",
       timeout_ms: :timer.minutes(20)

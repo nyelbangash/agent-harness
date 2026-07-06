@@ -332,9 +332,6 @@ defmodule HarnessWeb.RunsLive do
   defp reason_badge(%{status: status, error: error, result_subtype: subtype})
        when status in ["killed", "failed"] do
     cond do
-      is_binary(error) and String.starts_with?(error, "turn cap ") ->
-        error
-
       is_binary(error) and error =~ "operator" ->
         "operator kill"
 

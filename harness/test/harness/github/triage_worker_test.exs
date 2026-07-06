@@ -64,7 +64,6 @@ defmodule Harness.GitHub.TriageWorkerTest do
     assert spec.prompt =~ "untrusted"
     assert spec.prompt =~ issue.title
     assert spec.prompt =~ "Repository map"
-    assert spec.max_turns == 12
   end
 
   test "model auto proposal is demoted by policy in plan_only mode", %{repo: repo} do

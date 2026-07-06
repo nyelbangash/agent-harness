@@ -153,7 +153,6 @@ defmodule Harness.Ideation.IterationWorker do
           output_mode: :json,
           json_schema: if(mode == :diverge, do: @diverge_schema, else: @develop_schema),
           allowed_tools: @ideate_tools,
-          max_turns: Policy.get().budgets.ideate_iteration_max_turns,
           ref: "ideation-#{session.id}",
           timeout_ms: :timer.minutes(15)
         }
