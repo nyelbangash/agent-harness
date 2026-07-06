@@ -209,6 +209,36 @@ defmodule Harness.GitHub do
     )
   end
 
+  @doc """
+  True when an issue.s newest GitHub comment is harness-stamped and accounts
+  for the current stored github_updated_at — i.e. the last thing that happened
+  to this issue was the harness talking. Shared by the poller (:updated gate)
+  and the janitor (retriage_updated_issues), which otherwise reads the #28
+  self-acknowledgment as "changed since triage" and loops (the #75 mechanism:
+  plan comment -> self-ack advances updated_at -> janitor re-triages).
+  """
+  def harness_caused_update?(%Issue{} = issue) do
+    case Harness.GitHub.Client.newest_issue_comment(issue.repo, issue.number) do
+      {:ok, %{"body" => body, "created_at" => created_at_iso}} ->
+        Harness.GitHub.Provenance.harness_authored?(body) and
+          comment_accounts_for_delta?(created_at_iso, issue)
+
+      _ ->
+        false
+    end
+  end
+
+  defp comment_accounts_for_delta?(created_at_iso, issue) do
+    case DateTime.from_iso8601(created_at_iso) do
+      {:ok, comment_time, _} ->
+        not is_nil(issue.github_updated_at) and
+          DateTime.compare(comment_time, issue.github_updated_at) in [:gt, :eq]
+
+      _ ->
+        false
+    end
+  end
+
   # -- triages ----------------------------------------------------------------
 
   def record_triage!(attrs) do

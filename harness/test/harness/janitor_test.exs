@@ -83,6 +83,42 @@ defmodule Harness.JanitorTest do
     assert_enqueued(worker: TriageWorker, args: %{issue_id: issue.id})
   end
 
+  test "does NOT re-triage when the delta is the harness own stamped comment (the #75 loop)" do
+    issue = issue_fixture(%{pipeline_state: "plan_ready"})
+
+    GitHub.record_triage!(%{
+      issue_id: issue.id,
+      proposed_route: "plan",
+      final_route: "plan",
+      decision_reason: "proposed_plan"
+    })
+
+    # the #28 self-ack advanced github_updated_at past the triage row because
+    # WE posted the plan comment; the newest comment is harness-stamped
+    comment_time = DateTime.add(DateTime.utc_now(), 3600, :second)
+
+    issue
+    |> Harness.GitHub.Issue.changeset(%{github_updated_at: comment_time})
+    |> Repo.update!()
+
+    Application.put_env(:harness, :github_req_options, plug: {Req.Test, __MODULE__})
+    on_exit(fn -> Application.delete_env(:harness, :github_req_options) end)
+
+    stamped = Harness.GitHub.Provenance.stamp("## Implementation plan", "plan", 1)
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      Req.Test.json(conn, [
+        %{
+          "body" => stamped,
+          "created_at" => DateTime.to_iso8601(comment_time)
+        }
+      ])
+    end)
+
+    assert :ok = perform_job(Janitor, %{})
+    refute_enqueued(worker: TriageWorker, args: %{issue_id: issue.id})
+  end
+
   test "settled issues with up-to-date triage are left alone" do
     issue =
       issue_fixture(%{

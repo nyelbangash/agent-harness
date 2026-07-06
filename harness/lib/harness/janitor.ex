@@ -99,7 +99,11 @@ defmodule Harness.Janitor do
         )
       )
 
-    for issue <- outdated do
+    for issue <- outdated,
+        # the #28 self-ack advances github_updated_at past the triage row —
+        # without this check the janitor reads our own plan comment as
+        # operator activity and loops (plan -> comment -> ack -> re-triage)
+        not Harness.GitHub.harness_caused_update?(issue) do
       Logger.info(
         "janitor: issue #{issue.repo}##{issue.number} changed since triage — re-enqueueing"
       )

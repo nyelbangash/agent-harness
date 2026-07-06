@@ -254,15 +254,7 @@ defmodule Harness.GitHub.PollWorker do
     Path.join([Application.fetch_env!(:harness, :harness_home), "logs", "retriage_trace.log"])
   end
 
-  defp harness_caused_update?(issue) do
-    case Client.newest_issue_comment(issue.repo, issue.number) do
-      {:ok, %{"body" => body, "created_at" => created_at_iso}} ->
-        Provenance.harness_authored?(body) and comment_accounts_for_delta?(created_at_iso, issue)
-
-      _ ->
-        false
-    end
-  end
+  defp harness_caused_update?(issue), do: Harness.GitHub.harness_caused_update?(issue)
 
   defp comment_accounts_for_delta?(created_at_iso, issue) do
     case DateTime.from_iso8601(created_at_iso) do
