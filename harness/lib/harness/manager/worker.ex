@@ -357,11 +357,24 @@ defmodule Harness.Manager.Worker do
   defp has_live_run_for_issue?(nil), do: true
 
   defp has_live_run_for_issue?(issue_id) do
-    from(r in Run, where: r.issue_id == ^issue_id and r.status == "running")
-    |> Repo.all()
-    |> Enum.any?(fn run ->
-      Registry.lookup(Harness.Runs.Registry, run.id) != []
-    end)
+    # implement runs outlive their RunServer: after the model phase the worker
+    # drives verify -> push -> open_pr with the run in a phase status and no
+    # Registry entry. Those phases are legitimate activity, not a wedge
+    # (first false positive: the manager cancelled #65 mid-verify on its
+    # first night, 2026-07-05).
+    phase_active =
+      Repo.exists?(
+        from(r in Run,
+          where: r.issue_id == ^issue_id and r.status in ["verifying", "pushing", "opening_pr"]
+        )
+      )
+
+    phase_active or
+      from(r in Run, where: r.issue_id == ^issue_id and r.status == "running")
+      |> Repo.all()
+      |> Enum.any?(fn run ->
+        Registry.lookup(Harness.Runs.Registry, run.id) != []
+      end)
   end
 
   defp has_incomplete_implement_job?(issue_id) do
@@ -377,11 +390,7 @@ defmodule Harness.Manager.Worker do
     )
   end
 
-  defp has_live_run?(issue_id) do
-    from(r in Run, where: r.issue_id == ^issue_id and r.status == "running")
-    |> Repo.all()
-    |> Enum.any?(fn run ->
-      Registry.lookup(Harness.Runs.Registry, run.id) != []
-    end)
-  end
+  # same phase-awareness as has_live_run_for_issue?: verify/push/PR phases
+  # have no RunServer by design and must not read as stranded
+  defp has_live_run?(issue_id), do: has_live_run_for_issue?(issue_id)
 end

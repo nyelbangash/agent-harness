@@ -196,6 +196,33 @@ defmodule Harness.Manager.WorkerTest do
 
   # -- Ghost job: live RunServer protects the job ------------------------------
 
+  test "ghost job check: job whose run is in the verify phase is not cancelled" do
+    set_policy("tier0")
+    issue = issue_fixture(%{pipeline_state: "implementing"})
+
+    # verify/push/PR phases have no RunServer by design (the worker owns them);
+    # the manager cancelled #65 mid-verify on its first night over this
+    Runs.create_run!(%{
+      kind: "implement",
+      status: "verifying",
+      issue_id: issue.id,
+      model: "sonnet"
+    })
+
+    job = %{issue_id: issue.id} |> Harness.GitHub.ImplementWorker.new() |> Oban.insert!()
+    old_time = DateTime.add(DateTime.utc_now(), -600, :second)
+
+    Repo.update_all(
+      from(j in Oban.Job, where: j.id == ^job.id),
+      set: [state: "executing", attempted_at: old_time]
+    )
+
+    assert :ok = perform_job(Worker, %{})
+
+    assert Repo.get(Oban.Job, job.id).state == "executing"
+    assert Harness.GitHub.get_issue!(issue.id).pipeline_state == "implementing"
+  end
+
   test "ghost job check: job for issue with live RunServer is not cancelled" do
     set_policy("tier0")
     issue = issue_fixture(%{pipeline_state: "implementing"})

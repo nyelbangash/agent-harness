@@ -227,7 +227,7 @@ defmodule HarnessWeb.OverviewLive do
             ]} />
             <span>manager</span>
             <span :if={@manager_last_sweep} class="normal-case tracking-normal">
-              · swept {Calendar.strftime(@manager_last_sweep, "%H:%M:%S")}
+              · swept {local_hms(@manager_last_sweep)}
             </span>
             <span
               :if={Enum.all?(@lamps, &(&1.status != :on))}
@@ -337,6 +337,16 @@ defmodule HarnessWeb.OverviewLive do
       </div>
     </Layouts.app>
     """
+  end
+
+  # sweeps are stamped UTC; the operator reads a wall clock
+  defp local_hms(%DateTime{} = dt) do
+    dt
+    |> DateTime.to_naive()
+    |> NaiveDateTime.to_erl()
+    |> :calendar.universal_time_to_local_time()
+    |> NaiveDateTime.from_erl!()
+    |> Calendar.strftime("%H:%M:%S")
   end
 
   attr :status, :string, required: true
