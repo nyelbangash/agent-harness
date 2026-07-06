@@ -71,6 +71,10 @@ defmodule Harness.Policy.Schema do
     defstruct repos: [], poll_minutes: 2
   end
 
+  defmodule Board do
+    defstruct auto_clear_after_days: 14
+  end
+
   defmodule Notify do
     defstruct macos: true, ntfy_topic: nil, budget_warn_fraction: 0.80
   end
@@ -104,6 +108,7 @@ defmodule Harness.Policy.Schema do
             ideate: nil,
             review: nil,
             github: nil,
+            board: nil,
             notify: nil,
             billing_model: :subscription_pool,
             calendar_notes: [],
@@ -136,6 +141,7 @@ defmodule Harness.Policy.Schema do
          ideate: struct_from(Ideate, raw["ideate"]),
          review: struct_from(Review, raw["review"]),
          github: github,
+         board: struct_from(Board, raw["board"]),
          notify: struct_from(Notify, raw["notify"]),
          billing_model: billing,
          calendar_notes: List.wrap(raw["calendar_notes"]) |> Enum.map(&to_string/1),

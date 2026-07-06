@@ -231,6 +231,52 @@ defmodule Harness.GitHub.PollWorkerTest do
     assert issue.pipeline_state == "done"
   end
 
+  test "a dismissed failed issue is not re-triaged when its GitHub side is untouched" do
+    stub_issues([gh_issue_payload(number: 40, updated_at: "2026-07-04T12:00:00Z")])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 40)
+    GitHub.transition!(issue, "failed")
+    GitHub.dismiss_issue!(GitHub.get_issue_by(@repo, 40))
+    Harness.Repo.delete_all(Oban.Job)
+
+    stub_issues([
+      Map.put(
+        gh_issue_payload(number: 40, updated_at: "2026-07-04T12:00:00Z"),
+        "id",
+        issue.github_id
+      )
+    ])
+
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    refute_enqueued(worker: TriageWorker)
+    issue = GitHub.get_issue_by(@repo, 40)
+    assert issue.pipeline_state == "failed"
+    assert issue.dismissed_at
+  end
+
+  test "an upstream update on a dismissed failed issue re-triages and clears the dismissal" do
+    stub_issues([gh_issue_payload(number: 41, updated_at: "2026-07-04T12:00:00Z")])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 41)
+    GitHub.transition!(issue, "failed")
+    GitHub.dismiss_issue!(GitHub.get_issue_by(@repo, 41))
+    Harness.Repo.delete_all(Oban.Job)
+
+    stub_issues([
+      gh_issue_payload(number: 41, id: issue.github_id, updated_at: "2026-07-04T13:00:00Z")
+    ])
+
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    assert_enqueued(worker: TriageWorker, args: %{issue_id: issue.id})
+    issue = GitHub.get_issue_by(@repo, 41)
+    assert issue.pipeline_state == "incoming"
+    assert issue.dismissed_at == nil
+  end
+
   test "polls are throttled by github.poll_minutes" do
     stub_issues([gh_issue_payload(number: 12)])
     assert :ok = perform_job(PollWorker, %{})

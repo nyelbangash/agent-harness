@@ -110,10 +110,29 @@ defmodule Harness.GitHub do
     end
   end
 
-  @doc "Move an issue through the pipeline and broadcast."
+  @doc """
+  Move an issue through the pipeline and broadcast. Also clears `dismissed_at`
+  — re-entering the pipeline is itself the un-dismiss signal, kept orthogonal
+  to `@retriageable` (see `PollWorker`).
+
+  Stamps `terminal_at` when landing on done/failed/skipped so the janitor's
+  auto-clear can age off the pipeline's own clock instead of `updated_at`,
+  which every poll bumps regardless of real GitHub activity (issue #76).
+  """
   def transition!(%Issue{} = issue, pipeline_state) do
     previous = issue.pipeline_state
-    issue = issue |> Issue.changeset(%{pipeline_state: pipeline_state}) |> Repo.update!()
+
+    terminal_at = if Issue.terminal?(pipeline_state), do: DateTime.utc_now(), else: nil
+
+    issue =
+      issue
+      |> Issue.changeset(%{
+        pipeline_state: pipeline_state,
+        dismissed_at: nil,
+        terminal_at: terminal_at
+      })
+      |> Repo.update!()
+
     broadcast(issue)
 
     # notify once per failure, deduped over a short window: an Oban retry
@@ -142,11 +161,41 @@ defmodule Harness.GitHub do
     end
   end
 
-  @doc "Issues grouped by board column, newest activity first (drives IssuesLive)."
+  @doc """
+  Issues grouped by board column, newest activity first (drives IssuesLive).
+  Dismissed issues are excluded — they remain in the `issues` table (the
+  poller still finds them by repo+number) but never render.
+  """
   def board do
-    from(i in Issue, order_by: [desc: i.github_updated_at, desc: i.id])
+    from(i in Issue,
+      where: is_nil(i.dismissed_at),
+      order_by: [desc: i.github_updated_at, desc: i.id]
+    )
     |> Repo.all()
     |> Enum.group_by(&Issue.column(&1.pipeline_state))
+  end
+
+  @doc """
+  Locally dismiss an issue from the board. Non-destructive: does not touch the
+  GitHub issue or delete the row, so `PollWorker` still treats it as known
+  (see `upsert_issue/2`) rather than re-triaging it as new.
+  """
+  def dismiss_issue!(%Issue{} = issue) do
+    issue = issue |> Issue.changeset(%{dismissed_at: DateTime.utc_now()}) |> Repo.update!()
+    broadcast(issue)
+    issue
+  end
+
+  @doc "Bulk dismiss by id list; returns the updated issues."
+  def dismiss_issues!(issue_ids) when is_list(issue_ids) do
+    now = DateTime.utc_now()
+
+    from(i in Issue, where: i.id in ^issue_ids)
+    |> Repo.update_all(set: [dismissed_at: now, updated_at: now])
+
+    issues = Repo.all(from(i in Issue, where: i.id in ^issue_ids))
+    Enum.each(issues, &broadcast/1)
+    issues
   end
 
   @doc "plan_ready and recently-failed issues (the Overview \"needs you\" queue)."

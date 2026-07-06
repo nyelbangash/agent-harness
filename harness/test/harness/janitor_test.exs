@@ -153,4 +153,82 @@ defmodule Harness.JanitorTest do
   test "no-op when all configured queues are already running" do
     assert :ok = perform_job(Janitor, %{})
   end
+
+  describe "auto-clear stale terminal issues" do
+    defp backdate_terminal!(issue, seconds_ago) do
+      from(i in Harness.GitHub.Issue, where: i.id == ^issue.id)
+      |> Repo.update_all(
+        set: [terminal_at: DateTime.add(DateTime.utc_now(), -seconds_ago, :second)]
+      )
+
+      GitHub.get_issue!(issue.id)
+    end
+
+    test "dismisses a terminal issue older than the configured threshold" do
+      issue = issue_fixture(%{pipeline_state: "failed"}) |> backdate_terminal!(15 * 86_400)
+
+      assert :ok = perform_job(Janitor, %{})
+
+      assert GitHub.get_issue!(issue.id).dismissed_at
+    end
+
+    test "leaves a terminal issue within the threshold alone" do
+      issue = issue_fixture(%{pipeline_state: "done"}) |> backdate_terminal!(1 * 86_400)
+
+      assert :ok = perform_job(Janitor, %{})
+
+      refute GitHub.get_issue!(issue.id).dismissed_at
+    end
+
+    test "never touches a non-terminal issue regardless of age" do
+      issue = issue_fixture(%{pipeline_state: "triaged"}) |> backdate_terminal!(30 * 86_400)
+
+      assert :ok = perform_job(Janitor, %{})
+
+      refute GitHub.get_issue!(issue.id).dismissed_at
+    end
+
+    test "ages by terminal_at, not by updated_at churn from routine polling" do
+      issue = issue_fixture(%{pipeline_state: "failed"}) |> backdate_terminal!(15 * 86_400)
+
+      # PollWorker polls every ~2 minutes; even when nothing about the issue
+      # changed, upsert_issue's :unchanged branch still touches the record
+      # (Ecto bumps `updated_at` on every Repo.update!, changed or not).
+      # That must not reset the auto-clear clock (issue #76 regression).
+      assert {:unchanged, _} =
+               GitHub.upsert_issue(issue.repo, gh_issue_payload(%{"number" => issue.number}))
+
+      assert :ok = perform_job(Janitor, %{})
+
+      assert GitHub.get_issue!(issue.id).dismissed_at
+    end
+
+    test "leaves a terminal issue with no terminal_at stamped alone" do
+      issue = issue_fixture(%{pipeline_state: "failed"})
+
+      assert :ok = perform_job(Janitor, %{})
+
+      refute GitHub.get_issue!(issue.id).dismissed_at
+    end
+
+    test "stamps terminal_at when an issue transitions into a terminal state" do
+      issue = issue_fixture(%{pipeline_state: "triaged"})
+
+      refute issue.terminal_at
+
+      failed = GitHub.transition!(issue, "failed")
+
+      assert failed.terminal_at
+    end
+
+    test "clears terminal_at when an issue leaves a terminal state" do
+      issue = issue_fixture(%{pipeline_state: "failed"})
+      failed = GitHub.transition!(issue, "failed")
+      assert failed.terminal_at
+
+      retriaged = GitHub.transition!(failed, "incoming")
+
+      refute retriaged.terminal_at
+    end
+  end
 end
