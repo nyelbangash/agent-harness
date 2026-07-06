@@ -4,7 +4,7 @@ defmodule Harness.Runs.FakeRunner do
 
       FakeRunner.script([
         {:ok, %Runner.Result{run_id: 0, subtype: "success", structured_output: %{...}}},
-        fn spec -> assert spec.model == "opus"; {:ok, ...} end
+        fn spec -> assert spec.model == "claude-opus-4-8"; {:ok, ...} end
       ])
 
   Every received `RunSpec` is recorded (`executed_specs/0`). Like the real

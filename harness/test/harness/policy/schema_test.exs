@@ -16,9 +16,9 @@ defmodule Harness.Policy.SchemaTest do
 
     assert policy.mode == :plan_only
     assert policy.billing_model == :subscription_pool
-    assert policy.models.triage == "sonnet"
-    assert policy.models.critique == "opus"
-    assert policy.models.escalation == "opus"
+    assert policy.models.triage == "claude-sonnet-5"
+    assert policy.models.critique == "claude-opus-4-8"
+    assert policy.models.escalation == "claude-opus-4-8"
     assert policy.schedule.full_auto_windows == [{~T[20:00:00], ~T[06:00:00]}]
     assert policy.schedule.ideation_windows == [{~T[21:00:00], ~T[02:00:00]}]
     assert policy.budgets.opus_hours_weekly_cap == 18

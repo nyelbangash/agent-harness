@@ -2,12 +2,12 @@
 # repos and budgets) and hot-reloads while the harness is running.
 mode: plan_only # plan_only | full_auto | paused — flippable from Mission Control
 models:
-  triage: sonnet
-  implement: sonnet
-  plan: sonnet
-  ideate: sonnet
-  critique: opus
-  escalation: opus
+  triage: claude-sonnet-5
+  implement: claude-sonnet-5
+  plan: claude-sonnet-5
+  ideate: claude-sonnet-5
+  critique: claude-opus-4-8
+  escalation: claude-opus-4-8
 schedule:
   full_auto_windows: ["20:00-06:00"] # local time; outside these, auto lane demotes to plan
   ideation_windows: ["21:00-02:00"]
@@ -35,8 +35,8 @@ implement:
 review:
   max_rounds: 1
   confidence_floor: 0.7
-  model: opus
-  fix_model: sonnet
+  model: claude-opus-4-8
+  fix_model: claude-sonnet-5
   rebase_max_attempts: 2
 ideate:
   critique_every: 5

@@ -251,7 +251,7 @@ an error in the logs.
 | Key | Default | Meaning |
 |---|---|---|
 | `mode` | `plan_only` | plan_only · full_auto · paused |
-| `models.*` | sonnet / opus | model per stage (triage/plan/implement/ideate/critique/escalation) |
+| `models.*` | claude-sonnet-5 / claude-opus-4-8 | model per stage (triage/plan/implement/ideate/critique/escalation) |
 | `schedule.full_auto_windows` | `["20:00-06:00"]` | when the auto lane may run (local time) |
 | `schedule.ideation_windows` | `["21:00-02:00"]` | when ideation iterates (`[]` = anytime) |
 | `budgets.opus_hours_weekly_cap` | 18 | Opus wall-clock hours per trailing 7 days |

@@ -9,13 +9,13 @@ defmodule Harness.Policy.Schema do
   """
 
   defmodule Models do
-    defstruct triage: "sonnet",
-              implement: "sonnet",
-              plan: "sonnet",
-              ideate: "sonnet",
-              critique: "opus",
-              escalation: "opus",
-              respond: "sonnet"
+    defstruct triage: "claude-sonnet-5",
+              implement: "claude-sonnet-5",
+              plan: "claude-sonnet-5",
+              ideate: "claude-sonnet-5",
+              critique: "claude-opus-4-8",
+              escalation: "claude-opus-4-8",
+              respond: "claude-sonnet-5"
   end
 
   defmodule Schedule do
@@ -62,8 +62,8 @@ defmodule Harness.Policy.Schema do
   defmodule Review do
     defstruct max_rounds: 1,
               confidence_floor: 0.7,
-              model: "opus",
-              fix_model: "sonnet",
+              model: "claude-opus-4-8",
+              fix_model: "claude-sonnet-5",
               rebase_max_attempts: 2
   end
 
