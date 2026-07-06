@@ -235,10 +235,11 @@ body {
   }
 }
 
-/* active-node pulse: the circle stroke breathes to show the iteration in flight */
+/* active-node pulse: the outline row's status dot breathes to show the
+   iteration in flight */
 @keyframes node-pulse {
-  0%, 100% { stroke: var(--color-accent); stroke-width: 2; stroke-opacity: 1; }
-  50%       { stroke: var(--color-accent); stroke-width: 4; stroke-opacity: 0.55; }
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
 }
 
 .node-developing {
@@ -248,18 +249,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .node-developing {
     animation: none;
-    stroke: var(--color-accent);
-    stroke-width: 3;
   }
 }
-
-/* Semantic zoom for the idea tree: label/score visibility by zoom level */
-#idea-tree .tree-score { display: none; }
-#idea-tree[data-zoom-level="dots"] .tree-label { display: none; }
-#idea-tree[data-zoom-level="badges"] .tree-score { display: inline; }
-
-/* Tree search: dim non-matching nodes below matching ones */
-#idea-tree g[data-match="false"] { opacity: 0.12 !important; }
 
 /* Add variants based on LiveView classes */
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);

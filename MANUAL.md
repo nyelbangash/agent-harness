@@ -192,8 +192,12 @@ Give it one broad thought; it grows a tree of ideas for hours.
    finishes with a **synthesis**: the 3–5 strongest branches and recommended
    next actions.
 
-Click any node to read its full artifact. The journal strip shows the
-running 3-line-per-iteration log. Everything lives on disk under
+The tree renders as a collapsible, depth-indented outline (not a pan/zoom
+map) — click a branch's caret to fold it, click a node to read its full
+artifact, or search to dim non-matches. While a session is running, nudge it
+from the vitals panel; past nudges stay listed there so you can see what you
+asked for. Recent journal entries roll up in the same panel instead of a
+separate strip. Everything lives on disk under
 `~/.harness/ideation/session-N/` (`node-*.md`, `JOURNAL.md`, `SYNTHESIS.md`),
 so it survives restarts.
 
