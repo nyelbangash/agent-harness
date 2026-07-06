@@ -678,6 +678,21 @@ defmodule HarnessWeb.IdeationLive do
                   >
                     Open synthesis
                   </button>
+                  <.link
+                    :if={@session.status == "synthesized" && @session.synthesis_path}
+                    href={~p"/ideation/#{@session.id}/synthesis.md"}
+                    download
+                    class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-ok text-ok rounded-sm hover:bg-ok/10"
+                  >
+                    Download
+                  </.link>
+                  <.link
+                    href={~p"/ideation/#{@session.id}/export.zip"}
+                    download
+                    class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
+                  >
+                    Download all
+                  </.link>
                   <button
                     :if={@session.status == "running"}
                     phx-click="synthesize_now"
@@ -745,13 +760,23 @@ defmodule HarnessWeb.IdeationLive do
 
                 <div class="rounded-sm bg-surface border border-surface-2 p-3 max-h-[60vh] md:max-h-none md:min-h-0 overflow-auto">
                   <div :if={!@selected_node} id="inspector-cockpit" class="space-y-4">
-                    <div :if={@session.status == "synthesized" && @session.synthesis_path}>
+                    <div
+                      :if={@session.status == "synthesized" && @session.synthesis_path}
+                      class="flex items-center gap-2"
+                    >
                       <button
                         phx-click="open_synthesis"
                         class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-ok text-ok rounded-sm hover:bg-ok/10"
                       >
                         Open Synthesis
                       </button>
+                      <.link
+                        href={~p"/ideation/#{@session.id}/synthesis.md"}
+                        download
+                        class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-ok text-ok rounded-sm hover:bg-ok/10"
+                      >
+                        Download
+                      </.link>
                     </div>
                     <div>
                       <h4 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-1">
@@ -865,6 +890,14 @@ defmodule HarnessWeb.IdeationLive do
                       >
                         Expand
                       </button>
+                      <.link
+                        :if={@selected_node.artifact}
+                        href={~p"/ideation/nodes/#{@selected_node.idea.id}/artifact.md"}
+                        download
+                        class="font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
+                      >
+                        Download
+                      </.link>
                       <button
                         :if={
                           @session && @session.status == "running" &&
@@ -938,10 +971,17 @@ defmodule HarnessWeb.IdeationLive do
             <span class="font-mono text-[10px] text-ink-dim tabular-nums">
               score {@selected_node.idea.score} · d{@selected_node.idea.depth} · {@selected_node.idea.status}
             </span>
+            <.link
+              href={~p"/ideation/nodes/#{@selected_node.idea.id}/artifact.md"}
+              download
+              class="ml-auto font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
+            >
+              Download
+            </.link>
             <button
               phx-click="close_artifact"
               aria-label="close"
-              class="ml-auto font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-alert hover:text-alert"
+              class="font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-alert hover:text-alert"
             >
               Close
             </button>
@@ -989,10 +1029,21 @@ defmodule HarnessWeb.IdeationLive do
           <div class="flex items-center gap-3 px-5 py-3 border-b border-surface-2 shrink-0">
             <span class="font-display text-sm text-ink">SYNTHESIS.md</span>
             <span class="font-mono text-[10px] text-ink-dim">session #{@session.id}</span>
+            <.link
+              :if={@synthesis_content != :missing}
+              href={~p"/ideation/#{@session.id}/synthesis.md"}
+              download
+              class="ml-auto font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
+            >
+              Download
+            </.link>
             <button
               phx-click="close_synthesis"
               aria-label="close"
-              class="ml-auto font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-alert hover:text-alert"
+              class={[
+                "font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-alert hover:text-alert",
+                @synthesis_content == :missing && "ml-auto"
+              ]}
             >
               Close
             </button>

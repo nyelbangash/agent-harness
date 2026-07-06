@@ -28,6 +28,12 @@ defmodule HarnessWeb.Router do
       live "/compose", ComposeLive
       live "/compose/:id", ComposeLive
     end
+
+    get "/ideation/:id/synthesis.md", DownloadController, :synthesis
+    get "/ideation/:id/journal.md", DownloadController, :journal
+    get "/ideation/:id/export.zip", DownloadController, :zip
+    get "/ideation/nodes/:idea_id/artifact.md", DownloadController, :node
+    get "/compose/:id/draft.md", DownloadController, :draft
   end
 
   scope "/", HarnessWeb do

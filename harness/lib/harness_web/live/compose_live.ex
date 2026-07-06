@@ -294,6 +294,15 @@ defmodule HarnessWeb.ComposeLive do
 
             <div :if={!@exploring && !@run_error && @draft.body} class="space-y-4">
               <div class="rounded-sm border border-surface-2 bg-surface p-4 space-y-3">
+                <div class="flex justify-end">
+                  <.link
+                    href={~p"/compose/#{@draft.id}/draft.md"}
+                    download
+                    class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
+                  >
+                    Download
+                  </.link>
+                </div>
                 <div>
                   <label class="font-mono text-[10px] text-ink-dim block mb-1">Title</label>
                   <input

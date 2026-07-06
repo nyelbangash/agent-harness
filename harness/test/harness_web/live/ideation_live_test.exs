@@ -377,6 +377,15 @@ defmodule HarnessWeb.IdeationLiveTest do
     html = view |> element("button[phx-value-id='#{high.id}']") |> render_click()
     assert html =~ "best artifact body"
     assert html =~ "Best Idea"
+    assert html =~ ~s(href="/ideation/nodes/#{high.id}/artifact.md")
+  end
+
+  test "session header always shows a Download all link for the session zip", %{conn: conn} do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+    assert html =~ ~s(href="/ideation/#{session.id}/export.zip")
+    assert html =~ "Download all"
   end
 
   test "journal renders two iterations newest-first as cards with rendered markdown", %{
@@ -595,6 +604,7 @@ defmodule HarnessWeb.IdeationLiveTest do
     {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
     assert html =~ "Open synthesis"
     assert html =~ ">doc<"
+    assert html =~ ~s(href="/ideation/#{session.id}/synthesis.md")
   end
 
   test "clicking Open synthesis opens modal with rendered markdown", %{conn: conn} do
@@ -613,6 +623,7 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert html =~ "<h2>"
     assert html =~ "<strong>bold</strong>"
     refute html =~ "## Key finding"
+    assert html =~ ~s(href="/ideation/#{session.id}/synthesis.md")
   end
 
   test "Escape key closes synthesis modal", %{conn: conn} do

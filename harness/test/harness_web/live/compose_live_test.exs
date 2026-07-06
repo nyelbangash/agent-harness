@@ -115,6 +115,17 @@ defmodule HarnessWeb.ComposeLiveTest do
     assert Compose.get_draft!(draft.id).status == "approved"
   end
 
+  test "draft with a body shows a download link independent of filing status", %{conn: conn} do
+    draft =
+      draft_fixture(%{
+        title: "Speed up widget",
+        body: "## Problem\n\nSlow."
+      })
+
+    {:ok, _view, html} = live(conn, ~p"/compose/#{draft.id}")
+    assert html =~ ~s(href="/compose/#{draft.id}/draft.md")
+  end
+
   test "discard → draft status discarded, never touches GitHub client", %{conn: conn} do
     ctx = with_policy_repo(%{})
 
