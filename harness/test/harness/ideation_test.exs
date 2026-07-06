@@ -134,4 +134,43 @@ defmodule Harness.IdeationTest do
       assert length(Outline.build(Ideation.tree(session.id))) == 1
     end
   end
+
+  describe "export_zip/1" do
+    test "packages the journal and every node artifact, without a synthesis file" do
+      %{session: session, root: root} = new_session()
+      # session dirs are keyed by (reused) session id and not rolled back with
+      # the DB sandbox, so clear any leftover SYNTHESIS.md from a prior run.
+      File.rm(Ideation.synthesis_path(session))
+
+      a = Ideation.add_child!(session, root, %{title: "a", score: 6.0}, "artifact a body")
+      b = Ideation.add_child!(session, root, %{title: "b", score: 6.0}, "artifact b body")
+
+      {:ok, zip_bin} = Ideation.export_zip(session)
+      {:ok, entries} = :zip.unzip(zip_bin, [:memory])
+      names = Enum.map(entries, fn {name, _content} -> to_string(name) end)
+
+      assert "JOURNAL.md" in names
+      assert Path.basename(a.artifact_path) in names
+      assert Path.basename(b.artifact_path) in names
+      refute "SYNTHESIS.md" in names
+
+      {_, node_content} =
+        Enum.find(entries, fn {name, _} ->
+          name == String.to_charlist(Path.basename(a.artifact_path))
+        end)
+
+      assert node_content == "artifact a body"
+    end
+
+    test "includes SYNTHESIS.md when present on disk" do
+      %{session: session} = new_session()
+      File.write!(Ideation.synthesis_path(session), "# Final synthesis")
+
+      {:ok, zip_bin} = Ideation.export_zip(session)
+      {:ok, entries} = :zip.unzip(zip_bin, [:memory])
+      names = Enum.map(entries, fn {name, _content} -> to_string(name) end)
+
+      assert "SYNTHESIS.md" in names
+    end
+  end
 end

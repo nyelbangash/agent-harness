@@ -320,6 +320,37 @@ defmodule Harness.Ideation do
     end
   end
 
+  @doc """
+  Zips the session's journal, synthesis (if present), and every node artifact
+  into a single in-memory archive (basenames only, no full disk paths).
+  Returns `{:ok, zip_binary}` or `{:error, reason}`.
+  """
+  def export_zip(%Session{} = session) do
+    dir = session_dir(session)
+
+    node_entries =
+      dir
+      |> Path.join("node-*.md")
+      |> Path.wildcard()
+      |> Enum.map(&{Path.basename(&1) |> String.to_charlist(), File.read!(&1)})
+
+    journal_entry = [{~c"JOURNAL.md", File.read!(journal_path(session))}]
+
+    synthesis_entry =
+      if File.exists?(synthesis_path(session)) do
+        [{~c"SYNTHESIS.md", File.read!(synthesis_path(session))}]
+      else
+        []
+      end
+
+    entries = journal_entry ++ synthesis_entry ++ node_entries
+
+    case :zip.create(~c"export.zip", entries, [:memory]) do
+      {:ok, {_name, zip_binary}} -> {:ok, zip_binary}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   # -- repo grounding ---------------------------------------------------------
 
   @doc """
