@@ -17,6 +17,14 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert html =~ "false positives"
   end
 
+  test "renders the styled attachment dropzone instead of a bare file input", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/ideation")
+
+    assert html =~ "attachments-dropzone"
+    assert html =~ "Drop files, click to browse, or paste an image"
+    assert html =~ ~s(phx-hook="HarnessWeb.CoreComponents.PasteUpload")
+  end
+
   test "start button is inside the aside form, not overflowing into the section", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/ideation")
     # button must live inside the aside's form, not in the right-hand section

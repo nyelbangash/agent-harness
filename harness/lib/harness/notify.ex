@@ -23,6 +23,7 @@ defmodule Harness.Notify do
           | :briefing
           | :conflict_escalated
           | :manager_proposal
+          | :review_stalled
 
   @spec notify(event(), String.t(), keyword()) :: :ok
   def notify(event, message, opts \\ []) do
@@ -45,6 +46,7 @@ defmodule Harness.Notify do
   defp title_for(:briefing), do: "Morning briefing"
   defp title_for(:conflict_escalated), do: "Conflict needs human attention"
   defp title_for(:manager_proposal), do: "Manager proposal"
+  defp title_for(:review_stalled), do: "Review stalled"
 
   defp backend, do: Application.get_env(:harness, :notify_backend, __MODULE__.System)
 

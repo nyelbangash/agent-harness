@@ -91,19 +91,26 @@ defmodule Harness.GitHub.PollWorker do
     end
   end
 
-  defp poll_pr_comments(repo_name, login, state) do
+  # Issues eligible for a scoped RespondWorker continuation on a new PR
+  # comment. Gated on `not is_nil(pr_number)` below, so plan_ready issues
+  # (no PR yet) never match here — they still go through the full
+  # @retriageable re-triage path in `handle_issue/2`.
+  @respondable ~w(pr_open review_stalled plan_ready failed done)
+
+  defp poll_pr_comments(repo_name, _login, state) do
     since_dt = state.pr_comments_since || DateTime.add(DateTime.utc_now(), -86_400, :second)
     since_iso = DateTime.to_iso8601(since_dt)
 
-    pr_open_issues =
+    respondable_issues =
       Harness.Repo.all(
         from(i in Issue,
           where:
-            i.repo == ^repo_name and i.pipeline_state == "pr_open" and not is_nil(i.pr_number)
+            i.repo == ^repo_name and i.pipeline_state in ^@respondable and
+              not is_nil(i.pr_number)
         )
       )
 
-    for issue <- pr_open_issues do
+    for issue <- respondable_issues do
       review_comments =
         case Client.list_pr_review_comments(repo_name, issue.pr_number, since_iso) do
           {:ok, comments} -> Enum.map(comments, &{&1, "review"})
@@ -116,11 +123,14 @@ defmodule Harness.GitHub.PollWorker do
           {:error, _} -> []
         end
 
+      # Any human collaborator's comment can trigger a continuation, not just
+      # the PAT-owner login — GitHub.maybe_insert_pr_comment_handle!/1's
+      # idempotency guard (keyed on comment_id) already prevents double
+      # processing regardless of who posted it.
       for {comment, comment_type} <- review_comments ++ issue_comments do
-        author = get_in(comment, ["user", "login"])
         body = comment["body"] || ""
 
-        if author == login and not Provenance.harness_authored?(body) do
+        if not Provenance.harness_authored?(body) do
           attrs = %{
             repo: repo_name,
             pr_number: issue.pr_number,
@@ -147,7 +157,8 @@ defmodule Harness.GitHub.PollWorker do
         end
       end
 
-      check_pr_mergeability(repo_name, issue)
+      if issue.pipeline_state in ~w(pr_open review_stalled),
+        do: check_pr_mergeability(repo_name, issue)
     end
 
     :ok
