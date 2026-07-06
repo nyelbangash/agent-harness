@@ -1,14 +1,18 @@
 defmodule HarnessWeb.IdeationLive do
   @moduledoc """
-  Ideation view (spec §12.4): session list, an interactive SVG tree (node
-  color by score, pruned branches dimmed not hidden), a click-to-read artifact
-  side panel, the journal strip along the bottom, and a start-session form.
+  Ideation view (spec §12.4): session list, a collapsible depth-indented
+  outline of the idea tree (node color by score, pruned branches dimmed not
+  hidden — see `Harness.Ideation.Outline` for the design rationale), a
+  click-to-read artifact side panel, and a start-session form. Session
+  vitals fold in the nudge box (with its own history) and a rolling feed of
+  journal entries, replacing the separate floating nudge input and journal
+  panel.
   """
 
   use HarnessWeb, :live_view
 
   alias Harness.Ideation
-  alias Harness.Ideation.Layout
+  alias Harness.Ideation.Outline
   alias Harness.Policy
 
   require Logger
@@ -35,7 +39,6 @@ defmodule HarnessWeb.IdeationLive do
      |> assign(:top_nodes, [])
      |> assign(:tokens_in, 0)
      |> assign(:tokens_out, 0)
-     |> assign(:journal_snippet, nil)
      |> assign(:synthesis_open, false)
      |> assign(:synthesis_content, nil)
      |> assign(:search_query, "")
@@ -51,13 +54,13 @@ defmodule HarnessWeb.IdeationLive do
         {:noreply,
          assign(socket,
            session: nil,
-           tree_layout: nil,
+           outline: [],
+           ideas: [],
            journal: nil,
            selected_node: nil,
            top_nodes: [],
            tokens_in: 0,
            tokens_out: 0,
-           journal_snippet: nil,
            synthesis_open: false,
            synthesis_content: nil,
            promote_open: false,
@@ -94,12 +97,12 @@ defmodule HarnessWeb.IdeationLive do
 
     socket
     |> assign(:session, session)
-    |> assign(:tree_layout, Layout.compute(ideas))
+    |> assign(:outline, Outline.build(ideas))
+    |> assign(:ideas, ideas)
     |> assign(:journal, journal)
     |> assign(:top_nodes, Ideation.top_nodes(id))
     |> assign(:tokens_in, tin)
     |> assign(:tokens_out, tout)
-    |> assign(:journal_snippet, last_journal_snippet(journal))
   end
 
   def handle_event("fill_seed", %{"seed" => seed}, socket) do
@@ -220,8 +223,14 @@ defmodule HarnessWeb.IdeationLive do
     if nudge == "" do
       {:noreply, socket}
     else
-      id |> String.to_integer() |> Ideation.get_session!() |> Ideation.set_nudge!(nudge)
-      {:noreply, put_flash(socket, :info, "Nudge stored — next iteration will address it.")}
+      session = id |> String.to_integer() |> Ideation.get_session!()
+      Ideation.set_nudge!(session, nudge)
+      Ideation.append_journal!(session, session.iterations, ["nudge: " <> nudge])
+
+      {:noreply,
+       socket
+       |> assign(:journal, Ideation.read_journal(session))
+       |> put_flash(:info, "Nudge stored — next iteration will address it.")}
     end
   end
 
@@ -337,17 +346,17 @@ defmodule HarnessWeb.IdeationLive do
 
   def handle_info(_message, socket), do: {:noreply, socket}
 
-  defp last_journal_snippet(journal) when is_binary(journal) do
-    case String.split(journal, ~r/(?=## Iteration \d+)/) do
-      parts when length(parts) > 1 ->
-        parts |> List.last() |> String.trim() |> String.slice(0, 400)
-
-      _ ->
-        nil
-    end
+  # Past nudges, newest-first — parsed from the journal text `submit_nudge`
+  # writes ("- nudge: ..." lines), so the operator can see what was asked for
+  # instead of it vanishing after submit (issue #70).
+  defp nudge_history(journal) when is_binary(journal) do
+    ~r/^- nudge: (.+)$/m
+    |> Regex.scan(journal)
+    |> Enum.map(fn [_, text] -> text end)
+    |> Enum.reverse()
   end
 
-  defp last_journal_snippet(_), do: nil
+  defp nudge_history(_), do: []
 
   defp parse_connect_now(nil), do: NaiveDateTime.local_now() |> NaiveDateTime.to_time()
 
@@ -700,198 +709,38 @@ defmodule HarnessWeb.IdeationLive do
                   critique in progress
                 </span>
               </div>
-              <form
-                :if={@session.status == "running"}
-                phx-submit="submit_nudge"
-                class="mb-3 flex gap-2"
-              >
-                <input type="hidden" name="session_id" value={@session.id} />
-                <input
-                  name="nudge"
-                  type="text"
-                  placeholder="Nudge next iteration…"
-                  autocomplete="off"
-                  class="flex-1 bg-surface border border-surface-2 rounded-sm px-2 py-1 font-mono text-[11px] text-ink focus:outline-2 focus:outline-accent"
-                />
-                <button
-                  type="submit"
-                  class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent"
-                >
-                  Nudge
-                </button>
-              </form>
-
               <div class="grid xl:grid-cols-3 gap-4 md:flex-1 md:min-h-0 md:auto-rows-fr">
-                <div class="xl:col-span-2 rounded-sm bg-surface border border-surface-2 overflow-hidden max-h-[60vh] md:max-h-none md:min-h-0 relative">
-                  <span class="absolute top-2 right-3 font-mono text-[9px] text-ink-dim/50 select-none pointer-events-none">
-                    scroll to zoom · drag to pan · dbl-click resets
-                  </span>
-                  <form
-                    phx-change="tree_search"
-                    id="tree-search-form"
-                    class="absolute top-2 left-2 z-10"
-                  >
-                    <input
-                      id="tree-search"
-                      type="search"
-                      name="q"
-                      value={@search_query}
-                      placeholder="Search nodes…"
-                      phx-debounce="150"
-                      autocomplete="off"
-                      class="bg-bg/70 border border-surface-2 rounded-sm px-2 py-0.5 font-mono text-[10px] text-ink placeholder:text-ink-dim/50 focus:outline-none focus:border-accent w-28"
-                    />
-                  </form>
-                  <script :type={Phoenix.LiveView.ColocatedHook} name=".TreeZoom">
-                    // Wheel zooms at the cursor, drag pans, double-click resets.
-                    // The user's viewport survives live tree updates; reset uses the
-                    // server's current viewBox (data-viewbox), so it tracks growth.
-                    // data-zoom-level ("dots" | "labels" | "badges") is updated on
-                    // every viewBox change; CSS rules hide/show labels and score badges.
-                    export default {
-                      mounted() {
-                        this.dirty = false
-                        this.dragging = null
-                        const svg = this.el
-
-                        svg.addEventListener("wheel", e => {
-                          e.preventDefault()
-                          const vb = this.viewBox()
-                          // proportional to scroll delta: gentle per trackpad tick,
-                          // ~27%/notch on a mouse wheel; clamped to 1/8x–4x of fit
-                          let factor = Math.exp(e.deltaY * 0.002)
-                          const server = svg.dataset.viewbox.split(" ").map(Number)
-                          const w = Math.min(Math.max(vb.w * factor, server[2] / 8), server[2] * 4)
-                          factor = w / vb.w
-                          const rect = svg.getBoundingClientRect()
-                          const px = vb.x + ((e.clientX - rect.x) / rect.width) * vb.w
-                          const py = vb.y + ((e.clientY - rect.y) / rect.height) * vb.h
-                          this.setViewBox(px - ((px - vb.x) * factor), py - ((py - vb.y) * factor), w, vb.h * factor)
-                        }, {passive: false})
-
-                        svg.addEventListener("pointerdown", e => {
-                          // NO capture here: a captured pointer retargets the click
-                          // to the svg, which kills phx-click on the node circles
-                          this.dragging = {x: e.clientX, y: e.clientY, id: e.pointerId, moved: false}
-                        })
-                        svg.addEventListener("pointermove", e => {
-                          if (!this.dragging) return
-                          const dx = e.clientX - this.dragging.x, dy = e.clientY - this.dragging.y
-                          if (!this.dragging.moved && Math.abs(dx) + Math.abs(dy) > 4) {
-                            this.dragging.moved = true
-                            svg.setPointerCapture(this.dragging.id)
-                          }
-                          if (!this.dragging.moved) return
-                          const vb = this.viewBox()
-                          const rect = svg.getBoundingClientRect()
-                          this.setViewBox(vb.x - dx * (vb.w / rect.width), vb.y - dy * (vb.h / rect.height), vb.w, vb.h)
-                          this.dragging.x = e.clientX
-                          this.dragging.y = e.clientY
-                        })
-                        svg.addEventListener("pointerup", e => {
-                          if (this.dragging?.moved) {
-                            // swallow the click that follows a drag so nodes don't open
-                            svg.addEventListener("click", ev => ev.stopPropagation(), {capture: true, once: true})
-                          }
-                          this.dragging = null
-                        })
-                        svg.addEventListener("dblclick", () => {
-                          this.dirty = false
-                          svg.setAttribute("viewBox", svg.dataset.viewbox)
-                          this.updateZoomLevel()
-                        })
-                        this.updateZoomLevel()
-                      },
-                      updated() {
-                        if (this.dirty) this.el.setAttribute("viewBox", this.userViewBox)
-                        this.updateZoomLevel()
-                      },
-                      viewBox() {
-                        const [x, y, w, h] = this.el.getAttribute("viewBox").split(" ").map(Number)
-                        return {x, y, w, h}
-                      },
-                      setViewBox(x, y, w, h) {
-                        this.userViewBox = `${x} ${y} ${w} ${h}`
-                        this.dirty = true
-                        this.el.setAttribute("viewBox", this.userViewBox)
-                        this.updateZoomLevel()
-                      },
-                      computeZoomLevel() {
-                        const rect = this.el.getBoundingClientRect()
-                        if (rect.width === 0) return "labels"
-                        const vb = this.viewBox()
-                        const ratio = vb.w / rect.width
-                        if (ratio > 1.5) return "dots"
-                        if (ratio < 0.5) return "badges"
-                        return "labels"
-                      },
-                      updateZoomLevel() {
-                        this.el.setAttribute("data-zoom-level", this.computeZoomLevel())
-                      }
-                    }
-                  </script>
-                  <svg
-                    id="idea-tree"
-                    phx-hook=".TreeZoom"
-                    data-viewbox={"0 0 #{@tree_layout.width} #{@tree_layout.height}"}
-                    viewBox={"0 0 #{@tree_layout.width} #{@tree_layout.height}"}
-                    data-zoom-level="labels"
-                    class="w-full cursor-grab active:cursor-grabbing touch-none select-none"
-                    style="min-height: 300px"
-                  >
-                    <line
-                      :for={e <- @tree_layout.edges}
-                      x1={e.x1}
-                      y1={e.y1}
-                      x2={e.x2}
-                      y2={e.y2}
-                      stroke="var(--color-surface-2)"
-                      stroke-width="1.5"
-                    />
-                    <g
-                      :for={n <- @tree_layout.nodes}
-                      phx-click="select_node"
-                      phx-value-id={n.id}
-                      class="cursor-pointer"
-                      opacity={node_display_opacity(@search_query, n)}
-                      data-developing={if @active_node_id == n.id, do: "true"}
-                      data-match={node_match_attr(@search_query, n)}
-                    >
-                      <circle
-                        cx={n.x}
-                        cy={n.y}
-                        r="11"
-                        fill={score_fill(n.score)}
-                        stroke={
-                          if @selected_node && @selected_node.idea.id == n.id,
-                            do: "var(--color-ink)",
-                            else: "var(--color-bg)"
-                        }
-                        stroke-width="2"
-                        class={if @active_node_id == n.id, do: "node-developing"}
+                <div class="xl:col-span-2 rounded-sm bg-surface border border-surface-2 flex flex-col max-h-[60vh] md:max-h-none md:min-h-0">
+                  <div class="flex items-center gap-2 px-2 py-1.5 border-b border-surface-2 shrink-0">
+                    <h3 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim">
+                      Idea tree
+                    </h3>
+                    <form phx-change="tree_search" id="tree-search-form" class="ml-auto">
+                      <input
+                        id="tree-search"
+                        type="search"
+                        name="q"
+                        value={@search_query}
+                        placeholder="Search nodes…"
+                        phx-debounce="150"
+                        autocomplete="off"
+                        class="bg-bg/70 border border-surface-2 rounded-sm px-2 py-0.5 font-mono text-[10px] text-ink placeholder:text-ink-dim/50 focus:outline-none focus:border-accent w-28"
                       />
-                      <text
-                        x={n.x}
-                        y={n.y + 26}
-                        text-anchor="middle"
-                        class="font-mono tree-label"
-                        font-size="9"
-                        fill="var(--color-ink-dim)"
-                      >
-                        {n.title}
-                      </text>
-                      <text
-                        x={n.x}
-                        y={n.y + 38}
-                        text-anchor="middle"
-                        class="font-mono tree-score"
-                        font-size="8"
-                        fill={score_fill(n.score)}
-                      >
-                        {score_text(n.score)}
-                      </text>
-                    </g>
-                  </svg>
+                    </form>
+                  </div>
+                  <div id="idea-outline" class="flex-1 min-h-0 overflow-y-auto py-1">
+                    <p :if={@outline == []} class="px-3 py-2 font-body text-sm text-ink-dim">
+                      No nodes yet.
+                    </p>
+                    <.outline_node
+                      :for={node <- @outline}
+                      node={node}
+                      depth={0}
+                      active_node_id={@active_node_id}
+                      selected_id={@selected_node && @selected_node.idea.id}
+                      search_query={@search_query}
+                    />
+                  </div>
                 </div>
 
                 <div class="rounded-sm bg-surface border border-surface-2 p-3 max-h-[60vh] md:max-h-none md:min-h-0 overflow-auto">
@@ -914,6 +763,39 @@ defmodule HarnessWeb.IdeationLive do
                       <p class="font-mono text-[11px] text-ink-dim tabular-nums mt-0.5">
                         tokens {@tokens_in + @tokens_out} ({@tokens_in}↑ {@tokens_out}↓)
                       </p>
+
+                      <div :if={@session.status == "running"} class="mt-3">
+                        <h5 class="font-display uppercase tracking-[0.14em] text-[9px] text-ink-dim/70 mb-1">
+                          Nudge
+                        </h5>
+                        <ul
+                          :if={nudge_history(@journal) != []}
+                          class="space-y-0.5 mb-1.5 max-h-20 overflow-auto"
+                        >
+                          <li
+                            :for={text <- nudge_history(@journal)}
+                            class="font-mono text-[10px] text-ink-dim/70 truncate"
+                          >
+                            › {text}
+                          </li>
+                        </ul>
+                        <form phx-submit="submit_nudge" class="flex gap-1.5">
+                          <input type="hidden" name="session_id" value={@session.id} />
+                          <input
+                            name="nudge"
+                            type="text"
+                            placeholder="Nudge next iteration…"
+                            autocomplete="off"
+                            class="flex-1 min-w-0 bg-surface border border-surface-2 rounded-sm px-2 py-1 font-mono text-[11px] text-ink focus:outline-2 focus:outline-accent"
+                          />
+                          <button
+                            type="submit"
+                            class="font-display uppercase text-[10px] tracking-widest px-2.5 py-1 border border-surface-2 text-ink-dim rounded-sm hover:border-accent hover:text-accent shrink-0"
+                          >
+                            Nudge
+                          </button>
+                        </form>
+                      </div>
                     </div>
 
                     <div>
@@ -941,11 +823,27 @@ defmodule HarnessWeb.IdeationLive do
                       </button>
                     </div>
 
-                    <div :if={@journal_snippet}>
+                    <div>
                       <h4 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-1">
-                        Last entry
+                        Recent activity
                       </h4>
-                      <pre class="font-mono text-[10px] text-ink-dim whitespace-pre-wrap line-clamp-6">{@journal_snippet}</pre>
+                      <p
+                        :if={journal_entries(@journal, @ideas) == []}
+                        class="font-body text-[12px] text-ink-dim"
+                      >
+                        No journal entries yet.
+                      </p>
+                      <div class="space-y-2 max-h-48 overflow-auto">
+                        <div
+                          :for={{num, html} <- journal_entries(@journal, @ideas)}
+                          class="rounded-sm border border-surface-2 px-2 py-1.5"
+                        >
+                          <div class="font-mono text-[9px] text-ink-dim/60 uppercase tracking-wider mb-0.5">
+                            Iteration {num}
+                          </div>
+                          <div class="artifact-prose text-[11px]">{html}</div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <div :if={@selected_node}>
@@ -1001,23 +899,6 @@ defmodule HarnessWeb.IdeationLive do
                     <div :if={@selected_node.artifact} class="artifact-prose">
                       {artifact_html(@selected_node.artifact)}
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="mt-4 rounded-sm bg-surface border border-surface-2 p-3">
-                <h3 class="font-display uppercase tracking-[0.14em] text-[10px] text-ink-dim mb-2">
-                  Journal
-                </h3>
-                <div class="space-y-3 max-h-60 overflow-auto">
-                  <div
-                    :for={{num, html} <- journal_entries(@journal, @tree_layout.nodes)}
-                    class="rounded-sm border border-surface-2 px-3 py-2"
-                  >
-                    <div class="font-mono text-[9px] text-ink-dim/60 uppercase tracking-wider mb-1">
-                      Iteration {num}
-                    </div>
-                    <div class="artifact-prose text-[12px]">{html}</div>
                   </div>
                 </div>
               </div>
@@ -1174,6 +1055,79 @@ defmodule HarnessWeb.IdeationLive do
         </div>
       </div>
     </Layouts.app>
+    """
+  end
+
+  # One row of the depth-indented idea outline (see `Harness.Ideation.Outline`
+  # for why this replaced the pan/zoom SVG tree), plus its children, rendered
+  # recursively. Branches with children get a caret that toggles visibility
+  # client-side via `JS.toggle/1` — no server round-trip, no JS hook needed.
+  # Pruned branches start collapsed; everything else starts open.
+  attr :node, :map, required: true
+  attr :depth, :integer, default: 0
+  attr :active_node_id, :any, default: nil
+  attr :selected_id, :any, default: nil
+  attr :search_query, :string, default: ""
+
+  defp outline_node(assigns) do
+    ~H"""
+    <div>
+      <div
+        class="flex items-center gap-1.5 px-2 py-1 hover:bg-bg"
+        style={"padding-left: #{8 + min(@depth, 8) * 16}px"}
+      >
+        <button
+          :if={@node.children != []}
+          type="button"
+          phx-click={Phoenix.LiveView.JS.toggle(to: "#outline-children-#{@node.idea.id}")}
+          class="w-3 shrink-0 text-ink-dim/60 hover:text-accent select-none"
+          aria-label="toggle branch"
+        >
+          ▸
+        </button>
+        <span :if={@node.children == []} class="w-3 shrink-0"></span>
+        <div
+          phx-click="select_node"
+          phx-value-id={@node.idea.id}
+          class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+          style={"opacity: #{node_display_opacity(@search_query, @node.idea)}"}
+          data-developing={if @active_node_id == @node.idea.id, do: "true"}
+          data-match={node_match_attr(@search_query, @node.idea)}
+        >
+          <span
+            class={[
+              "w-2 h-2 rounded-full shrink-0",
+              @active_node_id == @node.idea.id && "node-developing"
+            ]}
+            style={"background: #{score_fill(@node.idea.score)}"}
+          ></span>
+          <span class={[
+            "font-body text-[12px] truncate",
+            if(@selected_id == @node.idea.id, do: "text-accent", else: "text-ink")
+          ]}>
+            {@node.idea.title}
+          </span>
+          <span class="font-mono text-[10px] text-ink-dim/70 tabular-nums shrink-0">
+            {score_text(@node.idea.score)}
+          </span>
+          <span class="font-mono text-[9px] text-ink-dim/50 shrink-0">{@node.idea.status}</span>
+        </div>
+      </div>
+      <div
+        :if={@node.children != []}
+        id={"outline-children-#{@node.idea.id}"}
+        class={@node.idea.status == "pruned" && "hidden"}
+      >
+        <.outline_node
+          :for={child <- @node.children}
+          node={child}
+          depth={@depth + 1}
+          active_node_id={@active_node_id}
+          selected_id={@selected_id}
+          search_query={@search_query}
+        />
+      </div>
+    </div>
     """
   end
 

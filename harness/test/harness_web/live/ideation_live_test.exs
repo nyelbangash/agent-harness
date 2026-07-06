@@ -5,7 +5,6 @@ defmodule HarnessWeb.IdeationLiveTest do
   import ExUnit.CaptureLog
 
   alias Harness.Ideation
-  alias Harness.Ideation.Layout
 
   @moduletag :capture_log
 
@@ -76,7 +75,7 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert session.budget_minutes == 90
   end
 
-  test "renders the tree with a node the user can select to read its artifact", %{conn: conn} do
+  test "renders the outline with a node the user can select to read its artifact", %{conn: conn} do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
 
     child =
@@ -89,13 +88,57 @@ defmodule HarnessWeb.IdeationLiveTest do
 
     {:ok, view, html} = live(conn, ~p"/ideation/#{session.id}")
     assert html =~ "Bright Idea"
-    assert html =~ "<svg"
-    # the tree carries the pan/zoom hook and the server viewBox for reset
-    assert html =~ "TreeZoom"
-    assert html =~ "data-viewbox"
+    # the outline is a plain DOM tree, not an SVG pan/zoom map
+    assert html =~ ~s(id="idea-outline")
+    refute html =~ "<svg"
 
-    html = view |> element("g[phx-value-id='#{child.id}']") |> render_click()
+    html = view |> element("div[phx-value-id='#{child.id}']") |> render_click()
     assert html =~ "full artifact body"
+  end
+
+  test "outline nests a child under its parent with a deeper indent", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+
+    child =
+      Ideation.add_child!(
+        session,
+        root,
+        %{title: "Child Idea", summary: "s", score: 6.0},
+        ""
+      )
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    # the child row lives inside the parent's collapsible children container
+    assert html =~ ~s(id="outline-children-#{root.id}")
+    {container_start, _} = :binary.match(html, ~s(id="outline-children-#{root.id}"))
+    tail = binary_part(html, container_start, byte_size(html) - container_start)
+    assert tail =~ "Child Idea"
+
+    {root_row, _} = :binary.match(html, "padding-left: 8px")
+    {child_row, _} = :binary.match(html, "padding-left: 24px")
+    assert root_row < child_row
+
+    # non-leaf branch gets a caret toggle
+    assert html =~ ~s(phx-value-id="#{child.id}")
+    assert html =~ "toggle branch"
+  end
+
+  test "a pruned branch starts collapsed, an active branch stays open", %{conn: conn} do
+    {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 180})
+    dead = Ideation.add_child!(session, root, %{title: "Dead branch", score: 2.0}, "")
+    _grandchild = Ideation.add_child!(session, dead, %{title: "Dead grandchild", score: 1.0}, "")
+    Ideation.mark_pruned!(dead)
+
+    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
+
+    {container_start, _} = :binary.match(html, ~s(id="outline-children-#{dead.id}"))
+    container = binary_part(html, container_start, 200)
+    assert container =~ "hidden"
+
+    {root_container_start, _} = :binary.match(html, ~s(id="outline-children-#{root.id}"))
+    root_container = binary_part(html, root_container_start, 200)
+    refute root_container =~ "hidden"
   end
 
   test "clicking a node opens a rendered-markdown modal, escape closes it", %{conn: conn} do
@@ -111,7 +154,7 @@ defmodule HarnessWeb.IdeationLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
 
-    html = view |> element("g[phx-value-id='#{child.id}']") |> render_click()
+    html = view |> element("div[phx-value-id='#{child.id}']") |> render_click()
     assert html =~ ~s(id="artifact-modal")
     assert html =~ "<h2>"
     assert html =~ "<li>"
@@ -150,7 +193,7 @@ defmodule HarnessWeb.IdeationLiveTest do
       )
 
     {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
-    html = view |> element("g[phx-value-id='#{child.id}']") |> render_click()
+    html = view |> element("div[phx-value-id='#{child.id}']") |> render_click()
 
     # breadcrumb shows ancestors (root and parent, not the current node)
     assert html =~ "Seed"
@@ -180,7 +223,7 @@ defmodule HarnessWeb.IdeationLiveTest do
       )
 
     {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
-    view |> element("g[phx-value-id='#{sib_a.id}']") |> render_click()
+    view |> element("div[phx-value-id='#{sib_a.id}']") |> render_click()
 
     # arrow right moves to Sibling B
     html = render_keydown(element(view, "#artifact-modal"), %{"key" => "ArrowRight"})
@@ -208,7 +251,7 @@ defmodule HarnessWeb.IdeationLiveTest do
       )
 
     {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
-    view |> element("g[phx-value-id='#{leaf.id}']") |> render_click()
+    view |> element("div[phx-value-id='#{leaf.id}']") |> render_click()
 
     # breadcrumb contains a button for the parent; click it
     html = view |> element("button[phx-value-id='#{parent.id}']") |> render_click()
@@ -223,7 +266,7 @@ defmodule HarnessWeb.IdeationLiveTest do
 
     {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
     assert html =~ "Dead End"
-    assert html =~ ~s(opacity="0.3")
+    assert html =~ "opacity: 0.3"
   end
 
   test "the operator can stop a running session", %{conn: conn} do
@@ -273,17 +316,6 @@ defmodule HarnessWeb.IdeationLiveTest do
     # cleared when session updates
     send(view.pid, {:session_updated, Ideation.get_session!(session.id)})
     refute render(view) =~ "critique in progress"
-  end
-
-  test "viewBox hugs content bounds for a seeded tree", %{conn: conn} do
-    {session, _root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 60})
-    ideas = Ideation.tree(session.id)
-    layout = Layout.compute(ideas)
-
-    {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
-
-    assert html =~ ~s(viewBox="0 0 #{layout.width} #{layout.height}")
-    assert html =~ ~s(data-viewbox="0 0 #{layout.width} #{layout.height}")
   end
 
   test "idle inspector shows top-scored nodes in score order", %{conn: conn} do
@@ -407,7 +439,7 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert html =~ "beta artifact body"
   end
 
-  test "tree svg has data-zoom-level attribute and semantic-zoom label/badge elements", %{
+  test "outline rows always show title and score — no zoom levels to hide them", %{
     conn: conn
   } do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 60})
@@ -417,12 +449,8 @@ defmodule HarnessWeb.IdeationLiveTest do
 
     {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
 
-    # SVG carries the data-zoom-level attribute the hook maintains
-    assert html =~ ~s(data-zoom-level=)
-    # Label text elements have the CSS-targetable class
-    assert html =~ ~s(class="font-mono tree-label")
-    # Score badge elements exist for the zoomed-in level
-    assert html =~ ~s(class="font-mono tree-score")
+    assert html =~ "Some Idea"
+    assert html =~ "7.0"
   end
 
   test "tree search marks matching nodes with data-match and dims non-matching ones", %{
@@ -481,7 +509,7 @@ defmodule HarnessWeb.IdeationLiveTest do
       )
 
     {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
-    html = view |> element("g[phx-value-id='#{high.id}']") |> render_click()
+    html = view |> element("div[phx-value-id='#{high.id}']") |> render_click()
 
     assert html =~ "Promote"
   end
@@ -498,7 +526,7 @@ defmodule HarnessWeb.IdeationLiveTest do
       )
 
     {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
-    html = view |> element("g[phx-value-id='#{high.id}']") |> render_click()
+    html = view |> element("div[phx-value-id='#{high.id}']") |> render_click()
 
     refute html =~ "Promote"
   end
@@ -537,7 +565,7 @@ defmodule HarnessWeb.IdeationLiveTest do
       )
 
     {:ok, view, _html} = live(conn, ~p"/ideation/#{session.id}")
-    view |> element("g[phx-value-id='#{idea.id}']") |> render_click()
+    view |> element("div[phx-value-id='#{idea.id}']") |> render_click()
 
     # click Promote button
     html = view |> element("button", "Promote") |> render_click()
@@ -635,21 +663,44 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert html =~ "Open Synthesis"
   end
 
-  test "viewBox height adjusts with tree depth, hugging content tighter than the old formula", %{
+  test "outline indent grows with each level for a 3-deep tree, no pan/zoom needed", %{
     conn: conn
   } do
     {session, root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 60})
-    _child = Ideation.add_child!(session, root, %{title: "Child", summary: "s", score: 7.0}, "")
-
-    ideas = Ideation.tree(session.id)
-    layout = Layout.compute(ideas)
-
-    # root at depth 0 (y=40), child at depth 1 (y=130); content height = 130 + margin(40) = 170
-    # the old formula gave @margin*2 + 1*@y_gap + 40 = 210 — 40 units tighter now
-    assert layout.height == 170
-    assert layout.height < 210
+    a = Ideation.add_child!(session, root, %{title: "Depth One", summary: "s", score: 7.0}, "")
+    b = Ideation.add_child!(session, a, %{title: "Depth Two", summary: "s", score: 7.0}, "")
+    _c = Ideation.add_child!(session, b, %{title: "Depth Three", summary: "s", score: 7.0}, "")
 
     {:ok, _view, html} = live(conn, ~p"/ideation/#{session.id}")
-    assert html =~ ~s(viewBox="0 0 #{layout.width} #{layout.height}")
+
+    assert html =~ "Depth One"
+    assert html =~ "Depth Two"
+    assert html =~ "Depth Three"
+    assert html =~ "padding-left: 8px"
+    assert html =~ "padding-left: 24px"
+    assert html =~ "padding-left: 40px"
+    assert html =~ "padding-left: 56px"
+
+    # every level's rows nest inside their parent's collapsible container
+    assert html =~ ~s(id="outline-children-#{root.id}")
+    assert html =~ ~s(id="outline-children-#{a.id}")
+    assert html =~ ~s(id="outline-children-#{b.id}")
+  end
+
+  test "submitting a nudge appears in the vitals nudge history on the next render", %{
+    conn: conn
+  } do
+    {session, _root} = Ideation.start_session(%{seed_prompt: "seed", budget_minutes: 60})
+
+    {:ok, view, html} = live(conn, ~p"/ideation/#{session.id}")
+    refute html =~ "focus on pricing"
+
+    html =
+      view
+      |> form("form[phx-submit='submit_nudge']", %{"nudge" => "focus on pricing"})
+      |> render_submit()
+
+    assert html =~ "focus on pricing"
+    assert Ideation.get_session!(session.id).nudge == "focus on pricing"
   end
 end

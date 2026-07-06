@@ -2,7 +2,7 @@ defmodule Harness.IdeationTest do
   use Harness.DataCase, async: false
 
   alias Harness.Ideation
-  alias Harness.Ideation.Layout
+  alias Harness.Ideation.Outline
 
   @moduletag :capture_log
 
@@ -112,22 +112,26 @@ defmodule Harness.IdeationTest do
     end
   end
 
-  describe "Layout.compute/1" do
-    test "positions nodes by depth and centers parents over children" do
+  describe "Outline.build/1" do
+    test "nests children under their parent, ordered by insertion" do
       %{session: session, root: root} = new_session()
       a = Ideation.add_child!(session, root, %{title: "a", score: 6.0}, "")
       b = Ideation.add_child!(session, root, %{title: "b", score: 6.0}, "")
+      grandchild = Ideation.add_child!(session, a, %{title: "a1", score: 5.0}, "")
 
-      layout = Layout.compute(Ideation.tree(session.id))
-      nodes = Map.new(layout.nodes, &{&1.id, &1})
+      [root_node] = Outline.build(Ideation.tree(session.id))
 
-      # children on a deeper row than the root
-      assert nodes[a.id].y > nodes[root.id].y
-      assert nodes[a.id].y == nodes[b.id].y
-      # root centered between its two children
-      assert_in_delta nodes[root.id].x, (nodes[a.id].x + nodes[b.id].x) / 2, 0.1
-      # one edge per parent-child link
-      assert length(layout.edges) == 2
+      assert root_node.idea.id == root.id
+      assert Enum.map(root_node.children, & &1.idea.id) == [a.id, b.id]
+
+      [a_node, _b_node] = root_node.children
+      assert Enum.map(a_node.children, & &1.idea.id) == [grandchild.id]
+    end
+
+    test "one forest entry per root idea" do
+      %{session: session} = new_session()
+      # start_session already created the seed root; there's exactly one root
+      assert length(Outline.build(Ideation.tree(session.id))) == 1
     end
   end
 end
