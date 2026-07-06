@@ -31,6 +31,7 @@ defmodule Harness.GitHub.Issue do
     field :pr_url, :string
     field :pr_number, :integer
     field :auto_demoted, :boolean, default: false
+    field :dismissed_at, :utc_datetime_usec
 
     has_many :triages, Harness.GitHub.TriageDecision
     has_many :plans, Harness.GitHub.Plan
@@ -59,7 +60,8 @@ defmodule Harness.GitHub.Issue do
       :last_synced_at,
       :pr_url,
       :pr_number,
-      :auto_demoted
+      :auto_demoted,
+      :dismissed_at
     ])
     |> validate_required([:repo, :number, :github_id, :title])
     |> validate_inclusion(:pipeline_state, @pipeline_states)

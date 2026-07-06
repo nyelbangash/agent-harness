@@ -37,6 +37,17 @@ defmodule Harness.Policy.SchemaTest do
     assert note =~ "2026-07-13"
   end
 
+  test "board.auto_clear_after_days defaults to 14 when absent" do
+    assert {:ok, policy} = Schema.parse(base_raw())
+    assert policy.board.auto_clear_after_days == 14
+  end
+
+  test "board.auto_clear_after_days honors an explicit override" do
+    raw = Map.put(base_raw(), "board", %{"auto_clear_after_days" => 30})
+    assert {:ok, policy} = Schema.parse(raw)
+    assert policy.board.auto_clear_after_days == 30
+  end
+
   test "rejects an unknown mode" do
     assert {:error, [error]} = Schema.parse(Map.put(base_raw(), "mode", "yolo"))
     assert error =~ "mode"

@@ -30,6 +30,8 @@ defmodule HarnessWeb.IssuesLive do
      socket
      |> assign(:page_title, "Issues")
      |> assign(:columns, @columns)
+     |> assign(:selected_ids, MapSet.new())
+     |> assign(:last_selected_id, nil)
      |> load_board()}
   end
 
@@ -38,12 +40,96 @@ defmodule HarnessWeb.IssuesLive do
   def handle_info({:run_updated, _run}, socket), do: {:noreply, load_board(socket)}
   def handle_info(_message, socket), do: {:noreply, socket}
 
+  @impl true
+  def handle_event("select_card", %{"id" => id, "shift" => shift, "meta" => meta}, socket) do
+    id = String.to_integer(id)
+
+    socket =
+      cond do
+        shift -> select_range(socket, id)
+        meta -> toggle_selected(socket, id)
+        true -> select_only(socket, id)
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_event("trash_selected", _params, socket) do
+    {:noreply, dismiss_and_clear_selection(socket, MapSet.to_list(socket.assigns.selected_ids))}
+  end
+
+  def handle_event("trash_drop", %{"ids" => ids}, socket) do
+    {:noreply, dismiss_and_clear_selection(socket, Enum.map(ids, &String.to_integer/1))}
+  end
+
+  defp select_only(socket, id) do
+    socket
+    |> assign(:selected_ids, MapSet.new([id]))
+    |> assign(:last_selected_id, id)
+  end
+
+  defp toggle_selected(socket, id) do
+    selected = socket.assigns.selected_ids
+
+    updated =
+      if MapSet.member?(selected, id),
+        do: MapSet.delete(selected, id),
+        else: MapSet.put(selected, id)
+
+    socket
+    |> assign(:selected_ids, updated)
+    |> assign(:last_selected_id, id)
+  end
+
+  # contiguous range between the last-clicked card and `id`, within the
+  # column that both belong to (per the column's current render order); falls
+  # back to a plain single-card selection when there is no anchor yet or the
+  # two cards live in different columns
+  defp select_range(socket, id) do
+    case socket.assigns.last_selected_id do
+      nil ->
+        select_only(socket, id)
+
+      anchor_id ->
+        case range_within_column(socket.assigns.board, anchor_id, id) do
+          nil -> select_only(socket, id)
+          ids -> assign(socket, :selected_ids, MapSet.new(ids))
+        end
+    end
+  end
+
+  defp range_within_column(board, anchor_id, id) do
+    Enum.find_value(board, fn {_column, issues} ->
+      column_ids = Enum.map(issues, & &1.id)
+
+      if anchor_id in column_ids and id in column_ids do
+        i = Enum.find_index(column_ids, &(&1 == anchor_id))
+        j = Enum.find_index(column_ids, &(&1 == id))
+        {lo, hi} = if i <= j, do: {i, j}, else: {j, i}
+        Enum.slice(column_ids, lo..hi)
+      end
+    end)
+  end
+
+  defp dismiss_and_clear_selection(socket, []), do: socket
+
+  defp dismiss_and_clear_selection(socket, ids) do
+    GitHub.dismiss_issues!(ids)
+
+    socket
+    |> assign(:selected_ids, MapSet.new())
+    |> assign(:last_selected_id, nil)
+    |> put_flash(:info, "Dismissed #{length(ids)} issue(s)")
+  end
+
   defp load_board(socket) do
     board = GitHub.board()
+    visible_ids = board |> Map.values() |> List.flatten() |> MapSet.new(& &1.id)
 
     socket
     |> assign(:board, board)
     |> assign(:empty?, board == %{})
+    |> assign(:selected_ids, MapSet.intersection(socket.assigns.selected_ids, visible_ids))
     |> attach_triages(board)
     |> attach_run_errors(board)
     |> attach_run_phases(board)
@@ -99,8 +185,65 @@ defmodule HarnessWeb.IssuesLive do
           and assign yourself an issue. The poller checks every 2 minutes.
         </p>
 
+        <div :if={!@empty?} class="flex items-center gap-2 mb-3">
+          <button
+            :if={MapSet.size(@selected_ids) > 0}
+            phx-click="trash_selected"
+            data-testid="trash-selected"
+            class="font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-alert text-alert rounded-sm hover:bg-alert hover:text-bg flex items-center gap-1"
+          >
+            <.icon name="hero-trash" class="size-3.5" /> Trash selected ({MapSet.size(@selected_ids)})
+          </button>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".SelectableCard">
+            export default {
+              mounted() {
+                this.el.addEventListener("click", e => {
+                  if (e.target.closest("a, button")) return
+                  this.pushEvent("select_card", {
+                    id: this.el.dataset.issueId,
+                    shift: e.shiftKey,
+                    meta: e.metaKey || e.ctrlKey
+                  })
+                })
+                this.el.addEventListener("dragstart", e => {
+                  const board = document.getElementById("issue-board")
+                  const selected = (board?.dataset.selectedIds || "").split(",").filter(Boolean)
+                  const id = this.el.dataset.issueId
+                  const ids = selected.includes(id) ? selected : [id]
+                  e.dataTransfer.effectAllowed = "move"
+                  e.dataTransfer.setData("text/plain", JSON.stringify({ids}))
+                })
+              }
+            }
+          </script>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".TrashTarget">
+            export default {
+              mounted() {
+                this.el.addEventListener("dragover", e => e.preventDefault())
+                this.el.addEventListener("drop", e => {
+                  e.preventDefault()
+                  const raw = e.dataTransfer.getData("text/plain")
+                  if (!raw) return
+                  const {ids} = JSON.parse(raw)
+                  this.pushEvent("trash_drop", {ids})
+                })
+              }
+            }
+          </script>
+          <div
+            id="board-trash-target"
+            phx-hook=".TrashTarget"
+            data-testid="trash-target"
+            class="ml-auto font-display uppercase text-[10px] tracking-widest px-2 py-1 border border-dashed border-ink-dim/40 text-ink-dim rounded-sm flex items-center gap-1"
+          >
+            <.icon name="hero-trash" class="size-3.5" /> Drop to trash
+          </div>
+        </div>
+
         <div
           :if={!@empty?}
+          id="issue-board"
+          data-selected-ids={Enum.join(@selected_ids, ",")}
           class="grid md:grid-cols-3 xl:grid-cols-5 gap-4 md:flex-1 md:min-h-0 md:auto-rows-fr"
         >
           <section
@@ -122,6 +265,7 @@ defmodule HarnessWeb.IssuesLive do
                 triage={@triages[issue.id]}
                 run_error={@run_errors[issue.id]}
                 phase_status={Map.get(@run_phases, issue.id)}
+                selected={MapSet.member?(@selected_ids, issue.id)}
               />
             </div>
           </section>
@@ -135,16 +279,23 @@ defmodule HarnessWeb.IssuesLive do
   attr :triage, :map, default: nil
   attr :run_error, :string, default: nil
   attr :phase_status, :string, default: nil
+  attr :selected, :boolean, default: false
 
   defp issue_card(assigns) do
     ~H"""
     <article
+      id={"issue-card-#{@issue.id}"}
+      phx-hook=".SelectableCard"
+      draggable="true"
+      data-issue-id={@issue.id}
       class={[
-        "rounded-sm bg-surface border px-3 py-2.5",
-        if(@issue.pipeline_state == "failed", do: "border-alert/60", else: "border-surface-2")
+        "rounded-sm bg-surface border px-3 py-2.5 cursor-pointer select-none",
+        if(@issue.pipeline_state == "failed", do: "border-alert/60", else: "border-surface-2"),
+        @selected && "ring-2 ring-accent"
       ]}
       data-testid="issue-card"
       data-issue-number={@issue.number}
+      data-selected={@selected}
     >
       <div class="flex items-center gap-2 mb-1">
         <a

@@ -117,4 +117,39 @@ defmodule Harness.JanitorTest do
   test "no-op when all configured queues are already running" do
     assert :ok = perform_job(Janitor, %{})
   end
+
+  describe "auto-clear stale terminal issues" do
+    defp backdate!(issue, seconds_ago) do
+      from(i in Harness.GitHub.Issue, where: i.id == ^issue.id)
+      |> Repo.update_all(
+        set: [updated_at: DateTime.add(DateTime.utc_now(), -seconds_ago, :second)]
+      )
+
+      GitHub.get_issue!(issue.id)
+    end
+
+    test "dismisses a terminal issue older than the configured threshold" do
+      issue = issue_fixture(%{pipeline_state: "failed"}) |> backdate!(15 * 86_400)
+
+      assert :ok = perform_job(Janitor, %{})
+
+      assert GitHub.get_issue!(issue.id).dismissed_at
+    end
+
+    test "leaves a terminal issue within the threshold alone" do
+      issue = issue_fixture(%{pipeline_state: "done"}) |> backdate!(1 * 86_400)
+
+      assert :ok = perform_job(Janitor, %{})
+
+      refute GitHub.get_issue!(issue.id).dismissed_at
+    end
+
+    test "never touches a non-terminal issue regardless of age" do
+      issue = issue_fixture(%{pipeline_state: "triaged"}) |> backdate!(30 * 86_400)
+
+      assert :ok = perform_job(Janitor, %{})
+
+      refute GitHub.get_issue!(issue.id).dismissed_at
+    end
+  end
 end

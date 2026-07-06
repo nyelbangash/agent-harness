@@ -90,6 +90,75 @@ defmodule HarnessWeb.IssuesLiveTest do
     assert done_col =~ "operator kill"
   end
 
+  test "a dismissed issue does not render, and the row survives underneath", %{conn: conn} do
+    issue = issue_fixture(%{title: "Dismissed already", pipeline_state: "failed"})
+    GitHub.dismiss_issue!(issue)
+
+    {:ok, _view, html} = live(conn, ~p"/issues")
+    refute html =~ "Dismissed already"
+    assert GitHub.get_issue!(issue.id).dismissed_at
+  end
+
+  test "clicking a card selects it and shows the trash-selected action", %{conn: conn} do
+    issue = issue_fixture(%{title: "Selectable issue", pipeline_state: "incoming"})
+    {:ok, view, html} = live(conn, ~p"/issues")
+    refute html =~ "Trash selected"
+
+    html =
+      view
+      |> render_click("select_card", %{"id" => "#{issue.id}", "shift" => false, "meta" => false})
+
+    assert html =~ "Trash selected"
+    assert html =~ "ring-2 ring-accent"
+  end
+
+  test "trash_selected dismisses the selected card without deleting the row", %{conn: conn} do
+    issue = issue_fixture(%{title: "Bulk-trashed issue", pipeline_state: "incoming"})
+    {:ok, view, _html} = live(conn, ~p"/issues")
+
+    view
+    |> render_click("select_card", %{"id" => "#{issue.id}", "shift" => false, "meta" => false})
+
+    render_click(view, "trash_selected", %{})
+
+    # the dismiss broadcasts {:issue_updated, issue} back to this same view
+    # process asynchronously — force it to drain that message before asserting
+    html = render(view)
+
+    refute html =~ "Bulk-trashed issue"
+    assert GitHub.get_issue!(issue.id).dismissed_at
+  end
+
+  test "meta-click toggles a second card into the selection, trashing both", %{conn: conn} do
+    a = issue_fixture(%{title: "Card A", pipeline_state: "incoming"})
+    b = issue_fixture(%{title: "Card B", pipeline_state: "incoming"})
+    {:ok, view, _html} = live(conn, ~p"/issues")
+
+    view |> render_click("select_card", %{"id" => "#{a.id}", "shift" => false, "meta" => false})
+
+    html =
+      view
+      |> render_click("select_card", %{"id" => "#{b.id}", "shift" => false, "meta" => true})
+
+    assert html =~ "Trash selected (2)"
+
+    render_click(view, "trash_selected", %{})
+
+    assert GitHub.get_issue!(a.id).dismissed_at
+    assert GitHub.get_issue!(b.id).dismissed_at
+  end
+
+  test "trash_drop dismisses the dragged issue ids", %{conn: conn} do
+    issue = issue_fixture(%{title: "Dragged off", pipeline_state: "incoming"})
+    {:ok, view, _html} = live(conn, ~p"/issues")
+
+    render_click(view, "trash_drop", %{"ids" => ["#{issue.id}"]})
+    html = render(view)
+
+    refute html =~ "Dragged off"
+    assert GitHub.get_issue!(issue.id).dismissed_at
+  end
+
   test "failed issue card shows turn cap reason badge with counts", %{conn: conn} do
     issue = issue_fixture(%{title: "Capped issue", pipeline_state: "failed"})
 

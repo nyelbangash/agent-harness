@@ -44,6 +44,8 @@ ideate:
 github:
   repos: [] # "owner/name" or {name: "owner/name", test_command: "mix test"} — the auto lane needs a test command
   poll_minutes: 2
+board:
+  auto_clear_after_days: 14 # terminal-state cards (done/failed/skipped) auto-dismiss after this many days
 notify:
   macos: true # osascript banner
   ntfy_topic: null # e.g. "harness-<random-suffix>" for phone push via ntfy.sh

@@ -19,6 +19,7 @@ defmodule Harness.Janitor do
   require Logger
   import Ecto.Query
 
+  alias Harness.GitHub
   alias Harness.GitHub.{Issue, TriageDecision}
   alias Harness.Repo
   alias Harness.Runs.Run
@@ -29,6 +30,7 @@ defmodule Harness.Janitor do
     unwedge_stuck_issues()
     retriage_updated_issues()
     resume_stalled_ideation()
+    auto_clear_stale_issues()
     reconcile_queues()
     :ok
   end
@@ -130,6 +132,29 @@ defmodule Harness.Janitor do
             fragment("json_extract(?, '$.session_id') = ?", j.args, ^session_id)
       )
     )
+  end
+
+  # terminal-state cards (done/failed/skipped) sitting untouched past the
+  # configured threshold auto-dismiss off the board (issue #76)
+  defp auto_clear_stale_issues do
+    days = Harness.Policy.get().board.auto_clear_after_days
+    cutoff = DateTime.add(DateTime.utc_now(), -days * 86_400, :second)
+
+    stale_ids =
+      Repo.all(
+        from(i in Issue,
+          where:
+            i.pipeline_state in ["done", "failed", "skipped"] and
+              is_nil(i.dismissed_at) and
+              i.updated_at < ^cutoff,
+          select: i.id
+        )
+      )
+
+    if stale_ids != [] do
+      Logger.info("janitor: auto-dismissing #{length(stale_ids)} stale terminal issue(s)")
+      GitHub.dismiss_issues!(stale_ids)
+    end
   end
 
   defp latest_triages do
