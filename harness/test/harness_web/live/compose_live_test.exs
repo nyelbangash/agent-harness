@@ -51,6 +51,14 @@ defmodule HarnessWeb.ComposeLiveTest do
     assert html =~ "Explore"
   end
 
+  test "renders the styled attachment dropzone instead of a bare file input", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/compose")
+
+    assert html =~ "attachments-dropzone"
+    assert html =~ "Drop files, click to browse, or paste an image"
+    assert html =~ ~s(phx-hook="HarnessWeb.CoreComponents.PasteUpload")
+  end
+
   test "submit with blank prompt shows error flash", %{conn: conn} do
     ctx = with_policy_repo(%{})
     {:ok, view, _html} = live(conn, ~p"/compose")
@@ -61,9 +69,12 @@ defmodule HarnessWeb.ComposeLiveTest do
       |> render_submit()
 
     assert html =~ "Describe your idea first"
+    refute_push_event(view, "clear_draft", %{})
   end
 
-  test "submit with no repo shows error flash", %{conn: conn} do
+  test "submit with no repo shows error flash and does not clear persisted draft", %{
+    conn: conn
+  } do
     {:ok, view, _html} = live(conn, ~p"/compose")
 
     html =
@@ -72,6 +83,18 @@ defmodule HarnessWeb.ComposeLiveTest do
       |> render_submit()
 
     assert html =~ "Select a policy repo"
+    refute_push_event(view, "clear_draft", %{})
+  end
+
+  test "successful submit clears the persisted draft", %{conn: conn} do
+    ctx = with_policy_repo(%{})
+    {:ok, view, _html} = live(conn, ~p"/compose")
+
+    view
+    |> form("form", %{"prompt" => "An idea", "repo" => ctx.repo})
+    |> render_submit()
+
+    assert_push_event(view, "clear_draft", %{key: "compose:new-draft"})
   end
 
   test "approve with stubbed client → draft approved, success flash shown", %{conn: conn} do

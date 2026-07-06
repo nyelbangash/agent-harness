@@ -17,6 +17,14 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert html =~ "false positives"
   end
 
+  test "renders the styled attachment dropzone instead of a bare file input", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/ideation")
+
+    assert html =~ "attachments-dropzone"
+    assert html =~ "Drop files, click to browse, or paste an image"
+    assert html =~ ~s(phx-hook="HarnessWeb.CoreComponents.PasteUpload")
+  end
+
   test "start button is inside the aside form, not overflowing into the section", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/ideation")
     # button must live inside the aside's form, not in the right-hand section
@@ -64,6 +72,7 @@ defmodule HarnessWeb.IdeationLiveTest do
     assert render(view) =~ "Session #1"
     # composer clears for the next seed
     refute render(view) =~ "a calmer inbox</textarea>"
+    assert_push_event(view, "clear_draft", %{key: "ideation:seed-prompt"})
 
     # clicking the selected session again deselects it
     view |> element("a", "a calmer inbox") |> render_click()
@@ -73,6 +82,19 @@ defmodule HarnessWeb.IdeationLiveTest do
     session = Ideation.get_session!(1)
     assert session.seed_prompt == "a calmer inbox"
     assert session.budget_minutes == 90
+  end
+
+  test "starting a session with a blank seed shows an error and does not clear the persisted draft",
+       %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/ideation")
+
+    html =
+      view
+      |> form("form", %{"seed_prompt" => "   ", "budget_minutes" => "90"})
+      |> render_submit()
+
+    assert html =~ "Give it a seed idea first"
+    refute_push_event(view, "clear_draft", %{})
   end
 
   test "renders the outline with a node the user can select to read its artifact", %{conn: conn} do

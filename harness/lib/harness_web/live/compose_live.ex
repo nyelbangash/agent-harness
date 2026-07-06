@@ -7,6 +7,7 @@ defmodule HarnessWeb.ComposeLive do
 
   use HarnessWeb, :live_view
 
+  alias Harness.Attachments
   alias Harness.Compose
   alias Harness.Compose.ExploreWorker
   alias Harness.{Policy, Runs}
@@ -14,6 +15,7 @@ defmodule HarnessWeb.ComposeLive do
   require Logger
 
   @allowed_attachment_exts ~w(.png .jpg .jpeg .gif .webp .txt .md .log .pdf .diff .patch)
+  @draft_storage_key "compose:new-draft"
 
   @impl true
   def mount(_params, _session, socket) do
@@ -31,11 +33,7 @@ defmodule HarnessWeb.ComposeLive do
      |> assign(:exploring, false)
      |> assign(:run_error, nil)
      |> assign(:form, to_form(%{"prompt" => "", "repo" => ""}))
-     |> allow_upload(:attachments,
-       accept: @allowed_attachment_exts,
-       max_entries: 5,
-       max_file_size: 15_000_000
-     )}
+     |> allow_upload(:attachments, Attachments.upload_opts())}
   end
 
   @impl true
@@ -99,6 +97,7 @@ defmodule HarnessWeb.ComposeLive do
         {:noreply,
          socket
          |> assign(:form, to_form(%{"prompt" => "", "repo" => ""}))
+         |> push_event("clear_draft", %{key: @draft_storage_key})
          |> push_patch(to: ~p"/compose/#{draft.id}")}
     end
   end
@@ -198,44 +197,11 @@ defmodule HarnessWeb.ComposeLive do
     draft.run && draft.run.status in ~w(queued running)
   end
 
-  defp entry_errors(uploads) do
-    Enum.flat_map(uploads.entries, fn entry ->
-      Enum.map(upload_errors(uploads, entry), &{entry, &1})
-    end)
-  end
-
-  defp upload_error_message(:too_large), do: "file is too large (max 15 MB)"
-  defp upload_error_message(:too_many_files), do: "too many files (max 5)"
-  defp upload_error_message(:not_accepted), do: "unsupported file type"
-  defp upload_error_message(other), do: to_string(other)
-
   defp persist_attachments(socket, draft) do
-    dir = Compose.draft_dir(draft)
-    File.mkdir_p!(dir)
-
-    consume_uploaded_entries(socket, :attachments, fn %{path: tmp_path}, entry ->
-      # client_name is browser-supplied — strip any path components so a name
-      # like "../../../x.png" can't escape the draft dir on cp, and so the
-      # stored filename can't forge prompt trust-boundary markers downstream.
-      filename = safe_filename(entry.client_name)
-      dest = Path.join(dir, filename)
-      File.cp!(tmp_path, dest)
-      {:ok, %{filename: filename, path: dest, content_type: entry.client_type}}
-    end)
+    Attachments.persist_uploaded_entries(socket, :attachments, Compose.draft_dir(draft))
   end
 
-  # Reduce a client-supplied filename to a single safe path segment. basename
-  # drops directory components (defeating ../ traversal); we then reject any
-  # residual separators or empty/dot-only names, falling back to a stable name.
-  defp safe_filename(client_name) do
-    name = client_name |> to_string() |> Path.basename() |> String.trim()
-
-    if name in ["", ".", ".."] or String.contains?(name, ["/", "\\"]) do
-      "attachment"
-    else
-      name
-    end
-  end
+  defp draft_storage_key, do: @draft_storage_key
 
   defp open_questions(%{open_questions: nil}), do: []
 
@@ -262,10 +228,30 @@ defmodule HarnessWeb.ComposeLive do
             <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim">
               New draft
             </h2>
+            <script :type={Phoenix.LiveView.ColocatedHook} name=".PersistDraft">
+              export default {
+                mounted() {
+                  const key = this.el.dataset.storageKey
+                  const saved = window.localStorage.getItem(key)
+                  if (saved && !this.el.value) {
+                    this.el.value = saved
+                  }
+                  this.el.addEventListener("input", () => {
+                    window.localStorage.setItem(key, this.el.value)
+                  })
+                  this.handleEvent("clear_draft", ({key: clearedKey}) => {
+                    if (clearedKey === key) window.localStorage.removeItem(key)
+                  })
+                }
+              }
+            </script>
             <textarea
+              id="compose-prompt"
               name="prompt"
               rows="5"
               placeholder="Rough idea — what problem needs solving?"
+              phx-hook=".PersistDraft"
+              data-storage-key={draft_storage_key()}
               class="w-full bg-surface border border-surface-2 rounded-sm px-2 py-1.5 font-body text-sm text-ink focus:outline-2 focus:outline-accent"
             >{@form[:prompt].value}</textarea>
             <select
@@ -279,34 +265,7 @@ defmodule HarnessWeb.ComposeLive do
               <label class="font-mono text-[10px] text-ink-dim block mb-1">
                 Attachments (optional)
               </label>
-              <.live_file_input upload={@uploads.attachments} />
-              <div
-                :for={entry <- @uploads.attachments.entries}
-                class="flex items-center gap-2 mt-1"
-              >
-                <span class="font-mono text-[11px] text-ink-dim truncate">{entry.client_name}</span>
-                <progress class="flex-1" value={entry.progress} max="100">{entry.progress}%</progress>
-                <button
-                  type="button"
-                  phx-click="cancel_attachment"
-                  phx-value-ref={entry.ref}
-                  class="font-mono text-[10px] text-alert"
-                >
-                  &times;
-                </button>
-              </div>
-              <p
-                :for={err <- upload_errors(@uploads.attachments)}
-                class="font-mono text-[10px] text-alert mt-1"
-              >
-                {upload_error_message(err)}
-              </p>
-              <p
-                :for={{entry, err} <- entry_errors(@uploads.attachments)}
-                class="font-mono text-[10px] text-alert mt-1"
-              >
-                {entry.client_name}: {upload_error_message(err)}
-              </p>
+              <.attachment_dropzone upload={@uploads.attachments} />
             </div>
             <div class="flex justify-end">
               <button class="font-display uppercase text-[10px] tracking-widest px-3 py-1.5 bg-accent text-bg rounded-sm">
