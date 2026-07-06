@@ -135,7 +135,10 @@ defmodule Harness.Janitor do
   end
 
   # terminal-state cards (done/failed/skipped) sitting untouched past the
-  # configured threshold auto-dismiss off the board (issue #76)
+  # configured threshold auto-dismiss off the board (issue #76). Aged against
+  # `terminal_at` (stamped once, when the issue lands in a terminal state) —
+  # not `updated_at`, which every ~2-minute poll bumps via upsert_issue's
+  # :unchanged branch even when nothing about the issue actually changed.
   defp auto_clear_stale_issues do
     days = Harness.Policy.get().board.auto_clear_after_days
     cutoff = DateTime.add(DateTime.utc_now(), -days * 86_400, :second)
@@ -146,7 +149,8 @@ defmodule Harness.Janitor do
           where:
             i.pipeline_state in ["done", "failed", "skipped"] and
               is_nil(i.dismissed_at) and
-              i.updated_at < ^cutoff,
+              not is_nil(i.terminal_at) and
+              i.terminal_at < ^cutoff,
           select: i.id
         )
       )

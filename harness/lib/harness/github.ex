@@ -114,13 +114,23 @@ defmodule Harness.GitHub do
   Move an issue through the pipeline and broadcast. Also clears `dismissed_at`
   — re-entering the pipeline is itself the un-dismiss signal, kept orthogonal
   to `@retriageable` (see `PollWorker`).
+
+  Stamps `terminal_at` when landing on done/failed/skipped so the janitor's
+  auto-clear can age off the pipeline's own clock instead of `updated_at`,
+  which every poll bumps regardless of real GitHub activity (issue #76).
   """
   def transition!(%Issue{} = issue, pipeline_state) do
     previous = issue.pipeline_state
 
+    terminal_at = if Issue.terminal?(pipeline_state), do: DateTime.utc_now(), else: nil
+
     issue =
       issue
-      |> Issue.changeset(%{pipeline_state: pipeline_state, dismissed_at: nil})
+      |> Issue.changeset(%{
+        pipeline_state: pipeline_state,
+        dismissed_at: nil,
+        terminal_at: terminal_at
+      })
       |> Repo.update!()
 
     broadcast(issue)

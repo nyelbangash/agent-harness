@@ -32,6 +32,7 @@ defmodule Harness.GitHub.Issue do
     field :pr_number, :integer
     field :auto_demoted, :boolean, default: false
     field :dismissed_at, :utc_datetime_usec
+    field :terminal_at, :utc_datetime_usec
 
     has_many :triages, Harness.GitHub.TriageDecision
     has_many :plans, Harness.GitHub.Plan
@@ -61,13 +62,19 @@ defmodule Harness.GitHub.Issue do
       :pr_url,
       :pr_number,
       :auto_demoted,
-      :dismissed_at
+      :dismissed_at,
+      :terminal_at
     ])
     |> validate_required([:repo, :number, :github_id, :title])
     |> validate_inclusion(:pipeline_state, @pipeline_states)
     |> validate_inclusion(:state, ~w(open closed))
     |> unique_constraint([:repo, :number])
   end
+
+  @terminal_states ~w(done failed skipped)
+
+  @doc "Whether a pipeline state is terminal (done/failed/skipped)."
+  def terminal?(pipeline_state), do: pipeline_state in @terminal_states
 
   @doc "Board column for a pipeline state (drives IssuesLive)."
   def column("incoming"), do: :incoming
@@ -77,5 +84,5 @@ defmodule Harness.GitHub.Issue do
   def column("implementing"), do: :in_progress
   def column("plan_ready"), do: :review
   def column("pr_open"), do: :review
-  def column(state) when state in ~w(done failed skipped), do: :done
+  def column(state) when state in @terminal_states, do: :done
 end
