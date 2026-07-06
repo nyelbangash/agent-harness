@@ -1,11 +1,11 @@
 mode: plan_only          # plan_only | full_auto | paused — flippable from Mission Control
 models:
-  triage: sonnet
-  implement: sonnet
-  plan: sonnet
-  ideate: sonnet
-  critique: opus
-  escalation: opus
+  triage: claude-sonnet-5
+  implement: claude-sonnet-5
+  plan: claude-sonnet-5
+  ideate: claude-sonnet-5
+  critique: claude-opus-4-8
+  escalation: claude-opus-4-8
 schedule:
   full_auto_windows: ["20:00-06:00"]     # local time; outside these, auto lane demotes to plan
   ideation_windows: ["21:00-02:00"]

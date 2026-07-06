@@ -52,7 +52,7 @@ defmodule Harness.GitHub.TriageWorkerTest do
     assert triage.final_route == "plan"
     assert triage.decision_reason == "proposed_plan"
     assert triage.confidence == 0.85
-    assert triage.model == "sonnet"
+    assert triage.model == "claude-sonnet-5"
     assert triage.attempt == 1
     assert triage.run_id
 
@@ -129,7 +129,7 @@ defmodule Harness.GitHub.TriageWorkerTest do
     FakeRunner.script([
       {:ok, runner_result(structured_output: triage_output(%{confidence: 0.3, route: "plan"}))},
       fn spec ->
-        assert spec.model == "opus"
+        assert spec.model == "claude-opus-4-8"
         {:ok, runner_result(structured_output: triage_output(%{confidence: 0.9, route: "plan"}))}
       end
     ])
@@ -137,7 +137,7 @@ defmodule Harness.GitHub.TriageWorkerTest do
     assert :ok = perform(issue)
 
     triage = GitHub.latest_triage(issue.id)
-    assert triage.model == "opus"
+    assert triage.model == "claude-opus-4-8"
     assert triage.confidence == 0.9
     assert length(FakeRunner.executed_specs()) == 2
   end

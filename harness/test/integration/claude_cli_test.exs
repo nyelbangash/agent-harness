@@ -54,7 +54,7 @@ defmodule Harness.Integration.ClaudeCLITest do
 
     spec = %RunSpec{
       kind: :triage,
-      model: "sonnet",
+      model: "claude-sonnet-5",
       prompt: issue_prompt,
       cwd: dir,
       output_mode: :json,
