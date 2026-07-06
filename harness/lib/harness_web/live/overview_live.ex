@@ -315,7 +315,7 @@ defmodule HarnessWeb.OverviewLive do
                     data-confirm={"Promote #{issue.repo}##{issue.number} to auto? An implement session will run against the reviewed plan and open a PR."}
                     class="ml-2 px-1.5 py-0.5 border border-accent text-accent rounded-sm hover:bg-accent hover:text-bg"
                   >
-                    Promote to auto
+                    Start implementing
                   </button>
                 </div>
                 <button

@@ -377,6 +377,15 @@ defmodule HarnessWeb.IssuesLive do
         </span>
       </div>
       <button
+        :if={@issue.pipeline_state == "plan_ready"}
+        phx-click="promote_to_auto"
+        phx-value-id={@issue.id}
+        data-confirm={"Promote #{@issue.repo}##{@issue.number} to auto? An implement session will run against the reviewed plan and open a PR."}
+        class="mt-1.5 font-display uppercase text-[10px] tracking-widest px-1.5 py-0.5 border border-accent text-accent rounded-sm hover:bg-accent hover:text-bg"
+      >
+        Implement
+      </button>
+      <button
         :if={@issue.pipeline_state == "failed"}
         phx-click="retry_issue"
         phx-value-id={@issue.id}

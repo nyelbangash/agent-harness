@@ -177,4 +177,53 @@ defmodule HarnessWeb.IssuesLiveTest do
     [_, done_col] = String.split(html, ~s(data-column="done"))
     assert done_col =~ "turn cap 41/40"
   end
+
+  test "plan_ready cards in the review column show an Implement button, pr_open cards do not", %{
+    conn: conn
+  } do
+    issue_fixture(%{title: "Ready to implement", pipeline_state: "plan_ready"})
+    issue_fixture(%{title: "Already has a PR", pipeline_state: "pr_open"})
+
+    {:ok, _view, html} = live(conn, ~p"/issues")
+    [_, review_col] = String.split(html, ~s(data-column="review"))
+
+    assert review_col =~ "Ready to implement"
+    assert review_col =~ "Already has a PR"
+    assert review_col =~ "Implement"
+
+    cards = String.split(review_col, "<article ")
+    ready_card = Enum.find(cards, &(&1 =~ "Ready to implement"))
+    pr_open_card = Enum.find(cards, &(&1 =~ "Already has a PR"))
+
+    assert ready_card =~ "Implement"
+    refute pr_open_card =~ "Implement"
+  end
+
+  test "clicking Implement on the board queues an implement job and moves the card", %{
+    conn: conn
+  } do
+    issue = issue_fixture(%{title: "Board promote me", pipeline_state: "plan_ready"})
+
+    {:ok, view, html} = live(conn, ~p"/issues")
+    [_, review_col] = String.split(html, ~s(data-column="review"))
+    assert review_col =~ "Board promote me"
+
+    render_click(view, "promote_to_auto", %{"id" => "#{issue.id}"})
+
+    html = render(view)
+    [_, in_progress_col] = String.split(html, ~s(data-column="in_progress"))
+    assert in_progress_col =~ "Board promote me"
+    assert GitHub.get_issue!(issue.id).pipeline_state == "implementing"
+  end
+
+  test "clicking Implement twice on the board surfaces the already-queued flash", %{conn: conn} do
+    issue = issue_fixture(%{title: "Double clicked", pipeline_state: "plan_ready"})
+
+    {:ok, view, _html} = live(conn, ~p"/issues")
+
+    render_click(view, "promote_to_auto", %{"id" => "#{issue.id}"})
+    html = render_click(view, "promote_to_auto", %{"id" => "#{issue.id}"})
+
+    assert html =~ "Already queued for implementation"
+  end
 end

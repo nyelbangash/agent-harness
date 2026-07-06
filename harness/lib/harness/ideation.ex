@@ -134,6 +134,24 @@ defmodule Harness.Ideation do
 
   def stop_session!(%Session{} = session, _reason), do: session
 
+  @doc """
+  Delete a session: its `ideas` rows cascade via the `ideas.session_id` FK
+  (`on_delete: :delete_all`), then its on-disk directory (JOURNAL.md,
+  SYNTHESIS.md, node artifacts, attachments/) is removed. Refuses to delete a
+  `running` session — `IterationWorker` looks the session up fresh on every
+  scheduled run and would raise `Ecto.NoResultsError` if the row vanished
+  mid-flight; stop it first.
+  """
+  def delete_session!(%Session{status: "running"}), do: {:error, :running}
+
+  def delete_session!(%Session{} = session) do
+    dir = session_dir(session)
+    Repo.delete!(session)
+    File.rm_rf!(dir)
+    broadcast(session.id, {:session_deleted, session.id})
+    :ok
+  end
+
   @doc "Store an operator nudge that the next iteration must address (consumed once)."
   def set_nudge!(%Session{} = session, nudge) when is_binary(nudge) do
     update_session!(session, %{nudge: nudge})
