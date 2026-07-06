@@ -14,6 +14,7 @@ defmodule HarnessWeb.ComposeLive do
   require Logger
 
   @allowed_attachment_exts ~w(.png .jpg .jpeg .gif .webp .txt .md .log .pdf .diff .patch)
+  @draft_storage_key "compose:new-draft"
 
   @impl true
   def mount(_params, _session, socket) do
@@ -99,6 +100,7 @@ defmodule HarnessWeb.ComposeLive do
         {:noreply,
          socket
          |> assign(:form, to_form(%{"prompt" => "", "repo" => ""}))
+         |> push_event("clear_draft", %{key: @draft_storage_key})
          |> push_patch(to: ~p"/compose/#{draft.id}")}
     end
   end
@@ -237,6 +239,8 @@ defmodule HarnessWeb.ComposeLive do
     end
   end
 
+  defp draft_storage_key, do: @draft_storage_key
+
   defp open_questions(%{open_questions: nil}), do: []
 
   defp open_questions(%{open_questions: json}) do
@@ -262,10 +266,30 @@ defmodule HarnessWeb.ComposeLive do
             <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim">
               New draft
             </h2>
+            <script :type={Phoenix.LiveView.ColocatedHook} name=".PersistDraft">
+              export default {
+                mounted() {
+                  const key = this.el.dataset.storageKey
+                  const saved = window.localStorage.getItem(key)
+                  if (saved && !this.el.value) {
+                    this.el.value = saved
+                  }
+                  this.el.addEventListener("input", () => {
+                    window.localStorage.setItem(key, this.el.value)
+                  })
+                  this.handleEvent("clear_draft", ({key: clearedKey}) => {
+                    if (clearedKey === key) window.localStorage.removeItem(key)
+                  })
+                }
+              }
+            </script>
             <textarea
+              id="compose-prompt"
               name="prompt"
               rows="5"
               placeholder="Rough idea — what problem needs solving?"
+              phx-hook=".PersistDraft"
+              data-storage-key={draft_storage_key()}
               class="w-full bg-surface border border-surface-2 rounded-sm px-2 py-1.5 font-body text-sm text-ink focus:outline-2 focus:outline-accent"
             >{@form[:prompt].value}</textarea>
             <select
