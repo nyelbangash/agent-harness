@@ -54,6 +54,40 @@
   --noise: 0;
 }
 
+@plugin "../vendor/daisyui-theme" {
+  name: "harness-light";
+  default: false;
+  color-scheme: "light";
+  --color-base-100: #f4f1ea;   /* ivory-white panel */
+  --color-base-200: #ffffff;
+  --color-base-300: #e3ded2;
+  --color-base-content: #14181d;
+  --color-primary: #3d5a75;    /* Horizon Blue, darkened for contrast on light */
+  --color-primary-content: #f4f1ea;
+  --color-secondary: #3d5a75;
+  --color-secondary-content: #f4f1ea;
+  --color-accent: #3d5a75;
+  --color-accent-content: #f4f1ea;
+  --color-neutral: #e3ded2;
+  --color-neutral-content: #14181d;
+  --color-info: #3d5a75;
+  --color-info-content: #f4f1ea;
+  --color-success: #46503f;    /* reseda green, darkened — success states only */
+  --color-success-content: #f4f1ea;
+  --color-warning: #a8301c;
+  --color-warning-content: #f4f1ea;
+  --color-error: #a8301c;      /* signal red, darkened — failures/red zones/kill only */
+  --color-error-content: #f4f1ea;
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.375rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
 /* -- design tokens ---------------------------------------------------------- */
 
 @theme {
@@ -70,6 +104,22 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* light-theme overrides for the app's custom design tokens (unlayered, so
+   they beat the @theme block's :root output at equal specificity — see
+   daisyui-theme.js:68 for the [data-theme="..."] selector convention this
+   mirrors). Same identity colors as the "harness-light" daisyUI theme above,
+   so both token systems flip together; alert/ok stay status-only. */
+[data-theme="harness-light"] {
+  --color-bg: #f4f1ea;
+  --color-surface: #ffffff;
+  --color-surface-2: #e3ded2;
+  --color-accent: #3d5a75;
+  --color-ink: #14181d;
+  --color-ink-dim: #5c584f;
+  --color-alert: #a8301c;
+  --color-ok: #46503f;
 }
 
 /* -- self-hosted fonts (priv/static/fonts, served at /fonts) ---------------- */

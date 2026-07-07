@@ -80,6 +80,36 @@ defmodule HarnessWeb.Layouts do
         <div class="flex md:flex-col items-center md:items-stretch gap-3">
           <.mode_indicator mode={@mode} usage_mode={@usage_mode} usage_health={@usage_health} />
 
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".ThemeToggle">
+            export default {
+              mounted() {
+                const key = this.el.dataset.storageKey
+                const label = this.el.querySelector("[data-theme-toggle-label]")
+                const apply = (theme) => {
+                  document.documentElement.setAttribute("data-theme", theme)
+                  label.textContent = theme === "harness-light" ? "Dark" : "Light"
+                }
+                apply(document.documentElement.getAttribute("data-theme") || "harness")
+                this.el.addEventListener("click", () => {
+                  const next = document.documentElement.getAttribute("data-theme") === "harness-light"
+                    ? "harness"
+                    : "harness-light"
+                  window.localStorage.setItem(key, next)
+                  apply(next)
+                })
+              }
+            }
+          </script>
+          <button
+            type="button"
+            id="theme-toggle"
+            phx-hook=".ThemeToggle"
+            data-storage-key="harness:theme"
+            class="font-display uppercase tracking-[0.14em] text-[11px] px-3 py-2 rounded-sm border border-surface-2 text-ink-dim hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <span data-theme-toggle-label>Light</span>
+          </button>
+
           <button
             phx-click="master_kill"
             data-confirm="Kill every running agent session?"
