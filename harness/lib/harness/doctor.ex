@@ -272,6 +272,19 @@ defmodule Harness.Doctor do
   @drift_window 3
 
   defp check_usage_schema do
+    # This inspects live usage samples, so it needs the running app (policy
+    # server + Repo). `mix harness.doctor` runs pre-boot (see the
+    # configured_policy/0 note), so if the supervision tree is down there is
+    # nothing to inspect — report that instead of crashing on the empty
+    # :persistent_term / unstarted Repo.
+    if Process.whereis(Harness.Policy.Server) == nil do
+      {:ok, "skipped — run against the running harness to check usage drift"}
+    else
+      usage_health_result()
+    end
+  end
+
+  defp usage_health_result do
     case Harness.Usage.health() do
       :schema_drift ->
         {:warn,

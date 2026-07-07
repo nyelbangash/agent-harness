@@ -89,8 +89,64 @@ defmodule Harness.Runs do
     broadcast({:run_counters, run_id, turns})
   end
 
-  @doc "Append one decoded NDJSON event and broadcast it on the run's topic."
+  @doc """
+  Append one decoded NDJSON event at an explicit `seq` and broadcast it.
+
+  Callers that own a serialized seq source (the streaming run server drives
+  this through a per-run Agent counter) pass the seq directly. For callers
+  that share a long-lived run across concurrent writers — e.g. the manager's
+  reused sweep run — use `append_event/3`, which allocates the seq atomically.
+  """
   def append_event!(%Run{} = run, seq, type, payload) do
+    insert_event!(run, seq, type, payload)
+  end
+
+  @doc """
+  Append an event, allocating the next seq atomically. Safe for concurrent
+  writers on the same run: if two allocate the same `max(seq)+1` and collide
+  on the `(run_id, seq)` unique index, the loser recomputes and retries rather
+  than raising an `Ecto.InvalidChangesetError`.
+  """
+  def append_event(%Run{} = run, type, payload, attempts \\ 20) do
+    seq = next_event_seq(run.id)
+
+    changeset =
+      RunEvent.changeset(%RunEvent{}, %{
+        run_id: run.id,
+        seq: seq,
+        type: type,
+        payload: payload,
+        at: DateTime.utc_now()
+      })
+
+    case Repo.insert(changeset) do
+      {:ok, event} ->
+        Phoenix.PubSub.broadcast(Harness.PubSub, "#{@topic}:#{run.id}", {:run_event, event})
+        event
+
+      {:error, %Ecto.Changeset{errors: errors} = failed} ->
+        cond do
+          not seq_collision?(errors) ->
+            # a genuine validation/constraint failure — surface it
+            raise Ecto.InvalidChangesetError, action: :insert, changeset: failed
+
+          attempts > 1 ->
+            # a concurrent writer took this seq; brief jittered backoff so the
+            # herd spreads out, then recompute max(seq)+1 and retry
+            Process.sleep(:rand.uniform(5))
+            append_event(run, type, payload, attempts - 1)
+
+          true ->
+            raise "append_event: exhausted seq-collision retries for run #{run.id}"
+        end
+    end
+  end
+
+  defp seq_collision?(errors) do
+    Keyword.has_key?(errors, :run_id) or Keyword.has_key?(errors, :seq)
+  end
+
+  defp insert_event!(%Run{} = run, seq, type, payload) do
     event =
       %RunEvent{}
       |> RunEvent.changeset(%{

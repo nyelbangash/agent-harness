@@ -308,9 +308,8 @@ defmodule Harness.Manager.Worker do
          proposals
        ) do
     run = ensure_manager_run()
-    seq = Harness.Runs.next_event_seq(run.id)
 
-    Harness.Runs.append_event!(run, seq, "system", %{
+    Harness.Runs.append_event(run, "system", %{
       "sweep_at" => DateTime.to_iso8601(DateTime.utc_now()),
       "anomalies" => %{
         "loop_signatures" => length(loops),

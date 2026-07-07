@@ -64,4 +64,25 @@ defmodule Harness.Runs.ContentionTest do
     assert length(Runs.events(id1)) == 10
     assert length(Runs.events(id2)) == 10
   end
+
+  test "concurrent append_event/3 on one run allocates unique seqs (no collision)" do
+    # The manager reuses a single long-lived run across sweeps; overlapping
+    # writers used to compute the same max(seq)+1 and crash with a
+    # run_events_run_id_seq_index unique-constraint violation. append_event/3
+    # retries on conflict, so every write must land with a distinct seq.
+    run = Runs.create_run!(%{kind: "manager", status: "running", model: "none", ref: "manager"})
+
+    tasks =
+      for i <- 1..25 do
+        Task.async(fn -> Runs.append_event(run, "system", %{"i" => i}) end)
+      end
+
+    events = Enum.map(tasks, &Task.await(&1, 15_000))
+
+    assert length(events) == 25
+    seqs = events |> Enum.map(& &1.seq) |> Enum.sort()
+    # every seq unique and contiguous 1..25
+    assert seqs == Enum.to_list(1..25)
+    assert length(Runs.events(run.id)) == 25
+  end
 end
