@@ -13,7 +13,23 @@ defmodule Harness.Runs.RunServerTest do
   setup do
     tmp = Path.join(System.tmp_dir!(), "run-server-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
-    on_exit(fn -> File.rm_rf!(tmp) end)
+
+    on_exit(fn ->
+      File.rm_rf!(tmp)
+
+      # RunServers register under run.id ({:via, Registry, ...}). The Ecto
+      # sandbox rolls run.id back to 1 between tests, so any server surviving
+      # into the next test collides on the registry key ({:already_started})
+      # — or a lingering server makes the janitor read a reaped run as still
+      # live. Terminate leftovers so each test starts from an empty registry.
+      # (Latent on fast machines where servers stop between tests; surfaced by
+      # CI's slower scheduling.)
+      for {_, pid, _, _} <- DynamicSupervisor.which_children(Harness.Runs.RunSupervisor),
+          is_pid(pid) do
+        DynamicSupervisor.terminate_child(Harness.Runs.RunSupervisor, pid)
+      end
+    end)
+
     %{tmp: tmp}
   end
 
