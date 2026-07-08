@@ -478,12 +478,33 @@ defmodule HarnessWeb.CoreComponents do
       <script :type={Phoenix.LiveView.ColocatedHook} name=".PasteUpload">
         export default {
           mounted() {
+            // Clipboard `File`s often carry no name (or one lacking a
+            // resolvable extension), e.g. "image" instead of "image.png".
+            // Force a proper extension so the persisted attachment
+            // (Harness.Attachments.persist_uploaded_entries/3 stores
+            // client_name verbatim) downloads/previews correctly, and so
+            // acceptance never depends on browsers reporting a matching
+            // client_type.
+            const extFor = {
+              "image/png": ".png",
+              "image/jpeg": ".jpg",
+              "image/gif": ".gif",
+              "image/webp": ".webp"
+            }
+            const withExtension = file => {
+              const ext = extFor[file.type]
+              if (ext && !file.name.toLowerCase().endsWith(ext)) {
+                return new File([file], `pasted-image${ext}`, { type: file.type })
+              }
+              return file
+            }
             this.handler = e => {
               const items = Array.from(e.clipboardData?.items || [])
               const files = items
                 .filter(item => item.kind === "file" && item.type.startsWith("image/"))
                 .map(item => item.getAsFile())
                 .filter(Boolean)
+                .map(withExtension)
               if (files.length > 0) {
                 e.preventDefault()
                 this.uploadTo(this.el, this.el.dataset.uploadName, files)

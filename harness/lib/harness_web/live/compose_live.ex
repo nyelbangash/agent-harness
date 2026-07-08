@@ -101,6 +101,11 @@ defmodule HarnessWeb.ComposeLive do
     end
   end
 
+  def handle_event("prompt_change", %{"prompt" => prompt} = params, socket) do
+    form = to_form(%{"prompt" => prompt, "repo" => params["repo"] || ""})
+    {:noreply, assign(socket, :form, form)}
+  end
+
   def handle_event("cancel_attachment", %{"ref" => ref}, socket) do
     {:noreply, cancel_upload(socket, :attachments, ref)}
   end
@@ -223,7 +228,12 @@ defmodule HarnessWeb.ComposeLive do
     >
       <div class="grid lg:grid-cols-3 gap-6">
         <aside class="space-y-4">
-          <form phx-submit="submit" class="space-y-2">
+          <form
+            id="compose-new-draft-form"
+            phx-submit="submit"
+            phx-change="prompt_change"
+            class="space-y-2"
+          >
             <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim">
               New draft
             </h2>

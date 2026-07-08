@@ -59,6 +59,45 @@ defmodule HarnessWeb.ComposeLiveTest do
     assert html =~ ~s(phx-hook="HarnessWeb.CoreComponents.PasteUpload")
   end
 
+  test "accepts a pasted image whose clipboard-supplied filename has no extension", %{
+    conn: conn
+  } do
+    {:ok, view, _html} = live(conn, ~p"/compose")
+
+    # Clipboard `File`s (as produced by `.PasteUpload`'s `mounted()` in
+    # core_components.ex, before its extension-normalization rename) can carry
+    # a name with no resolvable extension. Attachments.upload_opts/0's accept
+    # list must still take the entry, since Phoenix.LiveView.UploadConfig
+    # matches on the client-reported MIME type as well as the extension.
+    png =
+      Base.decode64!(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      )
+
+    avatar =
+      file_input(view, "#compose-new-draft-form", :attachments, [
+        %{name: "image", content: png, type: "image/png"}
+      ])
+
+    html = render_upload(avatar, "image")
+
+    assert html =~ "attachment-entry"
+    refute html =~ "unsupported file type"
+  end
+
+  test "typing in the prompt keeps the form assign (and rendered textarea) in sync", %{
+    conn: conn
+  } do
+    {:ok, view, _html} = live(conn, ~p"/compose")
+
+    html =
+      view
+      |> form("form", %{"prompt" => "typed but unsubmitted idea", "repo" => ""})
+      |> render_change()
+
+    assert html =~ "typed but unsubmitted idea"
+  end
+
   test "submit with blank prompt shows error flash", %{conn: conn} do
     ctx = with_policy_repo(%{})
     {:ok, view, _html} = live(conn, ~p"/compose")
