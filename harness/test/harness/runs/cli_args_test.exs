@@ -52,6 +52,32 @@ defmodule Harness.Runs.CLIArgsTest do
     end
   end
 
+  test "no subagents: no --agents flag" do
+    argv = CLIArgs.build(spec([]))
+    refute "--agents" in argv
+  end
+
+  test "subagents present: emits --agents as name -> {description, prompt, model}" do
+    argv =
+      CLIArgs.build(
+        spec(
+          subagents: [
+            %{name: "reader", description: "reads things", prompt: "be a reader", model: "haiku"}
+          ]
+        )
+      )
+
+    assert ["--agents", json] = Enum.drop_while(argv, &(&1 != "--agents"))
+
+    assert Jason.decode!(json) == %{
+             "reader" => %{
+               "description" => "reads things",
+               "prompt" => "be a reader",
+               "model" => "haiku"
+             }
+           }
+  end
+
   test "env scrubs every Anthropic billing variable" do
     env = CLIArgs.env()
 

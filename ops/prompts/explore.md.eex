@@ -40,6 +40,12 @@ Use Read, Glob, Grep, and git tools to:
 - Assess the scope (xs = trivial, s = small, m = medium, l = large) and feasibility
 - Note any open questions the operator must answer before implementation begins
 
+You have a `reader` subagent available via the Task tool. For mechanical
+sub-questions — "map this module's structure", "find prior art for X" — hand
+them to the reader subagent instead of doing the reading yourself, then use
+its report to keep planning and drafting. Stay the coordinator: you decide
+what to explore and you write DRAFT.json yourself.
+
 Start writing DRAFT.json early — you can revise it as you learn more. Don't wait until you've explored everything to begin.
 
 ## Output contract

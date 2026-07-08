@@ -82,6 +82,25 @@ defmodule Harness.Runs.EventIngestTest do
     assert Enum.any?(events, &(&1.type == "error" and &1.payload["note"] == "unparseable line"))
   end
 
+  test "a stream with Task subagent delegation ingests without crashing or dropping events" do
+    run = make_run()
+    outcomes = ingest_fixture(run, "subagent_delegation.ndjson")
+
+    events = Runs.events(run.id)
+    assert length(events) == length(outcomes)
+    assert Enum.all?(events, &(&1.type in Runs.RunEvent.types()))
+
+    # the parent's delegation call landed as a tool_use event; the subagent's
+    # own Read call and both tool_result replies (task's and the parent's)
+    # are all captured without a crash
+    types = Enum.map(events, & &1.type)
+    assert "tool_use" in types
+    assert "tool_result" in types
+
+    assert {:result, %{"subtype" => "success"} = result} = List.last(outcomes)
+    assert result["modelUsage"]["claude-haiku-4-5-20251001"]
+  end
+
   test "result_fields extracts run totals from the envelope" do
     payload = %{
       "subtype" => "success",
