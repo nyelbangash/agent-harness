@@ -245,7 +245,7 @@ defmodule Harness.Repos do
   def handle_call({:rebase_onto, repo, worktree, base_branch}, _from, state) do
     git!(base_path(repo), ["fetch", "origin", base_branch], repo)
 
-    case git(worktree, ["rebase", "origin/#{base_branch}"], repo) do
+    case git(worktree, git_identity() ++ ["rebase", "origin/#{base_branch}"], repo) do
       {_, 0} ->
         {:reply, :ok, state}
 
@@ -264,7 +264,12 @@ defmodule Harness.Repos do
   def handle_call({:rebase_continue, repo, worktree}, _from, state) do
     git!(worktree, ["add", "-A"], repo)
 
-    case git(worktree, ["rebase", "--continue"], repo, [{~c"GIT_EDITOR", ~c"true"}]) do
+    case git(
+           worktree,
+           git_identity() ++ ["rebase", "--continue"],
+           repo,
+           [{~c"GIT_EDITOR", ~c"true"}]
+         ) do
       {_, 0} ->
         {:reply, :ok, state}
 
@@ -381,6 +386,15 @@ defmodule Harness.Repos do
   defp base_path(repo) do
     home = Application.fetch_env!(:harness, :harness_home)
     Path.join([home, "repos", String.replace(repo, "/", "--")])
+  end
+
+  # Committer identity as leading `-c` flags, so commit-creating git ops
+  # (rebase replay/continue) never depend on the host's global git config —
+  # a fresh box (CI, a container) has none, and `rebase --continue` then fails
+  # to create its commit with an empty conflict list. Same identity as
+  # publish_branch's inline commit.
+  defp git_identity do
+    ["-c", "user.name=harness", "-c", "user.email=harness@users.noreply.github.com"]
   end
 
   defp remote_url(repo) do

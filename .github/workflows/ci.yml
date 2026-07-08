@@ -28,6 +28,12 @@ jobs:
       - name: Install inotify-tools
         run: sudo apt-get update && sudo apt-get install -y inotify-tools
 
+      # fixture git ops assume a committer identity; the runner has none
+      - name: Configure git identity
+        run: |
+          git config --global user.email "ci@harness.test"
+          git config --global user.name "harness ci"
+
       - name: Set up Elixir/OTP
         uses: erlef/setup-beam@v1
         with:

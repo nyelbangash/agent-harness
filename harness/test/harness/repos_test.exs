@@ -22,6 +22,14 @@ defmodule Harness.ReposTest do
     on_exit(fn ->
       Application.delete_env(:harness, :github_remote_base)
       File.rm_rf!(tmp)
+
+      # worktrees live in the shared, un-sandboxed workspaces dir; a test that
+      # raises before its body-level remove_worktree! would leak one into the
+      # next test's `File.ls(workspaces_dir) == {:ok, []}` assertion. Wipe here
+      # so cleanup is failure-safe, not body-dependent.
+      workspaces = Application.fetch_env!(:harness, :workspaces_dir)
+      File.rm_rf!(workspaces)
+      File.mkdir_p!(workspaces)
     end)
 
     %{repo: repo, bare: bare}
