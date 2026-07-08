@@ -64,7 +64,8 @@ defmodule Harness.Prompts do
       issue_body: truncate(issue.body || "(no body)", @max_body_chars),
       comments: prepare_comments(comments),
       plan: plan_text && truncate(plan_text, 20_000),
-      test_command: repo_cfg.test_command
+      test_command: repo_cfg.test_command,
+      playwright_command: repo_cfg.playwright_command
     )
   end
 

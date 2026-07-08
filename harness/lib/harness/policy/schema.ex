@@ -75,7 +75,7 @@ defmodule Harness.Policy.Schema do
 
   defmodule Repo do
     @enforce_keys [:name]
-    defstruct [:name, :test_command, :lint_command, :typecheck_command]
+    defstruct [:name, :test_command, :lint_command, :typecheck_command, :playwright_command]
   end
 
   defmodule Manager do
@@ -241,7 +241,8 @@ defmodule Harness.Policy.Schema do
            repo
            | test_command: map["test_command"],
              lint_command: map["lint_command"],
-             typecheck_command: map["typecheck_command"]
+             typecheck_command: map["typecheck_command"],
+             playwright_command: map["playwright_command"]
          }}
 
       :error ->

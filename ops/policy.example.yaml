@@ -38,7 +38,7 @@ ideate:
   critique_every: 5
   default_budget_minutes: 180
 github:
-  repos: [] # "owner/name" or {name: "owner/name", test_command: "mix test"} — the auto lane needs a test command
+  repos: [] # "owner/name" or {name: "owner/name", test_command: "mix test", lint_command:, typecheck_command:, playwright_command:} — the auto lane needs a test command; playwright_command is an optional browser-check gate for UI changes
   poll_minutes: 2
 board:
   auto_clear_after_days: 14 # terminal-state cards (done/failed/skipped) auto-dismiss after this many days

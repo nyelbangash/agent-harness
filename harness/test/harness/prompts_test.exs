@@ -15,6 +15,30 @@ defmodule Harness.PromptsTest do
     end
   end
 
+  describe "implement/4" do
+    alias Harness.Policy.Schema.Repo, as: RepoCfg
+
+    defp fake_issue do
+      %{repo: "o/r", number: 1, title: "Fix the widget", labels: [], body: "it's broken"}
+    end
+
+    test "mentions playwright_command when configured" do
+      repo_cfg = %RepoCfg{name: "o/r", test_command: "mix test", playwright_command: "npx playwright test"}
+      prompt = Prompts.implement(fake_issue(), [], nil, repo_cfg)
+
+      assert prompt =~ "npx playwright test"
+      assert prompt =~ "Playwright test"
+    end
+
+    test "omits playwright guidance when not configured" do
+      repo_cfg = %RepoCfg{name: "o/r", test_command: "mix test"}
+      prompt = Prompts.implement(fake_issue(), [], nil, repo_cfg)
+
+      refute prompt =~ "playwright"
+      refute prompt =~ "Playwright"
+    end
+  end
+
   describe "explore/3 attachment listing" do
     test "renders attachments inside the untrusted-content boundary" do
       attachments = [

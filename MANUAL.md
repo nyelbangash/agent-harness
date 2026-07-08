@@ -135,7 +135,7 @@ it automatically (see §7).
    lands in *Ready for review* — plus the Overview's **Needs you** queue.
 4. **Auto lane** (FULL AUTO only): implements in a worktree, then the
    pipeline itself runs your `test_command` (and optional `lint_command` /
-   `typecheck_command`). Failures loop back to the agent up to 2 fix cycles;
+   `typecheck_command` / `playwright_command`). Failures loop back to the agent up to 2 fix cycles;
    still red → demoted to the plan lane with the failure transcript. Green →
    the harness commits, pushes `harness/issue-N-slug`, opens a PR, and
    comments on the issue. **It never merges and can never push a default
@@ -260,7 +260,7 @@ an error in the logs.
 | `triage.auto_threshold` | 0.75 | min confidence for the auto route |
 | `plan.post_to_issue` | false | plan packets as issue comments instead of branches |
 | `implement.max_fix_cycles` | 2 | verification retry loops before demoting to plan |
-| `github.repos` | `[]` | `"owner/name"` or `{name:, test_command:, lint_command:, typecheck_command:}` |
+| `github.repos` | `[]` | `"owner/name"` or `{name:, test_command:, lint_command:, typecheck_command:, playwright_command:}` |
 | `notify.ntfy_topic` | null | ntfy.sh topic for phone pushes |
 
 ---

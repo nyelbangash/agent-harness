@@ -218,6 +218,81 @@ defmodule Harness.GitHub.ImplementWorkerTest do
     assert Harness.GitHub.Provenance.harness_authored?(body)
   end
 
+  test "the PR body notes a green playwright_command when configured", ctx do
+    put_repo_policy(ctx.repo, "true", ~s(, playwright_command: "true"))
+    issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "plan_ready"})
+
+    captured = start_supervised!({Agent, fn -> nil end})
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      case {conn.method, conn.request_path} do
+        {"GET", p} ->
+          if p =~ "/comments", do: Req.Test.json(conn, []), else: Req.Test.json(conn, %{})
+
+        {"POST", p} ->
+          cond do
+            p =~ "/pulls" ->
+              {:ok, raw, conn} = Plug.Conn.read_body(conn)
+              Agent.update(captured, fn _ -> Jason.decode!(raw)["body"] end)
+
+              conn
+              |> Plug.Conn.put_status(201)
+              |> Req.Test.json(%{"number" => 6, "html_url" => "https://github.com/x/pull/6"})
+
+            p =~ "/comments" ->
+              conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 1})
+
+            true ->
+              Plug.Conn.send_resp(conn, 500, "")
+          end
+      end
+    end)
+
+    FakeRunner.script([writes_code()])
+    assert :ok = perform_job(ImplementWorker, %{issue_id: issue.id, promoted: true})
+
+    body = Agent.get(captured, & &1)
+    assert body =~ "Playwright verification also ran green"
+    assert body =~ "`true`"
+  end
+
+  test "the PR body omits the playwright note when playwright_command is unset", ctx do
+    put_repo_policy(ctx.repo, "true")
+    issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "plan_ready"})
+
+    captured = start_supervised!({Agent, fn -> nil end})
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      case {conn.method, conn.request_path} do
+        {"GET", p} ->
+          if p =~ "/comments", do: Req.Test.json(conn, []), else: Req.Test.json(conn, %{})
+
+        {"POST", p} ->
+          cond do
+            p =~ "/pulls" ->
+              {:ok, raw, conn} = Plug.Conn.read_body(conn)
+              Agent.update(captured, fn _ -> Jason.decode!(raw)["body"] end)
+
+              conn
+              |> Plug.Conn.put_status(201)
+              |> Req.Test.json(%{"number" => 7, "html_url" => "https://github.com/x/pull/7"})
+
+            p =~ "/comments" ->
+              conn |> Plug.Conn.put_status(201) |> Req.Test.json(%{"id" => 1})
+
+            true ->
+              Plug.Conn.send_resp(conn, 500, "")
+          end
+      end
+    end)
+
+    FakeRunner.script([writes_code()])
+    assert :ok = perform_job(ImplementWorker, %{issue_id: issue.id, promoted: true})
+
+    body = Agent.get(captured, & &1)
+    refute body =~ "Playwright verification"
+  end
+
   test "red after max_fix_cycles demotes to plan with the failure transcript", ctx do
     put_repo_policy(ctx.repo, "echo boom-#{ctx.repo} && false")
     issue = issue_fixture(%{repo: ctx.repo, pipeline_state: "triaged"})
