@@ -77,15 +77,21 @@ defmodule Harness.Policy.SchemaTest do
     raw =
       put_in(base_raw(), ["github", "repos"], [
         "nyelbangash/sandbox",
-        %{"name" => "nyelbangash/other", "test_command" => "mix test"}
+        %{
+          "name" => "nyelbangash/other",
+          "test_command" => "mix test",
+          "playwright_command" => "npx playwright test"
+        }
       ])
 
     assert {:ok, policy} = Schema.parse(raw)
     assert [plain, with_cmd] = policy.github.repos
     assert plain.name == "nyelbangash/sandbox"
     assert plain.test_command == nil
+    assert plain.playwright_command == nil
     assert with_cmd.name == "nyelbangash/other"
     assert with_cmd.test_command == "mix test"
+    assert with_cmd.playwright_command == "npx playwright test"
   end
 
   test "rejects malformed repo entries" do

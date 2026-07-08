@@ -21,7 +21,8 @@ defmodule Harness.Verifier do
       [
         {"test", repo_cfg.test_command},
         {"lint", repo_cfg.lint_command},
-        {"typecheck", repo_cfg.typecheck_command}
+        {"typecheck", repo_cfg.typecheck_command},
+        {"ui", repo_cfg.playwright_command}
       ]
       |> Enum.reject(fn {_label, cmd} -> is_nil(cmd) or cmd == "" end)
 

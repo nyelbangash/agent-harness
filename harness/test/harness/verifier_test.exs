@@ -12,12 +12,25 @@ defmodule Harness.VerifierTest do
   end
 
   test "green when every configured command exits 0", %{tmp: tmp} do
-    cfg = %RepoCfg{name: "o/r", test_command: "true", lint_command: "true"}
+    cfg = %RepoCfg{
+      name: "o/r",
+      test_command: "true",
+      lint_command: "true",
+      playwright_command: "true"
+    }
+
     assert :ok = Verifier.verify(tmp, cfg)
   end
 
   test "nil/empty commands are skipped", %{tmp: tmp} do
-    cfg = %RepoCfg{name: "o/r", test_command: "true", lint_command: nil, typecheck_command: ""}
+    cfg = %RepoCfg{
+      name: "o/r",
+      test_command: "true",
+      lint_command: nil,
+      typecheck_command: "",
+      playwright_command: nil
+    }
+
     assert :ok = Verifier.verify(tmp, cfg)
   end
 
@@ -29,17 +42,33 @@ defmodule Harness.VerifierTest do
     assert transcript =~ "the-widget-broke"
   end
 
-  test "stops at the first failure in test → lint → typecheck order", %{tmp: tmp} do
+  test "stops at the first failure in test → lint → typecheck → ui order", %{tmp: tmp} do
     cfg = %RepoCfg{
       name: "o/r",
       test_command: "true",
       lint_command: "echo lint-sad && false",
-      typecheck_command: "echo should-not-run"
+      typecheck_command: "echo should-not-run",
+      playwright_command: "echo should-not-run-ui"
     }
 
     assert {:failed, transcript} = Verifier.verify(tmp, cfg)
     assert transcript =~ "lint command failed"
     refute transcript =~ "should-not-run"
+    refute transcript =~ "should-not-run-ui"
+  end
+
+  test "a failing playwright_command runs only after test/lint/typecheck pass", %{tmp: tmp} do
+    cfg = %RepoCfg{
+      name: "o/r",
+      test_command: "true",
+      lint_command: "true",
+      typecheck_command: "true",
+      playwright_command: "echo the-ui-broke && exit 3"
+    }
+
+    assert {:failed, transcript} = Verifier.verify(tmp, cfg)
+    assert transcript =~ "ui command failed (exit 3)"
+    assert transcript =~ "the-ui-broke"
   end
 
   test "commands run in the worktree", %{tmp: tmp} do

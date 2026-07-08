@@ -98,7 +98,7 @@ defmodule Harness.GitHub.ImplementWorker do
 
       case fix_cycle_loop(issue, policy, repo_cfg, worktree, prompt, 0, nil) do
         {:green, run_id, approach} ->
-          publish(issue, worktree, run_id, approach, promoted?)
+          publish(issue, worktree, run_id, approach, promoted?, repo_cfg)
 
         {:red, transcript, _run_id} ->
           Logger.warning(
@@ -188,7 +188,7 @@ defmodule Harness.GitHub.ImplementWorker do
     end
   end
 
-  defp publish(issue, worktree, run_id, approach, promoted?) do
+  defp publish(issue, worktree, run_id, approach, promoted?, repo_cfg) do
     run = Runs.get_run!(run_id)
     {:ok, counter} = Agent.start_link(fn -> Runs.next_event_seq(run.id) end)
     next_seq = fn -> Agent.get_and_update(counter, fn s -> {s, s + 1} end) end
@@ -222,7 +222,7 @@ defmodule Harness.GitHub.ImplementWorker do
       [owner, _name] = String.split(issue.repo, "/")
       base = Repos.default_branch(issue.repo)
       head = "#{owner}:#{branch}"
-      body = pr_body(issue, run_id, approach, changed)
+      body = pr_body(issue, run_id, approach, changed, repo_cfg.playwright_command)
 
       case Client.create_pull_request(issue.repo, head, base, pr_title(issue), body) do
         {:ok, pr} ->
@@ -317,7 +317,7 @@ defmodule Harness.GitHub.ImplementWorker do
   defp pr_title(issue), do: "Fix ##{issue.number}: #{issue.title}"
 
   # spec §4.3.4: structured body — summary, approach, test evidence, transcript
-  defp pr_body(issue, run_id, approach, changed_files) do
+  defp pr_body(issue, run_id, approach, changed_files, playwright_command) do
     test_files = Enum.filter(changed_files, &test_or_ci_file?/1)
 
     body = """
@@ -333,6 +333,7 @@ defmodule Harness.GitHub.ImplementWorker do
 
     The repository's configured test/lint/typecheck commands ran green in the isolated
     worktree before this branch was pushed (gate enforced by the pipeline, not the agent).
+    #{playwright_evidence_note(playwright_command)}
     #{test_evidence_caveat(test_files)}
     ## Files changed
     #{Enum.map_join(changed_files, "\n", &("- `" <> &1 <> "`"))}
@@ -346,6 +347,13 @@ defmodule Harness.GitHub.ImplementWorker do
     """
 
     Provenance.stamp(body, "pr", run_id)
+  end
+
+  defp playwright_evidence_note(nil), do: ""
+  defp playwright_evidence_note(""), do: ""
+
+  defp playwright_evidence_note(playwright_command) do
+    "Playwright verification also ran green (`#{playwright_command}`).\n"
   end
 
   # the agent has Write access to the worktree the gate runs in, so surface
