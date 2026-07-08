@@ -30,6 +30,10 @@ https://github.com/settings/personal-access-tokens with:
 - **Repository access:** only the repos you'll list in policy (never work repos)
 - **Permissions:** Contents *Read and write* · Issues *Read and write* ·
   Pull requests *Read and write* (Metadata read is added automatically)
+- If this owner is also watched under `github.projects` (a GitHub Projects
+  v2 board), the PAT additionally needs **Projects: read** — Projects v2 has
+  no REST surface, so `mix harness.doctor` reports a missing scope as a
+  GraphQL error naming the owner, not a 401.
 
 Store it by running the command `harness.setup` printed, **directly in your
 terminal** (input is hidden — if you can see the token as you paste, abort and

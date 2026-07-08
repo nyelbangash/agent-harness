@@ -7,7 +7,16 @@ defmodule Harness.GitHub do
 
   import Ecto.Query
 
-  alias Harness.GitHub.{Issue, Plan, PrCommentHandle, RepoState, TriageDecision, TriageOutcome}
+  alias Harness.GitHub.{
+    Issue,
+    Plan,
+    PrCommentHandle,
+    ProjectState,
+    RepoState,
+    TriageDecision,
+    TriageOutcome
+  }
+
   alias Harness.Repo
 
   @topic "issues"
@@ -348,6 +357,17 @@ defmodule Harness.GitHub do
 
   def update_repo_state!(%RepoState{} = state, attrs) do
     state |> RepoState.changeset(attrs) |> Repo.update!()
+  end
+
+  # -- project states -----------------------------------------------------------
+
+  def project_state(owner, number) do
+    Repo.get_by(ProjectState, owner: owner, number: number) ||
+      %ProjectState{} |> ProjectState.changeset(%{owner: owner, number: number}) |> Repo.insert!()
+  end
+
+  def update_project_state!(%ProjectState{} = state, attrs) do
+    state |> ProjectState.changeset(attrs) |> Repo.update!()
   end
 
   # -- pr comment handles -------------------------------------------------------

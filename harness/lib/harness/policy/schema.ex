@@ -62,7 +62,7 @@ defmodule Harness.Policy.Schema do
   end
 
   defmodule GitHub do
-    defstruct repos: [], poll_minutes: 2
+    defstruct repos: [], poll_minutes: 2, projects: []
   end
 
   defmodule Board do
@@ -76,6 +76,11 @@ defmodule Harness.Policy.Schema do
   defmodule Repo do
     @enforce_keys [:name]
     defstruct [:name, :test_command, :lint_command, :typecheck_command, :playwright_command]
+  end
+
+  defmodule Project do
+    @enforce_keys [:owner, :number, :trigger]
+    defstruct [:owner, :number, :trigger]
   end
 
   defmodule Manager do
@@ -212,18 +217,28 @@ defmodule Harness.Policy.Schema do
 
   defp parse_github(map) when is_map(map) do
     repos = List.wrap(map["repos"])
-    parsed = Enum.map(repos, &parse_repo/1)
+    parsed_repos = Enum.map(repos, &parse_repo/1)
 
-    case Enum.filter(parsed, &match?(:error, &1)) do
-      [] ->
+    projects = List.wrap(map["projects"])
+    parsed_projects = Enum.map(projects, &parse_project/1)
+
+    cond do
+      Enum.any?(parsed_repos, &match?(:error, &1)) ->
+        {:error, ["github.repos: entries must be \"owner/name\" or {name:, test_command:}"]}
+
+      Enum.any?(parsed_projects, &match?(:error, &1)) ->
+        {:error,
+         [
+           "github.projects: entries must be {owner:, number:} with an optional trigger: \"assignee\" or {field:, value:}"
+         ]}
+
+      true ->
         {:ok,
          %GitHub{
-           repos: Enum.map(parsed, fn {:ok, r} -> r end),
+           repos: Enum.map(parsed_repos, fn {:ok, r} -> r end),
+           projects: Enum.map(parsed_projects, fn {:ok, p} -> p end),
            poll_minutes: map["poll_minutes"] || 2
          }}
-
-      _ ->
-        {:error, ["github.repos: entries must be \"owner/name\" or {name:, test_command:}"]}
     end
   end
 
@@ -251,6 +266,26 @@ defmodule Harness.Policy.Schema do
   end
 
   defp parse_repo(_), do: :error
+
+  defp parse_project(%{"owner" => owner, "number" => number} = map)
+       when is_binary(owner) and owner != "" and is_integer(number) and number > 0 do
+    case parse_trigger(map["trigger"]) do
+      {:ok, trigger} -> {:ok, %Project{owner: owner, number: number, trigger: trigger}}
+      :error -> :error
+    end
+  end
+
+  defp parse_project(_), do: :error
+
+  defp parse_trigger(nil), do: {:ok, :assignee}
+  defp parse_trigger("assignee"), do: {:ok, :assignee}
+
+  defp parse_trigger(%{"field" => field, "value" => value})
+       when is_binary(field) and field != "" and is_binary(value) and value != "" do
+    {:ok, {:field, field, value}}
+  end
+
+  defp parse_trigger(_), do: :error
 
   defp parse_gates(map) when is_map(map) do
     gates = struct_from(UtilizationGates, map)

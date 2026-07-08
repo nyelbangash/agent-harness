@@ -40,6 +40,7 @@ ideate:
 github:
   repos: [] # "owner/name" or {name: "owner/name", test_command: "mix test", lint_command:, typecheck_command:, playwright_command:} — the auto lane needs a test command; playwright_command is an optional browser-check gate for UI changes
   poll_minutes: 2
+  projects: [] # GitHub Projects (v2) boards to watch, read-only. {owner:, number:, trigger: "assignee"} (default) or {owner:, number:, trigger: {field: "Status", value: "Ready"}}. Owner's PAT needs the Projects: read scope. Draft items are skipped (no repo); PR items are ignored; issues in a repo absent from github.repos are plan-lane only (no test_command)
 board:
   auto_clear_after_days: 14 # terminal-state cards (done/failed/skipped) auto-dismiss after this many days
 notify:

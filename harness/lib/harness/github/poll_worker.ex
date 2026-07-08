@@ -189,7 +189,14 @@ defmodule Harness.GitHub.PollWorker do
     DateTime.diff(DateTime.utc_now(), last, :second) >= minutes * 60 - 5
   end
 
-  defp handle_issue(repo_name, payload) do
+  @doc """
+  Upsert a GitHub issue payload and route it into the pipeline (new →
+  triage, human-only/agent-cloud → skip/cancel, upstream update on a
+  restartable state → re-triage). Shared with `ProjectPollWorker` so
+  project-board-discovered issues get identical monotonic-timestamp and
+  provenance guards as assignee-discovered ones.
+  """
+  def handle_issue(repo_name, payload) do
     {change, issue} = GitHub.upsert_issue(repo_name, payload)
 
     cond do

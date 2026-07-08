@@ -65,6 +65,7 @@ defmodule Harness.Doctor do
       }
     ] ++
       github_api_checks() ++
+      github_project_checks() ++
       [
         %Check{
           id: :launchd,
@@ -95,6 +96,53 @@ defmodule Harness.Doctor do
       }
     end
   end
+
+  # One reachability + Projects-scope check per {owner, number} configured
+  # under `github.projects` — a missing "Projects: read" scope should be a
+  # named red line in `mix harness.doctor`, not a silently empty item list.
+  defp github_project_checks do
+    for {owner, number} <- configured_projects() do
+      %Check{
+        id: :"github_project_#{owner}_#{number}",
+        label: "GitHub Projects v2 reachable (#{owner}/#{number})",
+        boot: :none,
+        run: fn -> check_github_project(owner, number) end
+      }
+    end
+  end
+
+  defp configured_projects do
+    case configured_policy() do
+      {:ok, policy} -> Enum.map(policy.github.projects, &{&1.owner, &1.number})
+      _ -> []
+    end
+  end
+
+  defp check_github_project(owner, number) do
+    case Harness.GitHub.Client.list_project_items(owner, number) do
+      {:ok, items} ->
+        {:ok, "#{length(items)} items"}
+
+      {:error, {:graphql_errors, errors}} ->
+        if Enum.any?(errors, &scope_error?/1) do
+          {:error,
+           "Projects scope missing for #{owner} — add \"Projects: read\" to the fine-grained " <>
+             "PAT (`mix harness.setup #{owner}`)"}
+        else
+          {:warn, "GraphQL errors: #{inspect(errors)}"}
+        end
+
+      {:error, reason} ->
+        {:warn, "GitHub Projects unreachable: #{inspect(reason)}"}
+    end
+  end
+
+  defp scope_error?(%{"message" => message}) when is_binary(message) do
+    String.contains?(message, "does not have permission") or
+      String.contains?(message, "scope") or String.contains?(message, "projectsV2")
+  end
+
+  defp scope_error?(_), do: false
 
   @doc "Run every check. Returns `[{check, result}]`."
   def run_all, do: Enum.map(checks(), &{&1, &1.run.()})

@@ -100,6 +100,50 @@ defmodule Harness.Policy.SchemaTest do
     assert error =~ "github.repos"
   end
 
+  test "parses projects with an assignee trigger (default and explicit)" do
+    raw =
+      put_in(base_raw(), ["github", "projects"], [
+        %{"owner" => "someorg", "number" => 7},
+        %{"owner" => "someuser", "number" => 8, "trigger" => "assignee"}
+      ])
+
+    assert {:ok, policy} = Schema.parse(raw)
+    assert [default, explicit] = policy.github.projects
+    assert default.owner == "someorg"
+    assert default.number == 7
+    assert default.trigger == :assignee
+    assert explicit.trigger == :assignee
+  end
+
+  test "parses a project with a field trigger" do
+    raw =
+      put_in(base_raw(), ["github", "projects"], [
+        %{
+          "owner" => "someorg",
+          "number" => 7,
+          "trigger" => %{"field" => "Status", "value" => "Ready"}
+        }
+      ])
+
+    assert {:ok, policy} = Schema.parse(raw)
+    assert [project] = policy.github.projects
+    assert project.trigger == {:field, "Status", "Ready"}
+  end
+
+  test "rejects malformed project entries" do
+    for bad <- [
+          %{"number" => 7},
+          %{"owner" => "someorg"},
+          %{"owner" => "someorg", "number" => "not-a-number"},
+          %{"owner" => "someorg", "number" => 7, "trigger" => %{"field" => "Status"}},
+          %{"owner" => "someorg", "number" => 7, "trigger" => "nope"}
+        ] do
+      raw = put_in(base_raw(), ["github", "projects"], [bad])
+      assert {:error, [error]} = Schema.parse(raw)
+      assert error =~ "github.projects"
+    end
+  end
+
   test "unknown keys are ignored so the yaml can grow ahead of the code" do
     assert {:ok, _} = Schema.parse(Map.put(base_raw(), "future_section", %{"x" => 1}))
   end
