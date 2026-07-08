@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# one run per ref; a new push cancels the in-flight run for the same branch
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # the Phoenix app lives in harness/; every mix step runs there
+    defaults:
+      run:
+        working-directory: harness
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Elixir/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+
+      - name: Cache deps and _build
+        uses: actions/cache@v4
+        with:
+          path: |
+            harness/deps
+            harness/_build
+          key: ${{ runner.os }}-mix-${{ hashFiles('harness/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      # mirrors the repo's `precommit` alias — the checks that caught this
+      # week's real breakages (an unclosed `end`, unused vars, a stale lock)
+      - name: Compile (warnings are errors)
+        run: mix compile --warnings-as-errors
+
+      - name: Check formatting
+        run: mix format --check-formatted
+
+      - name: Unused deps
+        run: mix deps.unlock --check-unused
+
+      # the `test` alias creates + migrates the SQLite test DB, then runs the
+      # suite; test config is fully hermetic (FakeRunner, test PAT, no network)
+      - name: Run tests
+        run: mix test
