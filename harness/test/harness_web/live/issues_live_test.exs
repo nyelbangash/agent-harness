@@ -208,7 +208,7 @@ defmodule HarnessWeb.IssuesLiveTest do
 
     assert html =~ "Already queued for implementation"
   end
-   
+
   describe "issue detail view" do
     test "clicking a card title patches to the detail route and shows run history", %{conn: conn} do
       issue = issue_fixture(%{title: "Detail me", pipeline_state: "pr_open", pr_number: 9})

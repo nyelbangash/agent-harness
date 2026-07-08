@@ -488,7 +488,12 @@ defmodule HarnessWeb.IdeationLive do
       <div class="page-fit md:flex md:flex-col md:min-h-0 md:overflow-hidden">
         <div class="grid lg:grid-cols-4 gap-6 md:flex-1 md:min-h-0 md:auto-rows-fr">
           <aside class="lg:col-span-1 space-y-4 md:flex md:flex-col md:min-h-0">
-            <form id="ideation-seed-form" phx-submit="start" phx-change="form_change" class="space-y-2">
+            <form
+              id="ideation-seed-form"
+              phx-submit="start"
+              phx-change="form_change"
+              class="space-y-2"
+            >
               <h2 class="font-display uppercase tracking-[0.14em] text-[11px] text-ink-dim">
                 Seed a session
               </h2>

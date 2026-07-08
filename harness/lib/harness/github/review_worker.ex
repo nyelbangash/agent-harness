@@ -100,7 +100,7 @@ defmodule Harness.GitHub.ReviewWorker do
         output_mode: :json,
         json_schema: review_schema_json(),
         allowed_tools: @review_tools,
-          issue_id: issue.id,
+        issue_id: issue.id,
         ref: "#{issue.repo}##{issue.number}",
         timeout_ms: :timer.minutes(30)
       }
