@@ -137,8 +137,11 @@ defmodule Harness.Doctor do
     end
   end
 
+  defp scope_error?(%{"type" => "FORBIDDEN"}), do: true
+
   defp scope_error?(%{"message" => message}) when is_binary(message) do
     String.contains?(message, "does not have permission") or
+      String.contains?(message, "not accessible by personal access token") or
       String.contains?(message, "scope") or String.contains?(message, "projectsV2")
   end
 
