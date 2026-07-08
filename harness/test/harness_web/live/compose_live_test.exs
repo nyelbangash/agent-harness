@@ -59,6 +59,19 @@ defmodule HarnessWeb.ComposeLiveTest do
     assert html =~ ~s(phx-hook="HarnessWeb.CoreComponents.PasteUpload")
   end
 
+  test "typing in the prompt keeps the form assign (and rendered textarea) in sync", %{
+    conn: conn
+  } do
+    {:ok, view, _html} = live(conn, ~p"/compose")
+
+    html =
+      view
+      |> form("form", %{"prompt" => "typed but unsubmitted idea", "repo" => ""})
+      |> render_change()
+
+    assert html =~ "typed but unsubmitted idea"
+  end
+
   test "submit with blank prompt shows error flash", %{conn: conn} do
     ctx = with_policy_repo(%{})
     {:ok, view, _html} = live(conn, ~p"/compose")
