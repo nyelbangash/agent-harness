@@ -17,14 +17,18 @@ defmodule Harness.Policy.Watcher do
   def init(_opts) do
     policy_path = Application.fetch_env!(:harness, :policy_path)
 
+    # FileSystem returns {:ok, pid} on macOS (fsevents, always available); on a
+    # host without a backend (Linux minus inotify-tools — e.g. CI) it can return
+    # :ignore or {:error, _}. Hot reload is a convenience, never load-bearing:
+    # any non-ok result disables it with a warning rather than crashing the app.
     case FileSystem.start_link(dirs: [Path.dirname(policy_path)]) do
       {:ok, watcher} ->
         FileSystem.subscribe(watcher)
         {:ok, %{policy_path: Path.expand(policy_path), timer: nil}}
 
-      {:error, reason} ->
+      other ->
         Logger.warning(
-          "policy watcher disabled (#{inspect(reason)}); edits need `Policy.reload/0`"
+          "policy watcher disabled (#{inspect(other)}); edits need `Policy.reload/0`"
         )
 
         :ignore
