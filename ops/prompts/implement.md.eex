@@ -29,6 +29,15 @@ code contradicts it — note deviations in your final summary.
 
 <%= @plan %>
 <% end %>
+## Pacing
+
+Read each file you touch once: understand it fully on the first pass, make
+your edits, and move on rather than re-opening it to double-check. Explore
+only as far as the fix requires — do not chase adjacent code, unrelated
+modules, or alternative designs "just in case." The issue body above and the
+reviewed plan (if present) already contain the context you need; treat them
+as ground truth and don't re-derive decisions they've already made.
+
 ## How to work
 1. Read the relevant code before changing anything; follow the repository's
    existing patterns and style.
@@ -38,4 +47,5 @@ code contradicts it — note deviations in your final summary.
    `<%= @test_command %>`
    The pipeline will run it again and will reject your work if it fails —
    never weaken or delete tests to get to green.
-5. End with a 3–6 line summary of what you changed and why.
+5. End with a 3–6 line summary that names the specific files and
+   functions/modules you changed and why — not a general recap.

@@ -10,7 +10,9 @@ The PR implements: <%= @issue_title %>
 The following files have conflict markers from rebasing onto <%= @base_branch %>. For
 each file, resolve the conflict so the merged result implements the PR's intent while
 incorporating the upstream changes. Rewrite each file in its entirety with no conflict
-markers.
+markers. If a conflict cannot be resolved without compromising the PR's intent or the
+upstream change, resolve it as best you can and flag the tradeoff explicitly in your
+summary rather than silently picking a side.
 
 <%= for {path, content} <- @conflicted_files do %>
 ### <%= path %>

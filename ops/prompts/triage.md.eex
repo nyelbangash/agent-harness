@@ -33,6 +33,9 @@ Body:
 ## Your assessment
 Investigate enough to answer confidently: locate the code the issue refers to,
 judge whether the request is well-specified, estimate the change surface.
+Stop as soon as you can commit to a route, scope estimate, and risk flags —
+you do not need to design the fix, only classify it. Do not chase code
+unrelated to the issue.
 
 Classify into exactly one route:
 - "auto"  — small, crisply specified, low-risk change an agent could implement
