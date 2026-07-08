@@ -222,6 +222,122 @@ defmodule Harness.GitHub.ClientTest do
     assert :ok = Client.edit_issue("owner/repo", 42, %{body: "updated body with task list"})
   end
 
+  test "list_project_items paginates across pages and distinguishes issue/PR/draft typenames" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      {:ok, raw, conn} = Plug.Conn.read_body(conn)
+      body = Jason.decode!(raw)
+
+      cond do
+        body["query"] =~ "organization(login" ->
+          Req.Test.json(conn, %{
+            "data" => %{"organization" => %{"projectV2" => %{"id" => "PVT_1"}}}
+          })
+
+        body["variables"]["after"] == nil ->
+          Req.Test.json(conn, %{
+            "data" => %{
+              "node" => %{
+                "items" => %{
+                  "pageInfo" => %{"hasNextPage" => true, "endCursor" => "cursor-1"},
+                  "nodes" => [
+                    %{
+                      "content" => %{
+                        "__typename" => "Issue",
+                        "number" => 1,
+                        "title" => "an issue",
+                        "body" => "body",
+                        "state" => "OPEN",
+                        "url" => "https://github.com/owner/repo/issues/1",
+                        "databaseId" => 555,
+                        "updatedAt" => "2026-07-04T12:00:00Z",
+                        "labels" => %{"nodes" => []},
+                        "author" => %{"login" => "someone"},
+                        "comments" => %{"totalCount" => 0},
+                        "repository" => %{"nameWithOwner" => "owner/repo"},
+                        "assignees" => %{"nodes" => [%{"login" => "nyelbangash"}]}
+                      },
+                      "fieldValues" => %{
+                        "nodes" => [
+                          %{
+                            "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+                            "name" => "Ready",
+                            "field" => %{"name" => "Status"}
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          })
+
+        body["variables"]["after"] == "cursor-1" ->
+          Req.Test.json(conn, %{
+            "data" => %{
+              "node" => %{
+                "items" => %{
+                  "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil},
+                  "nodes" => [
+                    %{
+                      "content" => %{"__typename" => "PullRequest", "number" => 2},
+                      "fieldValues" => %{"nodes" => []}
+                    },
+                    %{
+                      "content" => %{"__typename" => "DraftIssue", "title" => "a draft"},
+                      "fieldValues" => %{"nodes" => []}
+                    }
+                  ]
+                }
+              }
+            }
+          })
+      end
+    end)
+
+    assert {:ok, items} = Client.list_project_items("someorg", 7)
+    assert [issue, pr, draft] = items
+
+    assert issue.type == :issue
+    assert issue.number == 1
+    assert issue.repo == "owner/repo"
+    assert issue.github_id == 555
+    assert issue.assignees == ["nyelbangash"]
+    assert issue.field_values == [%{field: "Status", value: "Ready"}]
+
+    assert pr.type == :pull_request
+    assert pr.number == 2
+
+    assert draft.type == :draft_issue
+    assert draft.title == "a draft"
+  end
+
+  test "graphql returns {:error, {:graphql_errors, _}} on a 200 body with errors" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      Req.Test.json(conn, %{
+        "errors" => [%{"message" => "Resource not accessible by personal access token"}]
+      })
+    end)
+
+    assert {:error, {:graphql_errors, [%{"message" => message}]}} =
+             Client.graphql("someorg", "query { viewer { login } }")
+
+    assert message =~ "personal access token"
+  end
+
+  test "graphql sends the owner's PAT via github_pat_for_owner" do
+    Application.put_env(:harness, :github_pat_overrides, %{"someorg" => "org-pat"})
+    on_exit(fn -> Application.delete_env(:harness, :github_pat_overrides) end)
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      assert ["Bearer org-pat"] = Plug.Conn.get_req_header(conn, "authorization")
+      Req.Test.json(conn, %{"data" => %{"viewer" => %{"login" => "someorg"}}})
+    end)
+
+    assert {:ok, %{"viewer" => %{"login" => "someorg"}}} =
+             Client.graphql("someorg", "query { viewer { login } }")
+  end
+
   test "requests for different repos' owners send different Authorization headers" do
     Application.put_env(:harness, :github_pat_overrides, %{
       "ownera" => "pat-a",

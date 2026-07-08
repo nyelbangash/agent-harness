@@ -51,4 +51,42 @@ defmodule Harness.DoctorTest do
 
     assert github_api_check_ids() == [:github_api_default]
   end
+
+  test "reports a missing Projects scope as a named error, not a generic warning" do
+    original = Application.fetch_env!(:harness, :policy_path)
+    tmp = Path.join(System.tmp_dir!(), "doctor-policy-#{System.unique_integer([:positive])}.yaml")
+
+    File.write!(
+      tmp,
+      File.read!(original)
+      |> String.replace(
+        ~r/github:\n  repos:.*/,
+        "github:\n  repos: []\n  projects:\n    - owner: acme\n      number: 1"
+      )
+    )
+
+    Application.put_env(:harness, :policy_path, tmp)
+    Application.put_env(:harness, :github_req_options, plug: {Req.Test, __MODULE__})
+
+    on_exit(fn ->
+      Application.put_env(:harness, :policy_path, original)
+      Application.delete_env(:harness, :github_req_options)
+      File.rm(tmp)
+    end)
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      Req.Test.json(conn, %{
+        "errors" => [
+          %{
+            "type" => "FORBIDDEN",
+            "message" => "Resource not accessible by personal access token"
+          }
+        ]
+      })
+    end)
+
+    check = Doctor.checks() |> Enum.find(&(&1.id == :github_project_acme_1))
+    assert {:error, message} = check.run.()
+    assert message =~ "Projects scope missing for acme"
+  end
 end

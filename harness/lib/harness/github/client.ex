@@ -15,8 +15,11 @@ defmodule Harness.GitHub.Client do
 
   @api_version "2022-11-28"
 
-  def viewer_login do
-    case request(nil, :get, "/user") do
+  @doc "The PAT owner's login. Pass `owner` to resolve via that owner's PAT (see `Secrets.github_pat_for_owner/1`)."
+  def viewer_login(owner \\ nil) do
+    target = if owner, do: {:owner, owner}, else: nil
+
+    case request(target, :get, "/user") do
       {:ok, %{status: 200, body: %{"login" => login}}} -> {:ok, login}
       {:ok, %{status: 401}} -> {:error, :unauthorized}
       {:ok, %{status: status}} -> {:error, {:http_status, status}}
@@ -289,11 +292,205 @@ defmodule Harness.GitHub.Client do
     end
   end
 
+  @doc """
+  POST a GraphQL query, authenticated as `owner`'s PAT (Projects v2 has no
+  REST surface — see `Secrets.github_pat_for_owner/1`). GraphQL returns HTTP
+  200 even for query errors (missing-scope/permission problems surface as a
+  top-level `"errors"` array, not 401/403) — `{:ok, data}` is only returned
+  when that array is absent or empty.
+  """
+  def graphql(owner, query, variables \\ %{}) do
+    pat_result = Harness.Secrets.github_pat_for_owner(owner)
+
+    with {:ok, pat} <- pat_result do
+      headers = [
+        {"authorization", "Bearer #{pat}"},
+        {"x-github-api-version", @api_version}
+      ]
+
+      result =
+        Req.request(
+          [
+            method: :post,
+            url: base_url() <> "/graphql",
+            headers: headers,
+            json: %{query: query, variables: variables},
+            retry: false,
+            receive_timeout: 30_000
+          ] ++ Application.get_env(:harness, :github_req_options, [])
+        )
+
+      case result do
+        {:ok, %{status: 200, body: %{"errors" => [_ | _] = errors}}} ->
+          {:error, {:graphql_errors, errors}}
+
+        {:ok, %{status: 200, body: %{"data" => data}}} ->
+          {:ok, data}
+
+        {:ok, %{status: status}} ->
+          {:error, {:http_status, status}}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      {:error, :not_found} -> {:error, :no_pat}
+    end
+  end
+
+  @project_id_by_org """
+  query($login: String!, $number: Int!) {
+    organization(login: $login) { projectV2(number: $number) { id } }
+  }
+  """
+
+  @project_id_by_user """
+  query($login: String!, $number: Int!) {
+    user(login: $login) { projectV2(number: $number) { id } }
+  }
+  """
+
+  @project_items_page """
+  query($id: ID!, $after: String) {
+    node(id: $id) {
+      ... on ProjectV2 {
+        items(first: 100, after: $after) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            content {
+              __typename
+              ... on Issue {
+                number
+                title
+                body
+                state
+                url
+                databaseId
+                updatedAt
+                labels(first: 20) { nodes { name } }
+                author { login }
+                comments { totalCount }
+                repository { nameWithOwner }
+                assignees(first: 10) { nodes { login } }
+              }
+              ... on PullRequest { number }
+              ... on DraftIssue { title }
+            }
+            fieldValues(first: 20) {
+              nodes {
+                __typename
+                ... on ProjectV2ItemFieldSingleSelectValue {
+                  name
+                  field { ... on ProjectV2SingleSelectField { name } }
+                }
+                ... on ProjectV2ItemFieldTextValue {
+                  text
+                  field { ... on ProjectV2FieldCommon { name } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  """
+
+  @doc """
+  All items on `owner`'s project `number` (org- or user-owned), paginated to
+  completion. Returns `{:ok, [item]}` where each item is
+  `%{type: :issue | :pull_request | :draft_issue, ...}`, or `{:error, reason}`
+  on the first failing GraphQL call.
+  """
+  def list_project_items(owner, number) do
+    with {:ok, id} <- project_id(owner, number) do
+      paginate_items(owner, id, nil, [])
+    end
+  end
+
+  defp project_id(owner, number) do
+    case graphql(owner, @project_id_by_org, %{login: owner, number: number}) do
+      {:ok, %{"organization" => %{"projectV2" => %{"id" => id}}}} ->
+        {:ok, id}
+
+      _ ->
+        case graphql(owner, @project_id_by_user, %{login: owner, number: number}) do
+          {:ok, %{"user" => %{"projectV2" => %{"id" => id}}}} -> {:ok, id}
+          {:ok, _} -> {:error, :project_not_found}
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  defp paginate_items(owner, id, after_cursor, acc) do
+    case graphql(owner, @project_items_page, %{id: id, after: after_cursor}) do
+      {:ok, %{"node" => %{"items" => %{"nodes" => nodes, "pageInfo" => page_info}}}} ->
+        acc = acc ++ Enum.map(nodes, &to_item/1)
+
+        if page_info["hasNextPage"] do
+          paginate_items(owner, id, page_info["endCursor"], acc)
+        else
+          {:ok, acc}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp to_item(%{"content" => %{"__typename" => "Issue"} = content} = node) do
+    %{
+      type: :issue,
+      number: content["number"],
+      title: content["title"],
+      body: content["body"],
+      state: content["state"],
+      url: content["url"],
+      github_id: content["databaseId"],
+      updated_at: content["updatedAt"],
+      labels: content |> get_in(["labels", "nodes"]) |> List.wrap() |> Enum.map(& &1["name"]),
+      author: get_in(content, ["author", "login"]),
+      comments_count: get_in(content, ["comments", "totalCount"]) || 0,
+      repo: get_in(content, ["repository", "nameWithOwner"]),
+      assignees:
+        content |> get_in(["assignees", "nodes"]) |> List.wrap() |> Enum.map(& &1["login"]),
+      field_values: field_values(node)
+    }
+  end
+
+  defp to_item(%{"content" => %{"__typename" => "PullRequest"} = content}) do
+    %{type: :pull_request, number: content["number"]}
+  end
+
+  defp to_item(%{"content" => %{"__typename" => "DraftIssue"} = content}) do
+    %{type: :draft_issue, title: content["title"]}
+  end
+
+  defp to_item(_node), do: %{type: :unknown}
+
+  defp field_values(node) do
+    node
+    |> get_in(["fieldValues", "nodes"])
+    |> List.wrap()
+    |> Enum.map(fn field_value ->
+      %{
+        field: get_in(field_value, ["field", "name"]),
+        value: field_value["name"] || field_value["text"]
+      }
+    end)
+    |> Enum.reject(&is_nil(&1.field))
+  end
+
   defp maybe_put(map, _key, []), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp request(repo, method, path, opts \\ []) do
-    pat_result = if repo, do: Harness.Secrets.github_pat(repo), else: Harness.Secrets.github_pat()
+    pat_result =
+      case repo do
+        nil -> Harness.Secrets.github_pat()
+        {:owner, owner} -> Harness.Secrets.github_pat_for_owner(owner)
+        repo -> Harness.Secrets.github_pat(repo)
+      end
 
     with {:ok, pat} <- pat_result do
       headers =
