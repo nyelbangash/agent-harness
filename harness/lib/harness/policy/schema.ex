@@ -15,7 +15,8 @@ defmodule Harness.Policy.Schema do
               ideate: "claude-sonnet-5",
               critique: "claude-opus-4-8",
               escalation: "claude-opus-4-8",
-              respond: "claude-sonnet-5"
+              respond: "claude-sonnet-5",
+              reader: "claude-haiku-4-5-20251001"
   end
 
   defmodule Schedule do

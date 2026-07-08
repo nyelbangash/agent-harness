@@ -105,4 +105,16 @@ defmodule Harness.Compose.ExploreWorkerTest do
     assert "Write" in spec.allowed_tools
     assert spec.output_mode == :stream_json
   end
+
+  test "explore run spec allows Task delegation to a policy-configured reader subagent", ctx do
+    draft = draft_fixture(%{repo: ctx.repo})
+    FakeRunner.script([writes_draft_json()])
+
+    assert :ok = perform_job(ExploreWorker, %{draft_id: draft.id})
+
+    [spec] = FakeRunner.executed_specs()
+    assert "Task" in spec.allowed_tools
+    assert [%{name: "reader", model: model}] = spec.subagents
+    assert model == Harness.Policy.get().models.reader
+  end
 end

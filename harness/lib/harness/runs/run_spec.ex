@@ -19,8 +19,16 @@ defmodule Harness.Runs.RunSpec do
     :worktree,
     output_mode: :stream_json,
     permission_mode: "dontAsk",
-    timeout_ms: :timer.minutes(30)
+    timeout_ms: :timer.minutes(30),
+    subagents: []
   ]
+
+  @type subagent :: %{
+          name: String.t(),
+          description: String.t(),
+          prompt: String.t(),
+          model: String.t()
+        }
 
   @type t :: %__MODULE__{
           kind:
@@ -35,6 +43,7 @@ defmodule Harness.Runs.RunSpec do
           worktree: Path.t() | nil,
           output_mode: :json | :stream_json,
           permission_mode: String.t(),
-          timeout_ms: pos_integer()
+          timeout_ms: pos_integer(),
+          subagents: [subagent()]
         }
 end

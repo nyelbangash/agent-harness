@@ -6,6 +6,7 @@ models:
   ideate: claude-sonnet-5
   critique: claude-opus-4-8
   escalation: claude-opus-4-8
+  reader: claude-haiku-4-5-20251001
 schedule:
   full_auto_windows: ["20:00-06:00"]     # local time; outside these, auto lane demotes to plan
   ideation_windows: ["21:00-02:00"]

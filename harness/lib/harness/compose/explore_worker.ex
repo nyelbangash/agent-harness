@@ -16,7 +16,10 @@ defmodule Harness.Compose.ExploreWorker do
   alias Harness.Runs.RunSpec
   alias Harness.{Policy, Repos, Runs}
 
-  @explore_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch)
+  # "Task" is the allowedTools name; the CLI emits the actual tool_use as
+  # "Agent" with a subagent_type field — don't be confused by the mismatch
+  # when reading stream-json output or test fixtures.
+  @explore_tools ~w(Bash Read Glob Grep Write Edit WebSearch WebFetch Task)
 
   @min_draft_bytes 50
 
@@ -59,7 +62,8 @@ defmodule Harness.Compose.ExploreWorker do
         worktree: worktree,
         output_mode: :stream_json,
         allowed_tools: @explore_tools,
-        ref: "compose/draft-#{draft.id}"
+        ref: "compose/draft-#{draft.id}",
+        subagents: [reader_subagent(policy)]
       }
 
       case Runs.execute(spec) do
@@ -75,6 +79,24 @@ defmodule Harness.Compose.ExploreWorker do
     after
       Repos.remove_worktree!(draft.repo, worktree)
     end
+  end
+
+  defp reader_subagent(policy) do
+    %{
+      name: "reader",
+      description: "Delegate for mechanical reading/searching sub-questions",
+      prompt: """
+      You are a read-only research assistant helping ground a GitHub issue
+      draft in a real codebase. The coordinator will hand you one focused
+      sub-question at a time (e.g. "map this module's structure" or "find
+      prior art for X"). Investigate using Read, Glob, Grep, WebSearch, and
+      WebFetch, then report back a concise, well-cited summary of what you
+      found — file paths, function names, and direct quotes where useful.
+      Do not write or edit any files; your job is to gather information for
+      the coordinator to use.
+      """,
+      model: policy.models.reader
+    }
   end
 
   defp persist_draft(draft, worktree, run_id) do

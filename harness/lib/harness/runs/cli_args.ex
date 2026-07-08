@@ -14,6 +14,11 @@ defmodule Harness.Runs.CLIArgs do
       never `--dangerously-skip-permissions`
 
   stream-json requires `--verbose` in print mode (verified on CLI 2.1.195).
+
+  `RunSpec.subagents` becomes `--agents <json>` (verified on CLI 2.1.202):
+  this flag is independent of `--setting-sources` and does not require
+  loosening it — a subagent's definition reaches the process as an inline
+  argument, not through a target repo's `.claude/agents/*.md`.
   """
 
   alias Harness.Runs.RunSpec
@@ -33,7 +38,8 @@ defmodule Harness.Runs.CLIArgs do
         "",
         "--strict-mcp-config",
         "--no-session-persistence"
-      ]
+      ] ++
+      agents_args(spec)
   end
 
   defp output_args(%RunSpec{output_mode: :stream_json}) do
@@ -46,6 +52,17 @@ defmodule Harness.Runs.CLIArgs do
 
   defp output_args(%RunSpec{output_mode: :json}) do
     ["--output-format", "json"]
+  end
+
+  defp agents_args(%RunSpec{subagents: []}), do: []
+
+  defp agents_args(%RunSpec{subagents: subagents}) do
+    json =
+      Map.new(subagents, fn a ->
+        {a.name, %{"description" => a.description, "prompt" => a.prompt, "model" => a.model}}
+      end)
+
+    ["--agents", Jason.encode!(json)]
   end
 
   @doc """
