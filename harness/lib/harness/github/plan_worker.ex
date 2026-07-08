@@ -177,7 +177,7 @@ defmodule Harness.GitHub.PlanWorker do
         {:ok, comment_id, created_at} ->
           # self-acknowledge: our comment bumped updated_at; swallow it so the
           # next poll does not re-triage our own write (issue #28)
-          GitHub.acknowledge_comment_timestamp!(issue, created_at)
+          GitHub.acknowledge_comment_timestamp!(issue, comment_id, created_at)
           {nil, comment_id}
 
         {:error, reason} ->

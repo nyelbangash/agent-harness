@@ -94,11 +94,15 @@ defmodule Harness.JanitorTest do
     })
 
     # the #28 self-ack advanced github_updated_at past the triage row because
-    # WE posted the plan comment; the newest comment is harness-stamped
+    # WE posted the plan comment; the newest comment is harness-stamped and
+    # its id matches what we self-acked
     comment_time = DateTime.add(DateTime.utc_now(), 3600, :second)
 
     issue
-    |> Harness.GitHub.Issue.changeset(%{github_updated_at: comment_time})
+    |> Harness.GitHub.Issue.changeset(%{
+      github_updated_at: comment_time,
+      last_self_ack_comment_id: 900
+    })
     |> Repo.update!()
 
     Application.put_env(:harness, :github_req_options, plug: {Req.Test, __MODULE__})
@@ -109,6 +113,7 @@ defmodule Harness.JanitorTest do
     Req.Test.stub(__MODULE__, fn conn ->
       Req.Test.json(conn, [
         %{
+          "id" => 900,
           "body" => stamped,
           "created_at" => DateTime.to_iso8601(comment_time)
         }

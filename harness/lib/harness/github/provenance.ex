@@ -6,10 +6,13 @@ defmodule Harness.GitHub.Provenance do
 
   Self-acknowledge rule: any code path that posts a GitHub comment via
   Client.post_issue_comment/3 MUST immediately advance the stored
-  issues.github_updated_at to the comment's created_at (via
-  GitHub.acknowledge_comment_timestamp!/2). This prevents PollWorker from
-  treating the harness's own comment as operator activity and re-triaging the
-  issue.
+  issues.github_updated_at to the comment's created_at AND record the
+  comment's id (via GitHub.acknowledge_comment_timestamp!/3). This prevents
+  PollWorker from treating the harness's own comment as operator activity and
+  re-triaging the issue. `harness_caused_update?/1` keys off the stored
+  comment id, not the timestamp — the issues-list and comments-list GitHub
+  API surfaces don't reliably agree on time for the same event (issue #99),
+  so identity is the only reliable signal.
 
   The marker is an HTML comment (`<!-- harness:v1 kind=… ref=… -->`), which
   GitHub renders as invisible in issue comments and PR bodies.

@@ -61,4 +61,52 @@ defmodule Harness.GitHubTest do
       assert Enum.any?(all_issues, &(&1.id == issue.id))
     end
   end
+
+  describe "harness_caused_update?/1" do
+    setup do
+      Application.put_env(:harness, :github_req_options, plug: {Req.Test, __MODULE__})
+      on_exit(fn -> Application.delete_env(:harness, :github_req_options) end)
+      :ok
+    end
+
+    defp stub_newest_comment(comment) do
+      Req.Test.stub(__MODULE__, fn conn -> Req.Test.json(conn, List.wrap(comment)) end)
+    end
+
+    test "never self-acked (last_self_ack_comment_id nil) is not harness-caused" do
+      issue = issue_fixture(%{last_self_ack_comment_id: nil})
+
+      stub_newest_comment(%{
+        "id" => 1,
+        "body" => Harness.GitHub.Provenance.stamp("hi", "plan", "run-1"),
+        "created_at" => "2026-07-04T13:00:00Z"
+      })
+
+      refute GitHub.harness_caused_update?(issue)
+    end
+
+    test "self-ack id matches the newest stamped comment's id" do
+      issue = issue_fixture(%{last_self_ack_comment_id: 42})
+
+      stub_newest_comment(%{
+        "id" => 42,
+        "body" => Harness.GitHub.Provenance.stamp("hi", "plan", "run-1"),
+        "created_at" => "2026-07-04T13:00:00Z"
+      })
+
+      assert GitHub.harness_caused_update?(issue)
+    end
+
+    test "self-ack id matches but the comment body carries no provenance marker" do
+      issue = issue_fixture(%{last_self_ack_comment_id: 42})
+
+      stub_newest_comment(%{
+        "id" => 42,
+        "body" => "not stamped",
+        "created_at" => "2026-07-04T13:00:00Z"
+      })
+
+      refute GitHub.harness_caused_update?(issue)
+    end
+  end
 end

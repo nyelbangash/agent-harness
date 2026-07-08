@@ -279,8 +279,8 @@ defmodule Harness.GitHub.RespondWorker do
 
       "issue" ->
         case Client.post_issue_comment(issue.repo, issue.pr_number, body) do
-          {:ok, _id, created_at} ->
-            GitHub.acknowledge_comment_timestamp!(issue, created_at)
+          {:ok, comment_id, created_at} ->
+            GitHub.acknowledge_comment_timestamp!(issue, comment_id, created_at)
 
           _ ->
             :ok
