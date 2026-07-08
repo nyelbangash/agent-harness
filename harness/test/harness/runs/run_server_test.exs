@@ -140,7 +140,7 @@ defmodule Harness.Runs.RunServerTest do
   test "kill: SIGTERM ends the run as killed", %{tmp: tmp} do
     stub_executable(tmp, """
     printf '%s\\n' '{"type":"system","subtype":"init","session_id":"kill-me","uuid":"x"}'
-    sleep 30
+    exec sleep 30
     """)
 
     Runs.subscribe()
@@ -158,7 +158,7 @@ defmodule Harness.Runs.RunServerTest do
   test "kill_all sweeps every registered run", %{tmp: tmp} do
     stub_executable(tmp, """
     printf '%s\\n' '{"type":"system","subtype":"init","session_id":"s","uuid":"x"}'
-    sleep 30
+    exec sleep 30
     """)
 
     Runs.subscribe()
@@ -206,7 +206,7 @@ defmodule Harness.Runs.RunServerTest do
   test "wall-clock timeout kills the run", %{tmp: tmp} do
     stub_executable(tmp, """
     printf '%s\\n' '{"type":"system","subtype":"init","session_id":"slow","uuid":"x"}'
-    sleep 30
+    exec sleep 30
     """)
 
     assert {:error, :timeout} = execute(spec(tmp, timeout_ms: 500))
