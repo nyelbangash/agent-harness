@@ -132,7 +132,8 @@ defmodule Harness.GitHub.PollWorkerTest do
     Harness.Repo.delete_all(Oban.Job)
 
     # Simulate what PlanWorker does: advance github_updated_at to comment time
-    GitHub.acknowledge_comment_timestamp!(issue, "2026-07-04T13:00:00Z")
+    # and record the comment id
+    GitHub.acknowledge_comment_timestamp!(issue, 500, "2026-07-04T13:00:00Z")
 
     # Poll with the same updated_at as what we just stored — no delta
     stub_issues([
@@ -153,6 +154,9 @@ defmodule Harness.GitHub.PollWorkerTest do
     GitHub.transition!(issue, "plan_ready")
     Harness.Repo.delete_all(Oban.Job)
 
+    # Simulate what PlanWorker does when it posts comment id 100
+    issue = GitHub.acknowledge_comment_timestamp!(issue, 100, "2026-07-04T13:00:00Z")
+
     harness_body = Harness.GitHub.Provenance.stamp("plan content", "plan", "run-1")
 
     Req.Test.stub(__MODULE__, fn conn ->
@@ -161,10 +165,12 @@ defmodule Harness.GitHub.PollWorkerTest do
           Req.Test.json(conn, %{"login" => "nyelbangash"})
 
         conn.method == "GET" and not String.contains?(conn.request_path, "comments") ->
+          # skew: the issues-list endpoint's updated_at lands a few seconds
+          # after the comment's own created_at we self-acked with
           conn
           |> Plug.Conn.put_resp_header("etag", ~s(W/"tag-2"))
           |> Req.Test.json([
-            gh_issue_payload(number: 21, id: issue.github_id, updated_at: "2026-07-04T13:00:00Z")
+            gh_issue_payload(number: 21, id: issue.github_id, updated_at: "2026-07-04T13:00:07Z")
           ])
 
         true ->
@@ -214,6 +220,86 @@ defmodule Harness.GitHub.PollWorkerTest do
     assert :ok = perform_job(PollWorker, %{})
 
     assert_enqueued(worker: Harness.GitHub.TriageWorker, args: %{issue_id: issue.id})
+  end
+
+  test "clock/endpoint skew: issues-endpoint updated_at a few seconds after the self-acked comment's created_at does not re-trigger" do
+    stub_issues([gh_issue_payload(number: 23, updated_at: "2026-07-04T12:00:00Z")])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 23)
+    GitHub.transition!(issue, "plan_ready")
+    Harness.Repo.delete_all(Oban.Job)
+
+    # Simulate what PlanWorker does when it posts and self-acks comment id 200
+    issue = GitHub.acknowledge_comment_timestamp!(issue, 200, "2026-07-04T23:27:21Z")
+
+    harness_body = Harness.GitHub.Provenance.stamp("plan content", "plan", "run-1")
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      cond do
+        conn.request_path == "/user" ->
+          Req.Test.json(conn, %{"login" => "nyelbangash"})
+
+        conn.method == "GET" and not String.contains?(conn.request_path, "comments") ->
+          # 1s skew, matching the trace log: stored=...23:27:22 vs newest_comment=...23:27:21
+          conn
+          |> Plug.Conn.put_resp_header("etag", ~s(W/"tag-4"))
+          |> Req.Test.json([
+            gh_issue_payload(number: 23, id: issue.github_id, updated_at: "2026-07-04T23:27:22Z")
+          ])
+
+        true ->
+          Req.Test.json(conn, [
+            %{"body" => harness_body, "created_at" => "2026-07-04T23:27:21Z", "id" => 200}
+          ])
+      end
+    end)
+
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    refute_enqueued(worker: Harness.GitHub.TriageWorker)
+    assert GitHub.get_issue_by(@repo, 23).pipeline_state == "plan_ready"
+  end
+
+  test "stale comments-list snapshot: newest-comment lookup still returns the last self-acked comment does not re-trigger" do
+    stub_issues([gh_issue_payload(number: 24, updated_at: "2026-07-04T12:00:00Z")])
+    assert :ok = perform_job(PollWorker, %{})
+    issue = GitHub.get_issue_by(@repo, 24)
+    GitHub.transition!(issue, "plan_ready")
+    Harness.Repo.delete_all(Oban.Job)
+
+    # Simulate what PlanWorker does when it posts and self-acks comment id 300
+    issue = GitHub.acknowledge_comment_timestamp!(issue, 300, "2026-07-08T00:15:12Z")
+
+    harness_body = Harness.GitHub.Provenance.stamp("plan content", "plan", "run-1")
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      cond do
+        conn.request_path == "/user" ->
+          Req.Test.json(conn, %{"login" => "nyelbangash"})
+
+        conn.method == "GET" and not String.contains?(conn.request_path, "comments") ->
+          # the issues endpoint reports a much later updated_at (7+ min lag)
+          conn
+          |> Plug.Conn.put_resp_header("etag", ~s(W/"tag-5"))
+          |> Req.Test.json([
+            gh_issue_payload(number: 24, id: issue.github_id, updated_at: "2026-07-08T00:22:42Z")
+          ])
+
+        true ->
+          # the comments-list endpoint is still serving a stale snapshot: it
+          # returns the very comment we already self-acked, nothing newer
+          Req.Test.json(conn, [
+            %{"body" => harness_body, "created_at" => "2026-07-08T00:15:12Z", "id" => 300}
+          ])
+      end
+    end)
+
+    reset_poll_clock()
+    assert :ok = perform_job(PollWorker, %{})
+
+    refute_enqueued(worker: Harness.GitHub.TriageWorker)
+    assert GitHub.get_issue_by(@repo, 24).pipeline_state == "plan_ready"
   end
 
   test "issues that vanish from the open list are closed out" do

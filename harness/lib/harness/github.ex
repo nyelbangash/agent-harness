@@ -253,29 +253,26 @@ defmodule Harness.GitHub do
   end
 
   @doc """
-  True when an issue.s newest GitHub comment is harness-stamped and accounts
-  for the current stored github_updated_at — i.e. the last thing that happened
-  to this issue was the harness talking. Shared by the poller (:updated gate)
+  True when an issue's newest GitHub comment is the one the harness itself
+  last posted and self-acknowledged — i.e. the last thing that happened to
+  this issue was the harness talking. Shared by the poller (:updated gate)
   and the janitor (retriage_updated_issues), which otherwise reads the #28
   self-acknowledgment as "changed since triage" and loops (the #75 mechanism:
   plan comment -> self-ack advances updated_at -> janitor re-triages).
+
+  Compares by comment identity rather than by re-deriving time from
+  `issue.github_updated_at`: the issues-list endpoint's `updated_at` and the
+  comments-list endpoint's `created_at` are two different GitHub API surfaces
+  that are not guaranteed to agree, even for the exact same event (clock/
+  endpoint skew, or a stale comments-list snapshot) — see issue #99.
   """
+  def harness_caused_update?(%Issue{last_self_ack_comment_id: nil}), do: false
+
   def harness_caused_update?(%Issue{} = issue) do
     case Harness.GitHub.Client.newest_issue_comment(issue.repo, issue.number) do
-      {:ok, %{"body" => body, "created_at" => created_at_iso}} ->
-        Harness.GitHub.Provenance.harness_authored?(body) and
-          comment_accounts_for_delta?(created_at_iso, issue)
-
-      _ ->
-        false
-    end
-  end
-
-  defp comment_accounts_for_delta?(created_at_iso, issue) do
-    case DateTime.from_iso8601(created_at_iso) do
-      {:ok, comment_time, _} ->
-        not is_nil(issue.github_updated_at) and
-          DateTime.compare(comment_time, issue.github_updated_at) in [:gt, :eq]
+      {:ok, %{"id" => comment_id, "body" => body}} ->
+        comment_id == issue.last_self_ack_comment_id and
+          Harness.GitHub.Provenance.harness_authored?(body)
 
       _ ->
         false
@@ -310,14 +307,19 @@ defmodule Harness.GitHub do
 
   @doc """
   After posting a harness-authored comment, advance `github_updated_at` in the
-  DB to match the comment's `created_at`. This prevents the next poll sweep from
-  seeing the comment-induced bump as operator activity.
+  DB to match the comment's `created_at`, and record the comment's id as the
+  last self-acknowledged comment. This prevents the next poll sweep from
+  seeing the comment-induced bump as operator activity — `github_updated_at`
+  covers callers that still read it directly, while `last_self_ack_comment_id`
+  is what `harness_caused_update?/1` actually keys off of (issue #99: the two
+  GitHub API surfaces' timestamps don't reliably agree, so identity is the
+  sole source of truth for that comparison).
   """
-  def acknowledge_comment_timestamp!(issue, created_at_iso) do
+  def acknowledge_comment_timestamp!(issue, comment_id, created_at_iso) do
     case DateTime.from_iso8601(created_at_iso) do
       {:ok, dt, _} ->
         issue
-        |> Issue.changeset(%{github_updated_at: dt})
+        |> Issue.changeset(%{github_updated_at: dt, last_self_ack_comment_id: comment_id})
         |> Repo.update!()
 
       _ ->

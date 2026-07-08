@@ -213,7 +213,7 @@ defmodule Harness.GitHub.PollWorker do
         enqueue_triage(issue)
 
       change == :updated and issue.pipeline_state in @retriageable ->
-        caused = harness_caused_update_traced(issue)
+        caused = GitHub.harness_caused_update?(issue)
         unless caused, do: enqueue_triage(issue)
 
       true ->
@@ -227,55 +227,6 @@ defmodule Harness.GitHub.PollWorker do
     %{issue_id: issue.id}
     |> Harness.GitHub.TriageWorker.new()
     |> Oban.insert()
-  end
-
-  # TEMPORARY instrumentation (loop hunt, 2026-07-06): every retriage decision
-  # on the :updated path is appended to ~/.harness/logs/retriage_trace.log so
-  # the next natural lap identifies its own mechanism. Remove once the #70
-  # loop class is closed.
-  defp harness_caused_update_traced(issue) do
-    {verdict, detail} =
-      case Harness.GitHub.Client.newest_issue_comment(issue.repo, issue.number) do
-        {:ok, %{"body" => body, "created_at" => created_at_iso}} ->
-          stamped = Harness.GitHub.Provenance.harness_authored?(body)
-          accounts = comment_accounts_for_delta?(created_at_iso, issue)
-
-          {stamped and accounts,
-           "newest_comment=#{created_at_iso} stamped=#{stamped} accounts_for_delta=#{accounts}"}
-
-        {:ok, nil} ->
-          {false, "no_comments"}
-
-        {:error, reason} ->
-          {false, "GUARD_API_ERROR=#{inspect(reason)}"}
-
-        other ->
-          {false, "guard_unmatched=" <> String.slice(inspect(other), 0, 80)}
-      end
-
-    line =
-      "#{DateTime.utc_now() |> DateTime.to_iso8601()} ##{issue.number} state=#{issue.pipeline_state} " <>
-        "stored=#{inspect(issue.github_updated_at)} verdict=#{verdict} #{detail}\n"
-
-    File.write(trace_path(), line, [:append])
-    verdict
-  end
-
-  defp trace_path do
-    Path.join([Application.fetch_env!(:harness, :harness_home), "logs", "retriage_trace.log"])
-  end
-
-  defp comment_accounts_for_delta?(created_at_iso, issue) do
-    case DateTime.from_iso8601(created_at_iso) do
-      {:ok, comment_time, _} ->
-        # GitHub sets issue.updated_at = comment.created_at when a comment lands.
-        # If the comment timestamp is >= the stored github_updated_at, the comment
-        # is what caused the delta.
-        DateTime.compare(comment_time, issue.github_updated_at) in [:gt, :eq]
-
-      _ ->
-        false
-    end
   end
 
   # cancel queued/running local pipeline jobs + kill any live session for this
